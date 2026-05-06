@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Trading Chart</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body { background-color: #131722; color: #d1d4dc; margin: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+
+        /* Header Styles */
+        .top-nav {
+            background-color: #1e222d;
+            padding: 10px 20px;
+            border-bottom: 1px solid #363c4e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .nav-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .market-info { display: flex; align-items: center; gap: 10px; }
+        .market-select, .tf-select {
+            background-color: #2a2e39;
+            color: #fff;
+            border: 1px solid #434651;
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 14px;
+            cursor: pointer;
+            outline: none;
+        }
+        .market-select:hover, .tf-select:hover { background-color: #363c4e; }
+        .live-price {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            margin-left: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            transition: color 0.2s ease;
+        }
+        .sr-header-group {
+            display: flex;
+            gap: 8px;
+            margin-left: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+        .sr-tag {
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: 500;
+        }
+        .tf-badge {
+            display: none;
+        }
+
+        /* Layout */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            overflow: hidden;
+        }
+        .chart-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            width: 100%;
+        }
+
+        /* Chart Panes */
+        .chart-pane { width: 100%; position: relative; background-color: #131722; }
+        #main-chart { height: 55%; min-height: 300px; }
+        #volume-chart { height: 15%; min-height: 80px; }
+        #rsi-chart { height: 15%; min-height: 80px; }
+        #macd-chart { height: 15%; min-height: 80px; }
+
+        /* Indicator Bar */
+        .indicator-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 20px;
+            background: #1e222d;
+            border-bottom: 1px solid #363c4e;
+            font-family: monospace;
+            font-size: 12px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .ind-group { display: flex; gap: 15px; align-items: center; }
+        .ind-item { display: flex; gap: 5px; align-items: center; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .ohlcv-item { color: #aaa; margin-right: 10px; }
+        .ohlcv-value { color: #fff; font-weight: bold; }
+    </style>
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="market-info">
+            <select id="market-select" class="market-select"></select>
+            <select id="tf-select" class="tf-select"></select>
+            <span id="live-price" class="live-price">---</span>
+            <div id="header-sr" class="sr-header-group"></div>
+        </div>
+        <div class="nav-actions">
+            <button class="btn btn-sm btn-outline-info" onclick="copyCurrentData()">Copy Data</button>
+            <button class="btn btn-sm btn-outline-light" onclick="window.location.reload()">Refresh</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="resetData()">Reset</button>
+        </div>
+    </nav>
+
+    <div class="indicator-bar">
+        <div class="ind-group" id="indicator-info">
+            Loading indicators...
+        </div>
+        <div class="ind-group" id="ohlcv-info">
+            <span class="ohlcv-item">O: <span class="ohlcv-value" id="val-o">-</span></span>
+            <span class="ohlcv-item">H: <span class="ohlcv-value" id="val-h">-</span></span>
+            <span class="ohlcv-item">L: <span class="ohlcv-value" id="val-l">-</span></span>
+            <span class="ohlcv-item">C: <span class="ohlcv-value" id="val-c">-</span></span>
+            <span class="ohlcv-item">V: <span class="ohlcv-value" id="val-v">-</span></span>
+        </div>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="chart-section">
+            <div class="chart-pane" id="main-chart"></div>
+            <div class="chart-pane" id="volume-chart"></div>
+            <div class="chart-pane" id="rsi-chart"></div>
+            <div class="chart-pane" id="macd-chart"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variable to track current price for title updates
+        let globalCurrentPrice = '---';
+        let globalMarket = '---';
+        let globalTf = '---';
+
+        function updatePageTitle() {
+            document.title = `${globalCurrentPrice} | ${globalMarket} : ${globalTf} | Real-time Trading Chart`;
+        }
+
+        async function resetData() {
+            if (!confirm('Are you sure you want to reset all market data? This will delete all snapshots and regenerate them from Binance.')) {
+                return;
+            }
+            try {
+                const btn = event.target;
+                const originalText = btn.innerText;
+                btn.innerText = 'Resetting...';
+                btn.disabled = true;
+
+                const res = await fetch('/api/reset');
+                const data = await res.json();
+
+                if (data.success) {
+                    alert('Data reset successfully! The page will now reload.');
+                    window.location.reload();
+                } else {
+                    throw new Error(data.error || 'Unknown error occurred');
+                }
+            } catch (err) {
+                console.error('Reset Error:', err);
+                alert('Failed to reset data: ' + err.message);
+                event.target.innerText = 'Reset';
+                event.target.disabled = false;
+            }
+        }
+
+        async function copyCurrentData() {
+            try {
+                // We use the currentData variable which is updated by fetchData() and updateChartData()
+                if (!window.currentDataState) {
+                    alert('Data not yet loaded');
+                    return;
+                }
+
+                const data = window.currentDataState;
+                const lastCandle = data.candles[data.candles.length - 1];
+                const lastVol = data.indicators.volume[data.indicators.volume.length - 1];
+
+                const copyObj = {
+                    market: globalMarket,
+                    timeframe: globalTf,
+                    price: parseFloat(document.getElementById('live-price').innerText.replace(/,/g, '')),
+                    context: data.context,
+                    momentum: data.momentum,
+                    regime: data.regime,
+                    ohlcv: {
+                        open: lastCandle.open,
+                        high: lastCandle.high,
+                        low: lastCandle.low,
+                        close: lastCandle.close,
+                        volume: lastVol
+                    },
+                    indicators: {
+                        ma14: data.indicators.ma14[data.indicators.ma14.length - 1],
+                        ma50: data.indicators.ma50[data.indicators.ma50.length - 1],
+                        ma200: data.indicators.ma200[data.indicators.ma200.length - 1],
+                        rsi: data.indicators.rsi[data.indicators.rsi.length - 1],
+                        macd: data.indicators.macd[data.indicators.macd.length - 1],
+                    },
+                    levels: {
+                        resistance: data.levels.resistance,
+                        support: data.levels.support,
+                    },
+                    timestamp: data.timestamp
+                };
+
+                await navigator.clipboard.writeText(JSON.stringify(copyObj, null, 2));
+                alert('Data copied to clipboard!');
+            } catch (err) {
+                console.error('Copy Error:', err);
+                alert('Failed to copy data');
+            }
+        }
+
+        window.onload = async () => {
+            const pathParts = window.location.pathname.split('/').filter(p => p);
+            globalMarket = pathParts[1] || 'BTCUSDT';
+            globalTf = pathParts[2] || '15m';
+
+            // Initial title update
+            updatePageTitle();
+
+
+            // Initialize Select Menus
+            try {
+                const configRes = await fetch('/api/config');
+                const config = await configRes.json();
+
+                const mSelect = document.getElementById('market-select');
+                const tSelect = document.getElementById('tf-select');
+
+                config.markets.forEach(m => {
+                    const opt = new Option(m.label, m.code);
+                    if (m.code === globalMarket) opt.selected = true;
+                    mSelect.add(opt);
+                });
+
+                config.timeframes.forEach(t => {
+                    const opt = new Option(t.label, t.code);
+                    if (t.code === globalTf) opt.selected = true;
+                    tSelect.add(opt);
+                });
+
+                mSelect.onchange = (e) => {
+                    window.location.pathname = `/view/${e.target.value}/${tSelect.value}`;
+                };
+                tSelect.onchange = (e) => {
+                    window.location.pathname = `/view/${mSelect.value}/${e.target.value}`;
+                };
+
+            } catch (err) {
+                console.error('Config Load Error:', err);
+            }
+
+            const chartOptions = {
+                layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: {
+                    timeVisible: true,
+                    secondsVisible: false,
+                    rightOffset: 10,
+                },
+                rightPriceScale: {
+                    autoScale: true,
+                    borderVisible: false,
+                    minimumWidth: 100,
+                    lastValueVisible: true,
+                }
+            };
+
+            try {
+                const mainChart = LightweightCharts.createChart(document.getElementById('main-chart'), chartOptions);
+                const volChart = LightweightCharts.createChart(document.getElementById('volume-chart'), chartOptions);
+                const rsiChart = LightweightCharts.createChart(document.getElementById('rsi-chart'), chartOptions);
+                const macdChart = LightweightCharts.createChart(document.getElementById('macd-chart'), chartOptions);
+
+                const candleSeries = mainChart.addCandlestickSeries();
+                candleSeries.applyOptions({ lastValueVisible: true });
+
+                const ma14Series = mainChart.addLineSeries({ color: '#4fc3f7', lineWidth: 1 });
+                ma14Series.applyOptions({ lastValueVisible: false });
+
+                const ma50Series = mainChart.addLineSeries({ color: '#ba68c8', lineWidth: 2 });
+                ma50Series.applyOptions({ lastValueVisible: false });
+
+                const ma200Series = mainChart.addLineSeries({ color: '#ffffff', lineWidth: 2 });
+                ma200Series.applyOptions({ lastValueVisible: false });
+
+                const volSeries = volChart.addHistogramSeries({ color: '#26a69a' });
+                volSeries.applyOptions({ lastValueVisible: false });
+
+                const rsiSeries = rsiChart.addLineSeries({ color: '#9c27b0', lineWidth: 2 });
+                rsiSeries.applyOptions({ lastValueVisible: false });
+
+                const macdLine = macdChart.addLineSeries({ color: '#2962FF', lineWidth: 2 });
+                macdLine.applyOptions({ lastValueVisible: true });
+
+                const macdSignal = macdChart.addLineSeries({ color: '#ff9800', lineWidth: 2 });
+                macdSignal.applyOptions({ lastValueVisible: true });
+
+                const macdHist = macdChart.addHistogramSeries({ color: '#26a69a' });
+                macdHist.applyOptions({ lastValueVisible: false });
+
+                let srPriceLines = [];
+
+                const syncCharts = [mainChart, volChart, rsiChart, macdChart];
+                syncCharts.forEach(chart => {
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+                        syncCharts.forEach(c => {
+                            if (c !== chart) c.timeScale().setVisibleLogicalRange(range);
+                        });
+                    });
+                });
+
+                function drawSRLevels(levels) {
+                    srPriceLines.forEach(line => candleSeries.removePriceLine(line));
+                    srPriceLines = [];
+
+                    if (!levels) return;
+
+                    if (levels.resistance) {
+                        levels.resistance.forEach((level, i) => {
+                            const line = candleSeries.createPriceLine({
+                                price: level.mid,
+                                color: '#ffeb3b',
+                                lineWidth: 1,
+                                lineStyle: LightweightCharts.LineStyle.Dotted,
+                                axisLabelVisible: true,
+                                title: `[R${i+1}]`,
+                            });
+                            srPriceLines.push(line);
+                        });
+                    }
+
+                    if (levels.support) {
+                        levels.support.forEach((level, i) => {
+                            const line = candleSeries.createPriceLine({
+                                price: level.mid,
+                                color: '#00cc99',
+                                lineWidth: 1,
+                                lineStyle: LightweightCharts.LineStyle.Dotted,
+                                axisLabelVisible: true,
+                                title: `[S${i+1}]`,
+                            });
+                            srPriceLines.push(line);
+                        });
+                    }
+
+                    updateSRHeader(levels);
+                }
+
+                function updateSRHeader(levels) {
+                    const srContainer = document.getElementById('header-sr');
+                    if (!levels) return;
+
+                    let html = '';
+                    if (levels.resistance) {
+                        levels.resistance.forEach((level, i) => {
+                            html += `<span class="sr-tag" style="color: #ffeb3b">R${i+1}: ${level.mid.toFixed(2)} (S: ${level.score})</span>`;
+                        });
+                    }
+                    if (levels.support) {
+                        levels.support.forEach((level, i) => {
+                            html += `<span class="sr-tag" style="color: #00cc99">S${i+1}: ${level.mid.toFixed(2)} (S: ${level.score})</span>`;
+                        });
+                    }
+                    srContainer.innerHTML = html;
+                }
+
+                async function updateChartData() {
+                    try {
+                        const data = await fetchData();
+                        // No need for window.location.reload(), data is updated in-place
+                        return data;
+                    } catch (err) {
+                        console.error('Update Chart Data Error:', err);
+                    }
+                }
+
+                async function fetchData() {
+                    try {
+                        const res = await fetch(`/api/${globalMarket}/${globalTf}`);
+                        const data = await res.json();
+                        
+                        candleSeries.setData(data.candles);
+                        ma14Series.setData(data.indicators.ma14.map((v, i) => ({ time: data.candles[i].time, value: v })));
+                        ma50Series.setData(data.indicators.ma50.map((v, i) => ({ time: data.candles[i].time, value: v })));
+                        ma200Series.setData(data.indicators.ma200.map((v, i) => ({ time: data.candles[i].time, value: v })));
+                        
+                        volSeries.setData(data.indicators.volume.map((v, i) => ({ 
+                            time: data.candles[i].time, 
+                            value: v, 
+                            color: data.candles[i].close >= data.candles[i].open ? '#26a69a' : '#ef5350' 
+                        })));
+                        rsiSeries.setData(data.indicators.rsi.map((v, i) => ({ time: data.candles[i].time, value: v })));
+                        
+                        if (data.indicators.macd) {
+                            const macdData = data.indicators.macd;
+                            macdLine.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.macd || 0 })));
+                            macdSignal.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.signal || 0 })));
+                            macdHist.setData(macdData.map((v, i) => ({ 
+                                time: data.candles[i].time, 
+                                value: v?.histogram || 0,
+                                color: v?.histogram >= 0 ? '#26a69a' : '#ef5350'
+                            })));
+                        }
+
+                        drawSRLevels(data.levels);
+                        updateIndicatorInfo(data);
+                        
+                        // Store data in global window object for the copy function
+                        window.currentDataState = data;
+                        
+                        return data;
+                    } catch (err) {
+                        console.error('Fetch Data Error:', err);
+                        throw err;
+                    }
+                }
+
+                let currentData = await fetchData();
+
+                // 1. Set initial live price in header immediately after fetch
+                const lastCandle = currentData.candles[currentData.candles.length - 1];
+                const initialPrice = lastCandle.close;
+                const priceEl = document.getElementById('live-price');
+
+                // Use locale string for consistency with WS updates
+                const formattedPrice = initialPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                priceEl.innerText = formattedPrice;
+                globalCurrentPrice = formattedPrice;
+                updatePageTitle();
+
+                // 2. Initialize OHLCV with the last candle data immediately
+                document.getElementById('val-o').innerText = lastCandle.open.toFixed(2);
+                document.getElementById('val-h').innerText = lastCandle.high.toFixed(2);
+                document.getElementById('val-l').innerText = lastCandle.low.toFixed(2);
+                document.getElementById('val-c').innerText = lastCandle.close.toFixed(2);
+
+                const lastVol = currentData.indicators.volume[currentData.indicators.volume.length - 1];
+                document.getElementById('val-v').innerText = lastVol ? lastVol.toLocaleString() : 'N/A';
+
+                // --- FIXED OHLCV Logic ---
+                mainChart.subscribeCrosshairMove(param => {
+                    if (param.time) {
+                        const candleIdx = currentData.candles.findIndex(c => c.time === param.time);
+                        if (candleIdx !== -1) {
+                            const candle = currentData.candles[candleIdx];
+                            document.getElementById('val-o').innerText = candle.open.toFixed(2);
+                            document.getElementById('val-h').innerText = candle.high.toFixed(2);
+                            document.getElementById('val-l').innerText = candle.low.toFixed(2);
+                            document.getElementById('val-c').innerText = candle.close.toFixed(2);
+
+                            const volValue = currentData.indicators.volume[candleIdx];
+                            document.getElementById('val-v').innerText = volValue ? volValue.toLocaleString() : 'N/A';
+                        }
+                    } else {
+                        // Fallback to the last candle data when not hovering
+                        const lastCandle = currentData.candles[currentData.candles.length - 1];
+                        document.getElementById('val-o').innerText = lastCandle.open.toFixed(2);
+                        document.getElementById('val-h').innerText = lastCandle.high.toFixed(2);
+                        document.getElementById('val-l').innerText = lastCandle.low.toFixed(2);
+                        document.getElementById('val-c').innerText = lastCandle.close.toFixed(2);
+
+                        const lastVol = currentData.indicators.volume[currentData.indicators.volume.length - 1];
+                        document.getElementById('val-v').innerText = lastVol ? lastVol.toLocaleString() : 'N/A';
+                    }
+                });
+
+                const ws = new WebSocket(`ws://${window.location.host}`);
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({ type: 'subscribe', market: globalMarket, timeframe: globalTf }));
+                };
+
+                ws.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'price') {
+                        // ... existing price update logic ...
+                        const lastCandle = currentData.candles[currentData.candles.length - 1];
+                        candleSeries.update({ ...lastCandle, close: msg.price });
+
+                        globalCurrentPrice = msg.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        updatePageTitle();
+
+                        const priceEl = document.getElementById('live-price');
+                        const oldPrice = parseFloat(priceEl.innerText.replace(/,/g, '')) || 0;
+                        priceEl.innerText = msg.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                        if (msg.price > oldPrice) {
+                            priceEl.style.color = '#26a69a';
+                        } else if (msg.price < oldPrice) {
+                            priceEl.style.color = '#ef5350';
+                        }
+                        setTimeout(() => { priceEl.style.color = '#fff'; }, 500);
+
+                    } else if (msg.type === 'update_ready') {
+                        if (msg.market === globalMarket && msg.timeframe === globalTf) {
+                            updateChartData().then(newData => {
+                                if (newData) {
+                                    currentData = newData;
+                                    window.currentDataState = newData;
+                                    // IMPORTANT: Update OHLCV display immediately with the new last candle
+                                    const lastCandle = currentData.candles[currentData.candles.length - 1];
+                                    document.getElementById('val-o').innerText = lastCandle.open.toFixed(2);
+                                    document.getElementById('val-h').innerText = lastCandle.high.toFixed(2);
+                                    document.getElementById('val-l').innerText = lastCandle.low.toFixed(2);
+                                    document.getElementById('val-c').innerText = lastCandle.close.toFixed(2);
+                                    const lastVol = currentData.indicators.volume[currentData.indicators.volume.length - 1];
+                                    document.getElementById('val-v').innerText = lastVol ? lastVol.toLocaleString() : 'N/A';
+                                }
+                            });
+                        }
+                    }
+                };
+
+                function updateIndicatorInfo(data) {
+                    const info = document.getElementById('indicator-info');
+                    const ind = data.indicators;
+                    const lastIdx = data.candles.length - 1;
+                    const safeFix = (val) => (typeof val === 'number' ? val.toFixed(2) : 'N/A');
+
+                    const macdObj = ind.macd?.[lastIdx];
+                    const signalVal = macdObj ? macdObj.signal : undefined;
+                    const histVal = macdObj ? macdObj.histogram : undefined;
+
+                    info.innerHTML = `
+                        <div class="ind-item"><span class="dot" style="background:#4fc3f7"></span> MA14: ${safeFix(ind.ma14?.[lastIdx])}</div>
+                        <div class="ind-item"><span class="dot" style="background:#ba68c8"></span> MA50: ${safeFix(ind.ma50?.[lastIdx])}</div>
+                        <div class="ind-item"><span class="dot" style="background:#ffffff"></span> MA200: ${safeFix(ind.ma200?.[lastIdx])}</div>
+                        <div class="ind-item"><span class="dot" style="background:#9c27b0"></span> RSI: ${safeFix(ind.rsi?.[lastIdx])}</div>
+                        <div class="ind-item"><span class="dot" style="background:#2962FF"></span> MACD  : Sig: ${safeFix(signalVal)} | Hist: ${safeFix(histVal)}</div>
+                    `;
+                }
+
+                updateIndicatorInfo(currentData);
+
+            } catch (err) {
+                console.error('Critical Chart Error:', err);
+                document.getElementById('main-chart').innerHTML = `<div style="color:red; padding:20px;">Chart Error: ${err.message}</div>`;
+            }
+        };
+    </script>
+</body>
+</html>

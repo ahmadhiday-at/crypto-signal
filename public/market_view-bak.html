@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market State Engine | Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://unpkg.com/lucide@0.454.0"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(30, 34, 46, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .status-card { transition: all 0.3s ease; }
+        .chart-container { height: calc(100vh - 280px); min-height: 500px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
+        .copy-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2962ff; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; z-index: 100; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+    </style>
+    <div id="toast" class="copy-toast">Copied to clipboard!</div>
+</head>
+<body class="p-4 lg:p-6">
+    <!-- Top Navigation / Symbol Header -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div class="flex items-center gap-4">
+            <div class="relative group">
+                <select id="symbol-selector" class="appearance-none bg-gray-800 text-white text-3xl font-bold mono tracking-tighter px-4 py-1 rounded border border-gray-700 cursor-pointer hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all pr-10">
+                    <!-- Options injected by JS -->
+                </select>
+                <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+                    <i data-lucide="chevron-down" class="w-5 h-5"></i>
+                </div>
+            </div>
+            <div id="price-display" class="text-2xl mono font-medium text-gray-400">
+                0.00
+            </div>
+            <button onclick="copyMarketState()" class="flex items-center gap-2 px-3 py-1 rounded-lg glass text-xs font-semibold hover:bg-gray-700 transition-all text-gray-300">
+                <i data-lucide="copy" class="w-3 h-3"></i> Copy State
+            </button>
+        </div>
+        <div class="flex items-center gap-2">
+            <div id="connection-status" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold glass text-gray-400">
+                <span class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></span>
+                Connecting...
+            </div>
+            <div id="tf-selector" class="flex gap-1 glass p-1 rounded-lg">
+                <!-- TFs injected by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- State Dashboard -->
+    <div id="state-dashboard" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+        <!-- Bias Card -->
+        <div class="status-card glass p-3 rounded-xl">
+            <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
+                <i data-lucide="compass" class="w-3 h-3"></i> Global Bias
+            </div>
+            <div id="state-bias" class="text-lg font-semibold mono">-</div>
+        </div>
+        <!-- Energy Card -->
+        <div class="status-card glass p-3 rounded-xl">
+            <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
+                <i data-lucide="zap" class="w-3 h-3"></i> Market Energy
+            </div>
+            <div id="state-energy" class="text-lg font-semibold mono">-</div>
+        </div>
+        <!-- Pressure Card -->
+        <div class="status-card glass p-3 rounded-xl">
+            <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
+                <i data-lucide="gauge" class="w-3 h-3"></i> Pressure
+            </div>
+            <div id="state-pressure" class="text-lg font-semibold mono">-</div>
+        </div>
+        <!-- Setup Card -->
+        <div id="setup-card" class="status-card glass p-3 rounded-xl border-l-4 border-l-gray-500">
+            <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
+                <i data-lucide="target" class="w-3 h-3"></i> Setup State
+            </div>
+            <div id="state-setup" class="text-lg font-semibold mono">-</div>
+        </div>
+        <!-- Risk Card -->
+        <div class="status-card glass p-3 rounded-xl">
+            <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
+                <i data-lucide="alert-triangle" class="w-3 h-3"></i> Fakeout Risk
+            </div>
+            <div id="state-risk" class="text-lg font-semibold mono">-</div>
+        </div>
+    </div>
+
+    <!-- Main View: Chart & Metrics -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Chart Area -->
+        <div class="lg:col-span-3 flex flex-col gap-2">
+            <div class="glass rounded-2xl overflow-hidden relative flex flex-col" style="height: 600px;">
+                <div id="main-chart" style="height: 55%"></div>
+                <div id="vol-chart" style="height: 15%" class="border-t border-white/5"></div>
+                <div id="macd-chart" style="height: 15%" class="border-t border-white/5"></div>
+                <div id="rsi-chart" style="height: 15%" class="border-t border-white/5"></div>
+            </div>
+            <!-- OHLC Info Bar -->
+            <div id="ohlc-bar" class="glass p-2 rounded-xl flex justify-between items-center px-4 text-[11px] mono text-gray-400 uppercase">
+                <span>O: <span id="ohlc-o" class="text-white">-</span></span>
+                <span>H: <span id="ohlc-h" class="text-white">-</span></span>
+                <span>L: <span id="ohlc-l" class="text-white">-</span></span>
+                <span>C: <span id="ohlc-c" class="text-white">-</span></span>
+                <span>V: <span id="ohlc-v" class="text-white">-</span></span>
+            </div>
+        </div>
+
+        <!-- Right Panel: Metrics -->
+        <div class="flex flex-col gap-4">
+            <div class="glass p-4 rounded-2xl">
+                <h3 class="text-xs uppercase font-bold text-gray-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-3 h-3"></i> Probabilities
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-400">Breakout Score</span>
+                            <span id="score-val" class="mono">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                            <div id="score-bar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-black/30 p-2 rounded-lg border border-white/5">
+                            <div class="text-[10px] text-gray-500 uppercase">Dist. Support</div>
+                            <div id="dist-support" class="mono text-sm">0.00%</div>
+                        </div>
+                        <div class="bg-black/30 p-2 rounded-lg border border-white/5">
+                            <div class="text-[10px] text-gray-500 uppercase">Dist. Resist</div>
+                            <div id="dist-resist" class="mono text-sm">0.00%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Summary -->
+            <div class="glass p-4 rounded-2xl">
+                <h3 class="text-xs uppercase font-bold text-gray-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="activity" class="w-3 h-3"></i> Technical Summary
+                </h3>
+                <div class="space-y-3 text-xs mono">
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-gray-500">MA200</span>
+                        <span id="sum-ma200" class="text-white">-</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-gray-500">RSI</span>
+                        <span id="sum-rsi" class="text-white">-</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-gray-500">MACD</span>
+                        <span id="sum-macd" class="text-white text-right">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass p-4 rounded-2xl flex flex-col h-full">
+                <h3 class="text-xs uppercase font-bold text-gray-500 mb-4 flex items-center gap-2">
+                    <i data-lucide="layers" class="w-3 h-3"></i> Confluence Zones
+                </h3>
+                <div id="zones-list" class="space-y-2 overflow-y-auto flex-1 pr-2 custom-scrollbar">
+                    <!-- Zones injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Application State
+        const state = {
+            market: '',
+            currentTf: '15m',
+            charts: {
+                main: null,
+                vol: null,
+                macd: null,
+                rsi: null
+            },
+            series: {
+                candles: null,
+                ma: null,
+                vol: null,
+                macdHist: null,
+                macdSig: null,
+                rsi: null
+            },
+            priceLines: [],
+            ws: null
+        };
+
+        // Color Maps
+        const COLORS = {
+            bullish: { text: '#00c087', bg: 'rgba(0, 192, 135, 0.1)', border: '#00c087' },
+            bearish: { text: '#ff3b69', bg: 'rgba(255, 59, 105, 0.1)', border: '#ff3b69' },
+            neutral: { text: '#848e9c', bg: 'rgba(132, 142, 156, 0.1)', border: '#848e9c' },
+            warning: { text: '#f0b90b', bg: 'rgba(240, 185, 11, 0.1)', border: '#f0b90b' },
+            info: { text: '#2962ff', bg: 'rgba(41, 98, 255, 0.1)', border: '#2962ff' }
+        };
+
+        async function init() {
+            const pathParts = window.location.pathname.split('/');
+            state.market = pathParts[pathParts.length - 1];
+            
+            if (!state.market) {
+                document.body.innerHTML = `<div class="flex items-center justify-center h-screen text-2xl font-bold">Market Symbol Missing in URL</div>`;
+                return;
+            }
+
+            lucide.createIcons();
+            await loadTfSelector();
+            await loadMarketSelector();
+            await setupChart();
+            await refreshMarketState();
+            await loadChartData();
+            setupWebSocket();
+        }
+
+        async function loadMarketSelector() {
+            const res = await fetch('/api/config');
+            const config = await res.json();
+            const selector = document.getElementById('symbol-selector');
+            
+            config.markets.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.code;
+                opt.innerText = m.label;
+                opt.selected = (m.code === state.market);
+                selector.appendChild(opt);
+            });
+
+            selector.onchange = (e) => {
+                window.location.pathname = `/view/market/${e.target.value}`;
+            };
+        }
+
+        async function loadTfSelector() {
+            const res = await fetch('/api/config');
+            const config = await res.json();
+            const container = document.getElementById('tf-selector');
+            
+            config.timeframes.forEach(tf => {
+                const btn = document.createElement('button');
+                btn.innerText = tf.label;
+                btn.className = `px-3 py-1 rounded-md text-xs font-medium transition-all ${state.currentTf === tf.code ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`;
+                btn.onclick = async () => {
+                    state.currentTf = tf.code;
+                    // Update UI
+                    Array.from(container.children).forEach(b => b.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all text-gray-400 hover:text-white');
+                    btn.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all bg-gray-700 text-white';
+                    await loadChartData();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        async function refreshMarketState() {
+            try {
+                const res = await fetch(`/api/market/${state.market}`);
+                const data = await res.json();
+                
+                // Update Header
+                document.getElementById('price-display').innerText = data.price.toLocaleString();
+
+                // Update Bias
+                const biasEl = document.getElementById('state-bias');
+                biasEl.innerText = data.regime_global.toUpperCase();
+                biasEl.style.color = data.regime_global.includes('up') || data.regime_global.includes('bull') ? COLORS.bullish.text : 
+                                   data.regime_global.includes('down') || data.regime_global.includes('bear') ? COLORS.bearish.text : COLORS.neutral.text;
+
+                // Update Energy
+                const energyEl = document.getElementById('state-energy');
+                energyEl.innerText = data.market_energy.replace('_', ' ').toUpperCase();
+                energyEl.style.color = data.market_energy === 'explosive' ? COLORS.bullish.text : 
+                                     data.market_energy === 'cooling' ? COLORS.bearish.text : COLORS.neutral.text;
+
+                // Update Pressure
+                const pressureEl = document.getElementById('state-pressure');
+                pressureEl.innerText = data.market_pressure.replace('_', ' ').toUpperCase();
+                pressureEl.style.color = data.market_pressure.includes('bullish') ? COLORS.bullish.text : 
+                                       data.market_pressure.includes('bearish') ? COLORS.bearish.text : COLORS.neutral.text;
+
+                // Update Setup (The Big Card)
+                const setupCard = document.getElementById('setup-card');
+                const setupEl = document.getElementById('state-setup');
+                setupEl.innerText = data.setup_state.replace('_', ' ').toUpperCase();
+                const setupColor = data.setup_state.includes('ready') || data.setup_state.includes('entry') ? COLORS.bullish : COLORS.neutral;
+                setupCard.style.borderColorLeftColor = setupColor.border;
+                setupEl.style.color = setupColor.text;
+
+                // Update Risk
+                const riskEl = document.getElementById('state-risk');
+                riskEl.innerText = data.fake_breakout_risk.toUpperCase();
+                riskEl.style.color = data.fake_breakout_risk === 'high' ? COLORS.bearish.text : 
+                                   data.fake_breakout_risk === 'medium' ? COLORS.warning.text : COLORS.bullish.text;
+
+                // Update Probabilities
+                const score = Math.round(data.breakout_score * 100);
+                document.getElementById('score-val').innerText = score + '%';
+                document.getElementById('score-bar').style.width = score + '%';
+                document.getElementById('dist-support').innerText = (data.distance_percent.to_support).toFixed(2) + '%';
+                document.getElementById('dist-resist').innerText = (data.distance_percent.to_resistance).toFixed(2) + '%';
+
+                // Update Technical Summary
+                const currentTfData = data.timeframes[state.currentTf] || {};
+                document.getElementById('sum-ma200').innerText = currentTfData.indicators?.ma200?.slice(-1)[0]?.value?.toLocaleString() || '-';
+                document.getElementById('sum-rsi').innerText = currentTfData.indicators?.rsi?.slice(-1)[0]?.toFixed(2) || '-';
+                const macd = currentTfData.indicators?.macd || {};
+                document.getElementById('sum-macd').innerText = `Sig: ${macd.signal?.slice(-1)[0]?.toFixed(2) || '-'} | Hist: ${macd.histogram?.slice(-1)[0]?.toFixed(2) || '-'}`;
+                
+                // OHLCV Summary
+                const lastC = currentTfData.candles?.slice(-1)[0] || {};
+                const vol = currentTfData.indicators?.volume?.slice(-1)[0] || 0;
+                document.getElementById('sum-ohlcv').innerText = `O: ${lastC.open?.toLocaleString() || '-'} H: ${lastC.high?.toLocaleString() || '-'} L: ${lastC.low?.toLocaleString() || '-'} C: ${lastC.close?.toLocaleString() || '-'} V: ${vol.toLocaleString()}`;
+
+                // Update Zones List
+                renderZones(data.levels);
+
+                // Apply S/R Zones to Chart
+                applyZonesToChart(data.levels);
+
+            } catch (err) {
+                console.error('Market State Error:', err);
+            }
+        }
+
+        function renderZones(levels) {
+            const container = document.getElementById('zones-list');
+            container.innerHTML = '';
+
+            const allZones = [
+                ...levels.resistance.map(z => ({...z, type: 'RES'})),
+                ...levels.support.map(z => ({...z, type: 'SUP'}))
+            ].sort((a, b) => b.mid - a.mid);
+
+            allZones.forEach(z => {
+                const color = z.type === 'RES' ? COLORS.bearish : COLORS.bullish;
+                const div = document.createElement('div');
+                div.className = `flex justify-between items-center p-2 rounded-lg text-xs mono border-l-2 ${z.type === 'RES' ? 'border-l-red-500 bg-red-500/5' : 'border-l-green-500 bg-green-500/5'}`;
+                div.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="font-bold ${z.type === 'RES' ? 'text-red-400' : 'text-green-400'}">${z.type} Zone</span>
+                        <span class="text-gray-500 text-[10px]">TFs: ${z.tfs?.join(', ') || 'single'}</span>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-semibold cursor-pointer hover:text-white transition-colors relative group" onclick="copyPrice('${z.mid}')">
+                            ${z.mid.toLocaleString()}
+                            <span class="absolute -top-6 left-1/2 -translate-x-1/2 scale-0 group-hover:scale-100 transition-transform bg-gray-700 text-[8px] px-1 rounded text-white">Copy</span>
+                        </div>
+                        <div class="text-[10px] text-gray-500">Score: ${z.score}</div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function copyPrice(val) {
+            navigator.clipboard.writeText(val).then(() => {
+                const toast = document.getElementById('toast');
+                toast.innerText = 'Price Copied!';
+                toast.style.opacity = '1';
+                setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+            });
+        }
+
+        async function copyMarketState() {
+            try {
+                const res = await fetch(`/api/market/${state.market}`);
+                const data = await res.json();
+                await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+                
+                const toast = document.getElementById('toast');
+                toast.innerText = 'Market State Copied!';
+                toast.style.opacity = '1';
+                setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+            } catch (err) {
+                console.error('Copy Error:', err);
+            }
+        }
+
+        async function setupChart() {
+            const createChartConfig = (id) => LightweightCharts.createChart(document.getElementById(id), {
+                layout: { background: { type: LightweightCharts.ColorType.Solid, color: '#000000' }, textColor: '#848e9c' },
+                grid: { vertLines: { color: 'rgba(42, 46, 57, 0.5)' }, horzLines: { color: 'rgba(42, 46, 57, 0.5)' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderVisible: false },
+                timeScale: { borderVisible: false },
+            });
+
+            try {
+                // Main Chart
+                state.charts.main = createChartConfig('main-chart');
+                state.series.candles = state.charts.main.addCandlestickSeries({
+                    upColor: '#00c087', downColor: '#ff3b69', borderVisible: false, wickUpColor: '#00c087', wickDownColor: '#ff3b69',
+                });
+                state.series.ma = state.charts.main.addLineSeries({ color: '#f0b90b', lineWidth: 2, title: 'MA200' });
+
+                // Volume Chart
+                state.charts.vol = createChartConfig('vol-chart');
+                state.series.vol = state.charts.vol.addHistogramSeries({ color: '#26a69a' });
+
+                // MACD Chart
+                state.charts.macd = createChartConfig('macd-chart');
+                state.series.macdHist = state.charts.macd.addHistogramSeries({ color: '#26a69a' });
+                state.series.macdSig = state.charts.macd.addLineSeries({ color: '#ffeb3b', lineWidth: 1 });
+
+                // RSI Chart
+                state.charts.rsi = createChartConfig('rsi-chart');
+                state.series.rsi = state.charts.rsi.addLineSeries({ color: '#9c27b0', lineWidth: 2 });
+
+                // Sync Time Scales
+                const syncTf = (chart) => {
+                    chart.timeScale().subscribeVisibleTimeRangeChange(range => {
+                        state.charts.main.timeScale().setVisibleRange(range);
+                        state.charts.vol.timeScale().setVisibleRange(range);
+                        state.charts.macd.timeScale().setVisibleRange(range);
+                        state.charts.rsi.timeScale().setVisibleRange(range);
+                    });
+                };
+                state.charts.main.timeScale().subscribeVisibleTimeRangeChange(range => {
+                    state.charts.vol.timeScale().setVisibleRange(range);
+                    state.charts.macd.timeScale().setVisibleRange(range);
+                    state.charts.rsi.timeScale().setVisibleRange(range);
+                });
+
+                window.addEventListener('resize', () => {
+                    const ids = ['main-chart', 'vol-chart', 'macd-chart', 'rsi-chart'];
+                    ids.forEach(id => {
+                        const el = document.getElementById(id);
+                        state.charts[id.split('-')[0]].resize(el.clientWidth, el.clientHeight);
+                    });
+                });
+            } catch (err) {
+                console.error('Chart Setup Error:', err);
+            }
+        }
+
+        async function loadChartData() {
+            try {
+                const res = await fetch(`/api/${state.market}/${state.currentTf}`);
+                const data = await res.json();
+                
+                if (data.candles) {
+                    const formattedData = data.candles.map(c => ({
+                        time: c.time,
+                        open: c.open,
+                        high: c.high,
+                        low: c.low,
+                        close: c.close
+                    }));
+                    state.series.candles.setData(formattedData);
+                    
+                    // Update OHLC Bar
+                    const lastC = formattedData[formattedData.length - 1];
+                    document.getElementById('ohlc-o').innerText = lastC.open.toLocaleString();
+                    document.getElementById('ohlc-h').innerText = lastC.high.toLocaleString();
+                    document.getElementById('ohlc-l').innerText = lastC.low.toLocaleString();
+                    document.getElementById('ohlc-c').innerText = lastC.close.toLocaleString();
+                    document.getElementById('ohlc-v').innerText = data.indicators?.volume?.slice(-1)[0]?.toLocaleString() || '-';
+                }
+                
+                // MA Data
+                if (data.indicators?.ma200) {
+                    state.series.ma.setData(data.indicators.ma200.map(m => ({ time: m.time, value: m.value })));
+                }
+
+                // Volume Data
+                if (data.indicators?.volume) {
+                    const volData = data.indicators.volume.map((v, i) => ({
+                        time: data.candles[i].time,
+                        value: v,
+                        color: data.candles[i].close >= data.candles[i].open ? '#00c08766' : '#ff3b6966'
+                    }));
+                    state.series.vol.setData(volData);
+                }
+
+                // MACD Data
+                if (data.indicators?.macd) {
+                    const histData = data.indicators.macd.histogram.map((v, i) => ({
+                        time: data.candles[i].time,
+                        value: v,
+                        color: v >= 0 ? '#00c087' : '#ff3b69'
+                    }));
+                    const sigData = data.indicators.macd.signal.map((v, i) => ({
+                        time: data.candles[i].time,
+                        value: v
+                    }));
+                    state.series.macdHist.setData(histData);
+                    state.series.macdSig.setData(sigData);
+                }
+
+                // RSI Data
+                if (data.indicators?.rsi) {
+                    const rsiData = data.indicators.rsi.map((v, i) => ({
+                        time: data.candles[i].time,
+                        value: v
+                    }));
+                    state.series.rsi.setData(rsiData);
+                }
+                
+                state.charts.main.timeScale().fitContent();
+            } catch (err) {
+                console.error('Chart Data Error:', err);
+            }
+        }
+
+        function applyZonesToChart(levels) {
+            // Clear old lines
+            state.priceLines.forEach(line => state.chart.removePriceLine(line));
+            state.priceLines = [];
+
+            const drawLevel = (lvl, color) => {
+                const line = state.candleSeries.createPriceLine({
+                    price: lvl.mid,
+                    color: color,
+                    lineWidth: 2,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true,
+                    title: `${lvl.score >= 5 ? 'STRONG' : 'MINOR'} ${lvl.tfs ? lvl.tfs.length + 'TF' : 'S/R'}`,
+                });
+                state.priceLines.push(line);
+            };
+
+            levels.support.forEach(s => drawLevel(s, COLORS.bullish.text));
+            levels.resistance.forEach(r => drawLevel(r, COLORS.bearish.text));
+        }
+
+        function setupWebSocket() {
+            state.ws = new WebSocket(`ws://${window.location.host}`);
+            
+            state.ws.onopen = () => {
+                document.getElementById('connection-status').innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span> Connected
+                `;
+                document.getElementById('connection-status').classList.add('text-green-400');
+                
+                state.ws.send(JSON.stringify({ 
+                    type: 'subscribe', 
+                    market: state.market, 
+                    timeframe: state.currentTf 
+                }));
+            };
+
+            state.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'price') {
+                    document.getElementById('price-display').innerText = parseFloat(data.price).toLocaleString();
+                } else if (data.type === 'update_ready') {
+                    refreshMarketState();
+                    loadChartData();
+                }
+            };
+
+            state.ws.onclose = () => {
+                document.getElementById('connection-status').innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected
+                `;
+                document.getElementById('connection-status').classList.add('text-red-400');
+                setTimeout(setupWebSocket, 5000);
+            };
+        }
+
+        init();
+    </script>
+</body>
+</html>
