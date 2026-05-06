@@ -8,13 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### 🚀 Added
-- (Pending first official release)
+- Module-driven architecture for better scalability and maintainability.
 
 ### 🛠️ Fixed
-- (Pending)
+- Removed unused empty directories (`routes`, `handlers`, `src/utils`).
 
 ### ⚠️ Changed
-- (Pending)
+- Refactored the monolithic `server.js` into focused modules under `src/` (`config`, `api`, `services`, `websocket`, `jobs`, `data`).
+- Extracted business logic (`enhanceMarketState`, snapshot updating) into `src/services/market.service.js`.
+- Separated API routing and controller logic into `src/api/`.
+- Moved WebSocket handling to a dedicated `ws.manager.js`.
+- Isolated cron job scheduling to `src/jobs/cron.jobs.js`.
 
 ---
 

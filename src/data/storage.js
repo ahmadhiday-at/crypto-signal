@@ -3,8 +3,8 @@ const path = require('path');
 
 class StorageService {
     constructor() {
-        this.chartDataDir = path.join(__dirname, '../data/chart');
-        this.marketDataDir = path.join(__dirname, '../data/market');
+        this.chartDataDir = path.join(__dirname, '../../data/chart');
+        this.marketDataDir = path.join(__dirname, '../../data/market');
     }
 
     async ensureDirs() {
