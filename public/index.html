@@ -428,6 +428,18 @@
                         // Store data in global window object for the copy function
                         window.currentDataState = data;
                         
+                        // Reset viewport to approximately the latest 100 candles
+                        const totalCandles = data.candles ? data.candles.length : 0;
+                        const visibleCount = 100;
+                        if (totalCandles > visibleCount) {
+                            mainChart.timeScale().setVisibleLogicalRange({
+                                from: totalCandles - visibleCount,
+                                to: totalCandles,
+                            });
+                        } else {
+                            mainChart.timeScale().fitContent();
+                        }
+                        
                         return data;
                     } catch (err) {
                         console.error('Fetch Data Error:', err);
