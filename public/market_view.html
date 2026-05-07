@@ -184,10 +184,13 @@
             },
             series: {
                 candles: null,
-                ma: null,
+                ma14: null,
+                ma50: null,
+                ma200: null,
                 vol: null,
-                macdHist: null,
+                macdLine: null,
                 macdSig: null,
+                macdHist: null,
                 rsi: null
             },
             priceLines: [],
@@ -421,8 +424,14 @@
                 });
                 state.series.candles.applyOptions({ lastValueVisible: true });
 
-                state.series.ma = state.charts.main.addLineSeries({ color: '#f0b90b', lineWidth: 2, title: 'MA200' });
-                state.series.ma.applyOptions({ lastValueVisible: false });
+                state.series.ma14 = state.charts.main.addLineSeries({ color: '#4fc3f7', lineWidth: 1 });
+                state.series.ma14.applyOptions({ lastValueVisible: false });
+
+                state.series.ma50 = state.charts.main.addLineSeries({ color: '#ba68c8', lineWidth: 2 });
+                state.series.ma50.applyOptions({ lastValueVisible: false });
+
+                state.series.ma200 = state.charts.main.addLineSeries({ color: '#ffffff', lineWidth: 2 });
+                state.series.ma200.applyOptions({ lastValueVisible: false });
 
                 state.series.vol = state.charts.vol.addHistogramSeries({ color: '#26a69a' });
                 state.series.vol.applyOptions({ lastValueVisible: false });
@@ -508,57 +517,41 @@
                     document.getElementById('ohlc-v').innerText = data.indicators?.volume?.slice(-1)[0]?.toLocaleString() || '-';
                 }
                 
-                // MA Data - Filter Nulls
+                // MA Data
+                if (data.indicators?.ma14) {
+                    state.series.ma14.setData(data.indicators.ma14.map((v, i) => ({ time: data.candles[i].time, value: v })).filter(item => item.value !== null && item.value !== undefined));
+                }
+                if (data.indicators?.ma50) {
+                    state.series.ma50.setData(data.indicators.ma50.map((v, i) => ({ time: data.candles[i].time, value: v })).filter(item => item.value !== null && item.value !== undefined));
+                }
                 if (data.indicators?.ma200) {
-                    const maData = data.indicators.ma200
-                        .map((val, i) => ({
-                            time: candles[i]?.time,
-                            value: val
-                        }))
-                        .filter(item => item.time && item.value !== null);
-                    state.series.ma.setData(maData);
+                    state.series.ma200.setData(data.indicators.ma200.map((v, i) => ({ time: data.candles[i].time, value: v })).filter(item => item.value !== null && item.value !== undefined));
                 }
 
-                // Volume Data - Filter Nulls
+                // Volume Data
                 if (data.indicators?.volume) {
-                    const volData = data.indicators.volume
-                        .map((v, i) => ({
-                            time: data.candles[i].time,
-                            value: v,
-                            color: data.candles[i].close >= data.candles[i].open ? '#00c08766' : '#ff3b6966'
-                        }))
-                        .filter(v => v.value !== null);
-                    state.series.vol.setData(volData);
+                    state.series.vol.setData(data.indicators.volume.map((v, i) => ({ 
+                        time: data.candles[i].time, 
+                        value: v, 
+                        color: data.candles[i].close >= data.candles[i].open ? '#26a69a' : '#ef5350' 
+                    })).filter(v => v.value !== null && v.value !== undefined));
                 }
 
-                // MACD Data - Filter Nulls
+                // MACD Data
                 if (data.indicators?.macd) {
-                    const histData = data.indicators.macd.histogram
-                        .map((v, i) => ({
-                            time: data.candles[i].time,
-                            value: v,
-                            color: v >= 0 ? '#00c087' : '#ff3b69'
-                        }))
-                        .filter(v => v.value !== null);
-                    const sigData = data.indicators.macd.signal
-                        .map((v, i) => ({
-                            time: data.candles[i].time,
-                            value: v
-                        }))
-                        .filter(v => v.value !== null);
-                    state.series.macdHist.setData(histData);
-                    state.series.macdSig.setData(sigData);
+                    const macdData = data.indicators.macd;
+                    state.series.macdLine.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.macd || 0 })));
+                    state.series.macdSig.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.signal || 0 })));
+                    state.series.macdHist.setData(macdData.map((v, i) => ({ 
+                        time: data.candles[i].time, 
+                        value: v?.histogram || 0,
+                        color: v?.histogram >= 0 ? '#26a69a' : '#ef5350'
+                    })));
                 }
 
-                // RSI Data - Filter Nulls
+                // RSI Data
                 if (data.indicators?.rsi) {
-                    const rsiData = data.indicators.rsi
-                        .map((v, i) => ({
-                            time: data.candles[i].time,
-                            value: v
-                        }))
-                        .filter(v => v.value !== null);
-                    state.series.rsi.setData(rsiData);
+                    state.series.rsi.setData(data.indicators.rsi.map((v, i) => ({ time: data.candles[i].time, value: v })).filter(item => item.value !== null && item.value !== undefined));
                 }
                 
                 state.charts.main.timeScale().fitContent();
