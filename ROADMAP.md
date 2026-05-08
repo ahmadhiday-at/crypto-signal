@@ -22,15 +22,29 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
 **Objective:** Transition from "Yes/No" logic to a "Weighted Probability" system.
 
 ### 🛠️ Technical Milestones
-- [ ] **Weighted Point System:** 
-    - Create a `ScoringMatrix` where each condition (e.g., `near_support`, `bullish_macd`) is assigned a point value.
-    - Total Score $\rightarrow$ Signal Strength (Weak, Medium, Strong).
-- [ ] **Confidence Calculation:** 
-    - Formula: $\text{Confidence} = (\frac{\text{Current Score}}{\text{Max Possible Score}}) \times 100\%$.
+- [/] **Weighted Point System:** 
+    - [x] Create a `ScoringMatrix` based on timeframe weights (15m, 1h, 4h, 1d).
+    - [x] Consolidate S/R scores across MTF with dynamic merging.
+    - [ ] Total Score $\rightarrow$ Signal Strength (Weak, Medium, Strong).
+- [x] **Confidence Calculation:** 
+    - [x] Implemented `breakout_score` (0.0 - 1.0) based on proximity and volume.
 - [ ] **Dynamic Reasoning Engine:** 
     - Instead of a state string, return an array of triggers: `["Strong HTF Support", "Bullish Divergence", "Volume Surge"]`.
 
-**✅ Success Criteria:** The system can explain *why* it generated a signal and provide a confidence percentage.
+**✅ Success Criteria:** The system can provide a confidence percentage (`breakout_score`) and explain the dominant side of the market.
+
+---
+
+## 🎨 LEVEL 2.5 — VISUAL STRATEGY LAYER (THE DASHBOARD) ✅
+**Objective:** Provide a high-performance UI for real-time state monitoring.
+
+### 🛠️ Technical Milestones
+- [x] **Premium Glassmorphism UI:** Built with Tailwind CSS.
+- [x] **Crosshair Synchronization:** Updates OHLCV, Technical Summary, and Breakout Score on hover.
+- [x] **Confluence Monitoring:** Visual list of S/R zones with price-copying.
+- [x] **Live WebSocket Integration:** Zero-latency price and state updates.
+
+**✅ Success Criteria:** A dashboard that allows a trader to assess market state in under 5 seconds.
 
 ---
 
