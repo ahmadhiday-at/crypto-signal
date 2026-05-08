@@ -1,6 +1,6 @@
 # 📈 Trading Chart App: Market State Engine
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
 A professional-grade real-time trading analysis system that transforms raw market data into high-probability trading signals. This is not just a charting tool; it is a **Market State Reducer** that aggregates multi-timeframe (MTF) data into a single, interpretable "State" for precise decision-making.
@@ -19,7 +19,16 @@ The system converts technical indicators into strategic insights:
 - **MTF Confluence:** Weights levels across timeframes. A support zone appearing on both 1D and 4H is significantly more powerful than one appearing only on 15m.
 - **Compression Detection:** Detects "Squeezes" where price is trapped between converging support and resistance, signaling an imminent explosive move.
 - **Energy Analysis:** Uses Volume and MACD to differentiate between a "exhausted move" and a "strong trend."
-- **Probabilistic Scoring:** Calculates a `breakout_score` and `fakeout_risk` to prevent entering trades during low-probability environments.
+- **Probabilistic Scoring:** Calculates a dynamic `breakout_score` and `fakeout_risk`.
+- **Dynamic UX:** Real-time crosshair synchronization between charts and technical summary widgets.
+
+---
+
+## 💻 Core Interface: Market Dashboard
+The system now features a premium **Market Dashboard** (`/view/market/:symbol`) that provides:
+- **Glassmorphism UI:** High-contrast design for long-session trading.
+- **Crosshair Observer:** Instant synchronization of OHLCV and Technical Summary (MA/RSI/MACD) on cursor hover.
+- **Confluence Tracker:** Visual list of MTF Support/Resistance zones with one-click copying.
 
 ---
 
@@ -37,16 +46,17 @@ The system converts technical indicators into strategic insights:
 
 ```text
 trading-chart-app/
-├── data/
-│   ├── chart/          # Raw processed snapshots per symbol/TF
-│   └── market/         # Final "Enhanced Market State" JSONs
 ├── src/
-│   ├── binance.js      # API & WebSocket handlers
-│   ├── indicators.js   # TA logic & S/R Clustering
-│   └── storage.js      # Local file persistence layer
-├── server.js           # Main entry, API routes & Intelligence Layer
-├── package.json        # Dependencies & scripts
-└── .env                # Configuration variables
+│   ├── api/            # Routes and Controllers (REST/UI)
+│   ├── services/       # Domain Logic (Binance, Indicators, Market State)
+│   ├── websocket/      # Real-time event management
+│   ├── jobs/           # Scheduled snapshots and cleanup
+│   ├── config/         # Environment and system constants
+│   └── data/           # Filesystem persistence layer
+├── public/             # Dashboard and Reference UI files
+├── server.js           # Lightweight entry point
+├── package.json        # Dependencies
+└── .env                # App configuration
 ```
 
 ---
@@ -100,16 +110,16 @@ trading-chart-app/
    node server.js
    ```
 
-### 🔌 API Usage
+### 🔌 API & View Endpoints
 
-The system provides a "Single Source of Truth" API:
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/market/:symbol` | `GET` | Returns the fully reduced **Enhanced Market State**. |
-| `/api/:symbol/:tf` | `GET` | Returns the raw technical snapshot for a specific TF. |
-| `/api/config` | `GET` | Returns current system configuration. |
-| `/api/reset` | `GET` | Clears cache and forces a full market re-scan. |
+| Category | Endpoint | Method | Description |
+| :--- | :--- | :--- | :--- |
+| **Data** | `/api/market/:symbol` | `GET` | Returns the fully reduced **Enhanced Market State**. |
+| **Data** | `/api/:symbol/:tf` | `GET` | Returns raw technical snapshots for a specific TF. |
+| **UI** | `/view/market/:symbol` | `GET` | Renders the premium **Market Dashboard**. |
+| **UI** | `/view/:symbol/:tf` | `GET` | Renders the reference **Multi-Pane Chart**. |
+| **System** | `/api/config` | `GET` | Returns current system configuration. |
+| **System** | `/api/reset` | `GET` | Clears cache and forces a full market re-scan. |
 
 ---
 
