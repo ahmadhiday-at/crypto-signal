@@ -7,37 +7,37 @@
     "1h",
     "15m"
   ],
-  "price": 82417.55,
-  "context": "near_resistance",
-  "momentum": "bullish",
+  "price": 81256.53,
+  "context": "mid_range",
+  "momentum": "neutral",
   "regime": "ranging",
   "ohlcv": {
-    "time": 1778065200,
-    "open": 82290.03,
-    "high": 82484.21,
-    "low": 82261.6,
-    "close": 82417.55,
-    "volume": 223.89542
+    "time": 1778142600,
+    "open": 81419.04,
+    "high": 81483.36,
+    "low": 81243.33,
+    "close": 81256.53,
+    "volume": 165.62724
   },
   "indicators": {
-    "ma14": 81921.97500000022,
-    "ma50": 81462.91639999994,
-    "ma200": 80757.29404999997,
-    "rsi": 74.75,
+    "ma14": 81322.6392857145,
+    "ma50": 81230.51779999997,
+    "ma200": 81382.64039999997,
+    "rsi": 49.41,
     "macd": {
-      "MACD": 241.0325904834608,
-      "signal": 175.60870230159668,
-      "histogram": 65.42388818186413
+      "MACD": 85.00695908539637,
+      "signal": 59.813754225743,
+      "histogram": 25.193204859653378
     },
-    "atr": 204.65908326800084,
-    "volume": 223.89542
+    "atr": 174.49207053458915,
+    "volume": 165.62724
   },
   "levels": {
     "support": [
       {
-        "low": 76862.9525709504,
-        "high": 78946.90742904959,
-        "mid": 77904.93,
+        "low": 77305.76514241312,
+        "high": 79360.23485758688,
+        "mid": 78333,
         "touches": 1,
         "score": 10,
         "tfs": [
@@ -45,40 +45,40 @@
           "4h",
           "1h"
         ],
-        "score_raw": 501.90000000000003
+        "score_raw": 480
       },
       {
-        "low": 81184.10608673483,
-        "high": 82034.10724659852,
-        "mid": 81609.10666666667,
-        "touches": 3,
-        "score": 5.75,
-        "tfs": [
-          "4h",
-          "1h",
-          "15m"
-        ],
-        "score_raw": 288.8
-      },
-      {
-        "low": 80242.84942006815,
-        "high": 81092.85057993184,
+        "low": 80244.59133868077,
+        "high": 81091.10866131922,
         "mid": 80667.84999999999,
         "touches": 4,
-        "score": 5.73,
+        "score": 8.07,
         "tfs": [
           "4h",
           "1h",
           "15m"
         ],
-        "score_raw": 287.6
+        "score_raw": 387.4
+      },
+      {
+        "low": 78452.00514241312,
+        "high": 80506.47485758689,
+        "mid": 79479.24,
+        "touches": 2,
+        "score": 6.19,
+        "tfs": [
+          "1d",
+          "4h",
+          "15m"
+        ],
+        "score_raw": 297.3
       }
     ],
     "resistance": [
       {
-        "low": 80749.5025709504,
-        "high": 82833.4574290496,
-        "mid": 81791.48,
+        "low": 81822.76514241312,
+        "high": 83877.23485758688,
+        "mid": 82850,
         "touches": 1,
         "score": 10,
         "tfs": [
@@ -87,80 +87,82 @@
           "1h",
           "15m"
         ],
-        "score_raw": 157.2
+        "score_raw": 453
       },
       {
-        "low": 89332.03423761707,
-        "high": 91415.98909571627,
-        "mid": 90374.01166666667,
-        "touches": 6,
-        "score": 2.08,
+        "low": 80806.50133868078,
+        "high": 81653.01866131923,
+        "mid": 81229.76000000001,
+        "touches": 2,
+        "score": 5.06,
         "tfs": [
-          "1d"
+          "4h",
+          "15m"
         ],
-        "score_raw": 32.7
+        "score_raw": 229
       },
       {
-        "low": 85447.0975709504,
-        "high": 87531.0524290496,
-        "mid": 86489.075,
-        "touches": 4,
-        "score": 1.41,
+        "low": 81328.64133868077,
+        "high": 82175.15866131922,
+        "mid": 81751.9,
+        "touches": 2,
+        "score": 4.54,
         "tfs": [
-          "1d"
+          "4h",
+          "1h"
         ],
-        "score_raw": 22.2
+        "score_raw": 205.8
       }
     ]
   },
-  "timestamp": 1778065200,
+  "timestamp": 1778142600,
   "timeframes": {
     "1d": {
-      "price": 81353.67,
-      "context": "near_resistance",
+      "price": 80994.38,
+      "context": "mid_range",
       "momentum": "bullish",
       "regime": "trending",
-      "timestamp": 1778025600
+      "timestamp": 1778112000
     },
     "4h": {
-      "price": 81979.7,
-      "context": "mid_range",
-      "momentum": "bullish",
+      "price": 80979.19,
+      "context": "near_resistance",
+      "momentum": "neutral",
       "regime": "trending",
-      "timestamp": 1778054400
+      "timestamp": 1778126400
     },
     "1h": {
-      "price": 82290.04,
-      "context": "mid_range",
-      "momentum": "bullish",
+      "price": 81518.58,
+      "context": "near_resistance",
+      "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1778061600
+      "timestamp": 1778137200
     },
     "15m": {
-      "price": 82417.55,
+      "price": 81256.53,
       "context": "mid_range",
-      "momentum": "bullish",
+      "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1778065200
+      "timestamp": 1778142600
     }
   },
   "position": "closer_to_resistance",
   "zone_state": "normal",
-  "dominant_side": "support",
-  "market_pressure": "bullish_lean",
+  "dominant_side": "equilibrium",
+  "market_pressure": "balanced",
   "market_energy": "stable",
-  "breakout_score": 0.12,
+  "breakout_score": 0,
   "breakout_confirmation": "none",
   "volume_state": "normal",
   "setup_state": "no_trade",
   "fake_breakout_risk": "low",
   "regime_global": "weak_trend",
   "distance": {
-    "to_support": 0.0548,
-    "to_resistance": 0.0076
+    "to_support": 0.036,
+    "to_resistance": 0.0196
   },
   "distance_percent": {
-    "to_support": 5.48,
-    "to_resistance": 0.76
+    "to_support": 3.6,
+    "to_resistance": 1.96
   }
 }
