@@ -7,35 +7,31 @@ This document provides a detailed technical overview of the **Trading Chart App*
 The application follows a linear pipeline architecture where data is progressively refined from raw numbers into strategic intelligence.
 
 ### 🔄 The Data Pipeline
-`Market Data (Binance)` $\rightarrow$ `Technical Analysis (Indicators)` $\rightarrow$ `Temporal Snapshots (Per TF)` $\rightarrow$ `MTF Consolidation (Reducer)` $\rightarrow$ `Strategic Interpretation (Intelligence Layer)` $\rightarrow$ `Market State API`
+`Market Data (Binance API/WS)` $\rightarrow$ `Indicator Service` $\rightarrow$ `Market Reducer (MTF)` $\rightarrow$ `Intelligence Layer` $\rightarrow$ `REST/WS API` $\rightarrow$ `Dynamic Dashboard (UI)`
 
 ---
 
 ## 🧩 Component Deep Dive
 
-### 1. Data Acquisition Layer (`src/binance.js`)
+### 1. Data Acquisition Layer (`src/services/binance.service.js`)
 Responsible for the interface between the system and the external market.
-- **REST API:** Used for fetching historical K-lines (candles) for multiple timeframes.
-- **WebSocket:** Used for real-time price updates to ensure the "current price" in the state is accurate.
-- **Normalization:** Converts Binance's raw API response into a standardized format used by the `IndicatorService`.
+- **REST Client:** Fetches historical K-lines (candles) for all configured timeframes (15m, 1h, 4h, 1d).
+- **WebSocket Subscriber:** Listens for real-time price updates to keep the "Live Price" state current.
+- **Normalization:** Standardizes raw Binance data into the application's internal candle format.
 
-### 2. Technical Analysis Layer (`src/indicators.js`)
-This layer transforms raw candles into mathematical indicators.
-- **S/R Clustering:** Instead of a single line, it identifies "zones" of support and resistance by clustering price pivots.
-- **Trend Indicators:** Calculation of Moving Averages (MA) to determine the primary trend direction.
-- **Momentum & Volatility:**
-    - **RSI:** To identify overbought/oversold conditions.
-    - **MACD:** To analyze trend strength and momentum shifts.
-    - **ATR (Average True Range):** To measure volatility, which is used to set dynamic boundaries for zones.
+### 2. Technical Analysis Layer (`src/services/indicator.service.js`)
+Transforms raw price data into mathematical and structural insights.
+- **S/R Clustering Engine:** Identifies "Zones" of support and resistance by clustering historical price pivots using dynamic ATR-based tolerances.
+- **Indicator Suite:** Calculates MA14, MA50, MA200, RSI, and MACD.
+- **Volatility Analysis:** Uses ATR to determine dynamic "zone width" and risk parameters.
 
-### 3. Storage & Persistence Layer (`src/storage.js`)
+### 3. Data Management (`src/data/`)
 To avoid hitting API rate limits and to enable historical analysis, the system uses a local filesystem cache.
 - **`data/chart/{symbol}/{tf}.json`**: Stores the processed indicators for a specific timeframe.
 - **`data/market/{symbol}.json`**: Stores the final "Enhanced Market State".
-- **TTL Logic:** Implements a caching mechanism where data is refreshed based on the timeframe (e.g., 15m data is refreshed more often than 1d data).
 
-### 4. The Market State Reducer & Intelligence Layer (`server.js`)
-This is the "brain" of the application. It takes the snapshots from all timeframes and applies a set of heuristics to determine the current market environment.
+### 4. Intelligence Layer (`src/services/market.service.js`)
+This is the "brain" of the application. It takes snapshots from all timeframes and applies heuristics to determine the market environment.
 
 #### A. Multi-Timeframe (MTF) Confluence
 The system assigns weights to different timeframes:
@@ -59,10 +55,14 @@ Combines volume and momentum to categorize the "energy" of the move:
 - **Stable:** Low volume + Low volatility.
 
 #### D. Breakout Probability & Risk
-Calculates a score (0.0 to 1.0) based on:
-- **Proximity:** Distance of current price to the nearest strong zone.
-- **Volume Surge:** Relative volume compared to the average of the last 20 periods.
-- **Fake-out Filter:** If the price breaks a zone but the "Energy State" is `cooling`, the system flags a `high_risk_fakeout`.
+Calculates a `breakout_score` (0.0 to 1.0) by analyzing:
+- **Proximity:** Proximity to strong S/R zones.
+- **Volume Profile:** Relative volume surge vs. 20-period moving average.
+- **Regime Alignment:** Alignment between local momentum and global bias.
+
+### 4. API & Communication Layer
+- **REST API (`src/api/`):** Exposes endpoints for config, raw chart data, and the enhanced market state.
+- **WebSocket Manager (`src/websocket/ws.manager.js`):** Handles real-time event broadcasting (price updates and `update_ready` signals).
 
 ---
 
@@ -107,7 +107,41 @@ Calculates a score (0.0 to 1.0) based on:
 }
 ```
 
+## 💻 Frontend Layer
+
+The system provides two distinct interfaces for interacting with the Market State:
+
+### 1. Reference View (`public/index.html`)
+A standard trading view focused on accurate technical display and historical data review.
+
+### 2. Market Dashboard (`public/market_view.html`)
+A high-performance "command center" designed for rapid state assessment.
+- **Glassmorphism UI:** Built with Tailwind CSS for high readability.
+- **Dynamic Synchronization:** Features a "Crosshair Observer" that synchronizes the OHLCV, Technical Summary (MAs/RSI/MACD), and Breakout Score panels with the user's cursor position.
+- **Actionable Insights:** Direct display of confluence zones with integrated price-copying functionality.
+
+## 📊 Data Schema (Market State)
+The enhanced state object returned by `/api/market/:symbol`:
+
+```json
+{
+  "market": "BTCUSDT",
+  "price": 65432.10,
+  "regime_global": "bullish_trending",
+  "market_energy": "explosive",
+  "market_pressure": "bullish_compression",
+  "setup_state": "breakout_ready",
+  "breakout_score": 0.85,
+  "fake_breakout_risk": "low",
+  "levels": {
+    "support": [{ "mid": 64000, "score": 8, "tfs": ["1h", "4h"] }],
+    "resistance": [{ "mid": 67000, "score": 5, "tfs": ["1h"] }]
+  },
+  "distance_percent": { "to_support": 2.19, "to_resistance": 2.40 }
+}
+```
+
 ## 🚀 Design Goals
 1. **Determinism:** Given the same input data, the Market State must always be the same.
-2. **Low Latency:** By reducing data locally before sending it to the API, the frontend remains snappy.
-3. **Scalability:** The logic is symbol-agnostic, allowing the system to track hundreds of pairs by simply adding them to the `.env` list.
+2. **Low Latency:** Data reduction occurs server-side to minimize client-side processing overhead.
+3. **Responsive Intelligence:** The dashboard provides real-time, context-aware metrics that adapt as the user explores the chart.
