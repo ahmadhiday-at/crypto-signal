@@ -7,30 +7,30 @@
     "1h",
     "15m"
   ],
-  "price": 95.31,
+  "price": 95.04,
   "context": "near_support",
   "momentum": "neutral",
   "regime": "ranging",
   "ohlcv": {
     "time": 1787511600,
     "open": 95.3,
-    "high": 95.32,
-    "low": 95.3,
-    "close": 95.31,
-    "volume": 18.453
+    "high": 95.42,
+    "low": 94.88,
+    "close": 95.04,
+    "volume": 10572.528
   },
   "indicators": {
-    "ma14": 95.3221428571427,
-    "ma50": 94.41279999999993,
-    "ma200": 94.03465,
-    "rsi": 55.97,
+    "ma14": 95.30285714285698,
+    "ma50": 94.40739999999992,
+    "ma200": 94.0333,
+    "rsi": 49.8,
     "macd": {
-      "MACD": 0.1925670432620592,
-      "signal": 0.25990220981488976,
-      "histogram": -0.06733516655283056
+      "MACD": 0.17102858172358992,
+      "signal": 0.2555945175071959,
+      "histogram": -0.084565935783606
     },
-    "atr": 0.4323681283296764,
-    "volume": 18.453
+    "atr": 0.4687966997582492,
+    "volume": 10572.528
   },
   "levels": {
     "support": [
@@ -45,14 +45,14 @@
           "1h",
           "15m"
         ],
-        "score_raw": 358.1
+        "score_raw": 359.1
       },
       {
         "low": 74.05667704374125,
         "high": 76.7317844947203,
         "mid": 75.39423076923077,
         "touches": 26,
-        "score": 6.44,
+        "score": 6.42,
         "tfs": [
           "4h",
           "1h"
@@ -64,7 +64,7 @@
         "high": 93.97841024286429,
         "mid": 93.39500000000001,
         "touches": 2,
-        "score": 4.66,
+        "score": 4.65,
         "tfs": [
           "1h",
           "15m"
@@ -98,7 +98,7 @@
           "1h",
           "15m"
         ],
-        "score_raw": 248.3
+        "score_raw": 248.20000000000002
       },
       {
         "low": 100.69888176645657,
@@ -138,7 +138,7 @@
       "timestamp": 1787511600
     },
     "15m": {
-      "price": 95.31,
+      "price": 95.04,
       "context": "mid_range",
       "momentum": "neutral",
       "regime": "ranging",
@@ -150,18 +150,18 @@
   "dominant_side": "equilibrium",
   "market_pressure": "balanced",
   "market_energy": "stable",
-  "breakout_score": 0.23,
+  "breakout_score": 0.37,
   "breakout_confirmation": "none",
   "volume_state": "normal",
   "setup_state": "no_trade",
   "fake_breakout_risk": "low",
   "regime_global": "weak_trend",
   "distance": {
-    "to_support": 0.0054,
-    "to_resistance": 0.0325
+    "to_support": 0.0025,
+    "to_resistance": 0.0355
   },
   "distance_percent": {
-    "to_support": 0.54,
-    "to_resistance": 3.25
+    "to_support": 0.25,
+    "to_resistance": 3.55
   }
 }
