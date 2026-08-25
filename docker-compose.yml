@@ -1,10 +1,32 @@
 services:
+  vpn:
+    image: qmcgaw/gluetun:latest
+    container_name: crypto-signal-vpn
+
+    cap_add:
+      - NET_ADMIN
+
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    volumes:
+      - ./gluetun:/gluetun:ro
+
+    environment:
+      VPN_SERVICE_PROVIDER: custom
+      VPN_TYPE: wireguard
+      TZ: Asia/Jakarta
+
+    ports:
+      - "${PORT:-11000}:${PORT:-11000}"
+
+    restart: unless-stopped
+
   app:
     build: .
     container_name: crypto-signal
 
-    ports:
-      - "${PORT:-11000}:${PORT:-11000}"
+    network_mode: "service:vpn"
 
     env_file:
       - .env
@@ -12,11 +34,9 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/data
 
-    networks:
-      - docker-gateway
+    depends_on:
+      vpn:
+        condition: service_healthy
 
-networks:
-  docker-gateway:
-    external: true
+    restart: unless-stopped

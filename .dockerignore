@@ -16,9 +16,6 @@ docker-compose.yml
 Thumbs.db
 
 
-data
-
-
 # Proton VPN / WireGuard secrets
 
 gluetun/wireguard/*.conf
