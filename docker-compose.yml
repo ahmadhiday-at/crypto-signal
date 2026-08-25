@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    container_name: crypto-signal
+
+    ports:
+      - "${PORT:-11000}:${PORT:-11000}"
+
+    env_file:
+      - .env
+
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/data
+
+    networks:
+      - docker-gateway
+
+networks:
+  docker-gateway:
+    external: true

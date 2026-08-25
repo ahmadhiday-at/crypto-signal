@@ -497,6 +497,7 @@
                 });
 
                 const ws = new WebSocket(`ws://${window.location.host}`);
+                console.log('ws',ws)
                 ws.onopen = () => {
                     ws.send(JSON.stringify({ type: 'subscribe', market: globalMarket, timeframe: globalTf }));
                 };

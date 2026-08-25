@@ -43,3 +43,11 @@ build/
 *.db
 
 memory
+
+
+
+# Proton VPN / WireGuard secrets
+
+gluetun/wireguard/*.conf
+gluetun/wireguard/*.key
+gluetun/secrets
