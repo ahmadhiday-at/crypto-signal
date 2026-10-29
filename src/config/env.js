@@ -47,7 +47,7 @@ const TF_TO_SECONDS = {
 };
 
 module.exports = {
-  PORT: process.env.APP_PORT || 11000,
+  PORT: process.env.PORT || 11000,
   MARKETS,
   TIMEFRAMES,
   TIMEFRAME_LABELS,
