@@ -804,6 +804,30 @@ docker exec crypto-signal node -e "require('https').get('https://api.ipify.org',
 
 Kemudian cek lokasi IP tersebut menggunakan layanan IP geolocation.
 
+## Akses Binance dan Kebijakan Penggunaan
+
+HTTP `451` berarti _"Unavailable For Legal Reasons"_. Ini bukan sekadar gangguan jaringan, melainkan tanda bahwa Binance membatasi akses dari lokasi atau jaringan tertentu.
+
+Arsitektur VPN di dokumen ini menjelaskan **cara kerja teknis** routing traffic. Dokumen ini **tidak** menyatakan bahwa penggunaan VPN untuk mengakses Binance diizinkan untuk lokasi atau akun Anda.
+
+Sebelum mengandalkan VPN untuk mengatasi `451`, pemilik project perlu memutuskan dan mencatat:
+
+| Keputusan | Yang perlu dicatat |
+| :-------- | :----------------- |
+| Endpoint yang digunakan | REST dan WebSocket mana yang dipakai, dan syarat penggunaan (Terms of Use) yang berlaku untuk endpoint tersebut |
+| Yurisdiksi | Lokasi tempat aplikasi dijalankan dan lokasi exit IP VPN |
+| Kepatuhan | Apakah routing melalui VPN sesuai dengan syarat penggunaan Binance dan aturan yang berlaku di yurisdiksi tersebut |
+| Alternatif | Apakah ada sumber data market yang secara resmi tersedia untuk yurisdiksi tersebut |
+
+Status: **belum diputuskan**.
+
+Catatan operasional:
+
+- Exit IP VPN gratis biasanya dipakai bersama oleh banyak pengguna. Rate limit Binance dihitung per IP, sehingga `429` (rate limit) atau `418` (IP diblokir) dapat terjadi akibat traffic pengguna lain.
+- Exit IP dapat berubah lokasi tanpa pemberitahuan (lihat Bagian 23), sehingga `451` dapat muncul kembali kapan saja.
+- VPN `healthy` tidak berarti Binance dapat diakses. Selalu cek respons Binance secara langsung (Bagian 21 dan 22).
+- Perilaku aplikasi saat `451`, `429` atau `418` didefinisikan di [ARCHITECTURE.md → O6. Failure handling](./ARCHITECTURE.md#o6-failure-handling).
+
 ---
 
 # 21. Test Binance REST Secara Langsung
@@ -957,7 +981,7 @@ docker compose logs --tail=100 app
 | `EAI_AGAIN`                              | DNS/VPN tidak tersedia              | cek DNS + VPN health             |
 | IP container = IP Windows                | Traffic tidak melewati VPN          | cek `network_mode`               |
 | Binance `451`                            | Exit IP/location restriction        | cek public IP                    |
-| REST 451 + WS 451                        | kemungkinan restriction network/IP  | ganti VPN exit                   |
+| REST 451 + WS 451                        | kemungkinan restriction network/IP  | lihat Bagian 20 (Akses Binance)  |
 | REST OK + WS 451                         | masalah khusus WebSocket            | debug WS                         |
 | Port 11000 tidak bisa                    | port publish / Node listen issue    | `docker compose ps`              |
 | App tidak start                          | dependency / Node error             | `docker compose logs app`        |

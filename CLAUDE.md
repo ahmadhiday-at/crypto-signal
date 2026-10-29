@@ -79,5 +79,7 @@ Triggers for updates:
 ## Other docs
 
 - `.changelog/` — one file per released version (`v<version>.md`), see "Changelog, versioning & docs" above.
-- `ARCHITECTURE.md`, `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` — design intent and planned levels (scoring engine, backtesting, ML). Some details there are aspirational or outdated (e.g. chart file paths); trust the code.
+- `DATA_CONTRACT.md` — field-by-field contract for the Market State (`/api/market/:symbol`). Update it first when changing `enhanceMarketState` output.
+- `ARCHITECTURE.md` — design, plus the "Operating Model" section (candle finality, update ordering, concurrency, freshness, failure handling). Items marked **Proposed** there are agreed targets that are not implemented yet; the "Current" lines describe today's code.
+- `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` — planned levels (scoring engine, backtesting, ML); aspirational.
 - `PROMPT_AI_*.md` — LLM prompts (Indonesian) that take the `/api/market/:symbol` JSON as input.

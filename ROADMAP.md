@@ -26,12 +26,12 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
     - [x] Create a `ScoringMatrix` based on timeframe weights (15m, 1h, 4h, 1d).
     - [x] Consolidate S/R scores across MTF with dynamic merging.
     - [ ] Total Score $\rightarrow$ Signal Strength (Weak, Medium, Strong).
-- [x] **Confidence Calculation:** 
-    - [x] Implemented `breakout_score` (0.0 - 1.0) based on proximity and volume.
+- [x] **Heuristic Breakout Score:** 
+    - [x] Implemented `breakout_score` (0.0 - 1.0) based on proximity and volume. Uncalibrated; it becomes a probability only after calibration in Level 5.
 - [ ] **Dynamic Reasoning Engine:** 
     - Instead of a state string, return an array of triggers: `["Strong HTF Support", "Bullish Divergence", "Volume Surge"]`.
 
-**✅ Success Criteria:** The system can provide a confidence percentage (`breakout_score`) and explain the dominant side of the market.
+**✅ Success Criteria:** The system can provide a heuristic breakout score (`breakout_score`) and explain the dominant side of the market.
 
 ---
 

@@ -21,7 +21,7 @@ The system converts technical indicators into strategic insights:
 - **MTF Confluence:** Weights levels across timeframes. A support zone appearing on both 1D and 4H is significantly more powerful than one appearing only on 15m.
 - **Compression Detection:** Detects "Squeezes" where price is trapped between converging support and resistance, signaling an imminent explosive move.
 - **Energy Analysis:** Uses Volume and MACD to differentiate between a "exhausted move" and a "strong trend."
-- **Probabilistic Scoring:** Calculates a dynamic `breakout_score` and `fakeout_risk`.
+- **Heuristic Scoring:** Calculates a dynamic `breakout_score` and `fake_breakout_risk`. These are uncalibrated ranking heuristics, not probabilities (see [DATA_CONTRACT.md](./DATA_CONTRACT.md)).
 - **Dynamic UX:** Real-time crosshair synchronization between charts and technical summary widgets.
 
 ---
