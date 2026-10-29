@@ -37,10 +37,12 @@ Every change to code, config, or behavior must ship with three things in the sam
    | Commands, architecture, data flow, config gotchas | `CLAUDE.md`, `ARCHITECTURE.md` |
    | Setup, env vars, endpoints | `README.md`, `.env.example` |
    | Docker / VPN / compose | `DOCKER_README.md` |
-   | `enhanceMarketState` / `/api/market/:symbol` fields | `PROMPT_AI_*.md` (they consume those fields) |
+   | `enhanceMarketState` / `/api/market/:symbol` fields | `DATA_CONTRACT.md` |
    | Completing or changing a planned item | `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` |
 
    List the updated docs in the changelog's "Dokumentasi" section.
+
+   **Skip `PROMPT_AI_*.md`:** never edit these files as part of this rule, even when a change affects the fields they reference. Only touch them when explicitly asked.
 
 Not a change: diffs under `data/` produced by running the app — no version bump, no changelog.
 
@@ -82,4 +84,4 @@ Triggers for updates:
 - `DATA_CONTRACT.md` — field-by-field contract for the Market State (`/api/market/:symbol`). Update it first when changing `enhanceMarketState` output.
 - `ARCHITECTURE.md` — design, plus the "Operating Model" section (candle finality, update ordering, concurrency, freshness, failure handling). Items marked **Proposed** there are agreed targets that are not implemented yet; the "Current" lines describe today's code.
 - `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` — planned levels (scoring engine, backtesting, ML); aspirational.
-- `PROMPT_AI_*.md` — LLM prompts (Indonesian) that take the `/api/market/:symbol` JSON as input.
+- `PROMPT_AI_*.md` — LLM prompts (Indonesian) that take the `/api/market/:symbol` JSON as input. Excluded from the docs-update rule; edit only when explicitly asked.
