@@ -1,47 +1,48 @@
-const express = require('express');
 const http = require('http');
-const path = require('path');
 const config = require('./src/config/env');
-
-const apiRoutes = require('./src/api/routes/api.routes');
-const viewRoutes = require('./src/api/routes/view.routes');
+const { createApp, createHostCheck } = require('./src/app');
 
 const wsManager = require('./src/websocket/ws.manager');
-const marketService = require('./src/services/market.service');
 const binanceService = require('./src/services/binance.service');
-const cronJobs = require('./src/jobs/cron.jobs');
+const { createMarketEngine } = require('./src/services/market.service');
+const { createScheduler } = require('./src/jobs/scheduler');
 
-const app = express();
+const engine = createMarketEngine({
+    storage: require('./src/data/storage'),
+    binance: binanceService,
+    indicators: require('./src/services/indicator.service'),
+    config,
+    notify: {
+        timeframeUpdated: (market, timeframe) => wsManager.broadcastUpdate(market, timeframe),
+        summaryUpdated: (market) => wsManager.broadcastSummary(market),
+    },
+});
+
+const app = createApp({ engine, config });
 const server = http.createServer(app);
 
-// Initialize WebSocket Manager
-wsManager.init(server);
+wsManager.init(server, {
+    isValidSubscription: (market, timeframe) => engine.isMarket(market) && engine.isTimeframe(timeframe),
+    isAllowedHost: createHostCheck(config.ALLOWED_HOSTS),
+});
 
-// Static files
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Routes
-app.use('/api', apiRoutes);
-app.use('/view', viewRoutes);
-
-// Connect to Binance WebSocket for real-time price updates and Klines
+// Live ticker prices are display-only. After a reconnect, catch up any timeframe that fell behind.
 binanceService.connectWebSocket(
-    (market, price) => {
-        wsManager.broadcastPrice(market, price);
-    },
-    async (market, timeframe) => {
-        await marketService.updateMarketData(market, timeframe);
-    },
-    config.MARKETS
+    (market, price, eventTime) => wsManager.broadcastPrice(market, price, eventTime),
+    config.MARKETS,
+    { onReconnect: () => engine.refreshStale() }
 );
 
-// Start Server
-server.listen(config.PORT, async () => {
-    console.log(`Trading Chart Server running on http://localhost:${config.PORT}`);
-    
-    // Initialize initial market data
-    await marketService.initializeAllSnapshots();
-    
-    // Start Cron Jobs
-    cronJobs.scheduleCronJobs();
+const scheduler = createScheduler(engine);
+
+server.listen(config.PORT, config.HOST, async () => {
+    console.log(`Trading Chart Server running on http://${config.HOST}:${config.PORT}`);
+
+    try {
+        await engine.initialize();
+        console.log('System snapshots initialization complete.');
+    } catch (err) {
+        console.error('[Init] Initialization failed:', err.message);
+    }
+    scheduler.start();
 });

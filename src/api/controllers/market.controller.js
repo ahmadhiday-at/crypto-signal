@@ -1,77 +1,59 @@
-const fs = require('fs').promises;
-const path = require('path');
-const config = require('../../config/env');
-const storage = require('../../data/storage');
-const marketService = require('../../services/market.service');
+// Request handlers. Every market/timeframe parameter is checked against the configured lists before
+// it reaches storage or Binance.
+function createMarketController({ engine, config }) {
+    const unknown = (res) => res.status(404).json({ error: 'unknown_market_or_timeframe' });
 
-async function getMarketAnalysis(req, res) {
-    try {
-        const { market } = req.params;
-        let marketSnapshot = await storage.readMarketSnapshot(market);
-        if (!marketSnapshot) {
-            console.log(`[API] Market snapshot for ${market} not found. Generating...`);
-            marketSnapshot = await marketService.updateMarketSnapshot(market);
+    async function getMarketAnalysis(req, res, next) {
+        try {
+            const { market } = req.params;
+            if (!engine.isMarket(market)) return unknown(res);
+            const { httpStatus, body } = await engine.getMarketState(market);
+            res.status(httpStatus).json(body);
+        } catch (err) {
+            next(err);
         }
-        if (!marketSnapshot) {
-            return res.status(404).json({ error: 'Market snapshot could not be generated' });
-        }
-        res.json(marketSnapshot);
-    } catch (err) {
-        console.error('MTF API Error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
     }
-}
 
-function getConfig(req, res) {
-    res.json({
-        markets: config.MARKETS.map(code => ({ code, label: code })),
-        timeframes: config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code }))
-    });
-}
-
-async function getSnapshot(req, res) {
-    try {
-        const { market, timeframe } = req.params;
-        const data = await storage.readSnapshot(market, timeframe);
-        if (!data) {
-            await marketService.updateMarketData(market, timeframe);
-            const newData = await storage.readSnapshot(market, timeframe);
-            return res.json(newData || { error: 'Failed to generate snapshot' });
-        }
-        res.json(data);
-    } catch (err) {
-        console.error('API Error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
+    function getConfig(req, res) {
+        res.json({
+            markets: config.MARKETS.map(code => ({ code, label: code })),
+            timeframes: config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code })),
+            roles: config.TF_ROLES,
+        });
     }
-}
 
-async function resetData(req, res) {
-    try {
-        console.log('[API] Reset requested. Clearing all snapshots...');
-        const dirsToClear = [storage.chartDataDir, storage.marketDataDir];
-        for (const dir of dirsToClear) {
-            try {
-                const files = await fs.readdir(dir);
-                for (const file of files) {
-                    if (file.endsWith('.json')) await fs.unlink(path.join(dir, file));
-                }
-                console.log(`[API] Cleared: ${dir}`);
-            } catch (e) {
-                console.warn(`[API] Directory not found or empty, skipping: ${dir}`);
-            }
+    async function getSnapshot(req, res, next) {
+        try {
+            const { market, timeframe } = req.params;
+            if (!engine.isMarket(market) || !engine.isTimeframe(timeframe)) return unknown(res);
+            const { httpStatus, body } = await engine.getTimeframeSnapshot(market, timeframe);
+            res.status(httpStatus).json(body);
+        } catch (err) {
+            next(err);
         }
-        console.log('[API] All snapshots cleared. Regenerating...');
-        await marketService.initializeAllSnapshots();
-        res.json({ success: true, message: 'Data reset and regenerated successfully' });
-    } catch (err) {
-        console.error('Reset Error:', err);
-        res.status(500).json({ error: 'Failed to reset data' });
     }
+
+    function getHealth(req, res) {
+        res.json(engine.healthReport());
+    }
+
+    // Reset re-fetches every configured timeframe and rebuilds the summaries. Files are replaced
+    // atomically on success; nothing is deleted, so a failed refetch keeps the last good data.
+    async function resetData(req, res, next) {
+        try {
+            const { run, error, retryAfter } = engine.reset();
+            if (error === 'reset_in_progress') return res.status(409).json({ error });
+            if (error === 'reset_cooldown') return res.set('Retry-After', String(retryAfter)).status(429).json({ error, retry_after: retryAfter });
+            const results = await run;
+            const success = Object.values(results).every(r => r.failed.length === 0);
+            // 502: the refetch reached Binance (or tried to) and at least one timeframe failed.
+            res.status(success ? 200 : 502).json({ success, results });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    return { getMarketAnalysis, getConfig, getSnapshot, getHealth, resetData };
 }
 
-module.exports = {
-    getMarketAnalysis,
-    getConfig,
-    getSnapshot,
-    resetData
-};
+module.exports = { createMarketController };

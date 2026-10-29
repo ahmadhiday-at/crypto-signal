@@ -125,6 +125,7 @@
         <div class="ind-group" id="indicator-info">
             Loading indicators...
         </div>
+        <div class="ind-group" id="data-status" style="color:#888">-</div>
         <div class="ind-group" id="ohlcv-info">
             <span class="ohlcv-item">O: <span class="ohlcv-value" id="val-o">-</span></span>
             <span class="ohlcv-item">H: <span class="ohlcv-value" id="val-h">-</span></span>
@@ -154,29 +155,32 @@
         }
 
         async function resetData() {
-            if (!confirm('Are you sure you want to reset all market data? This will delete all snapshots and regenerate them from Binance.')) {
+            if (!confirm('Are you sure you want to reset all market data? This re-fetches every timeframe from Binance and rebuilds the market state. Existing data is kept if a fetch fails.')) {
                 return;
             }
+            const btn = event.target;
             try {
-                const btn = event.target;
-                const originalText = btn.innerText;
                 btn.innerText = 'Resetting...';
                 btn.disabled = true;
 
-                const res = await fetch('/api/reset');
-                const data = await res.json();
+                const res = await fetch('/api/reset', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'crypto-signal' }
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 409) throw new Error('A reset is already running');
 
-                if (data.success) {
+                if (res.ok && data.success) {
                     alert('Data reset successfully! The page will now reload.');
                     window.location.reload();
                 } else {
-                    throw new Error(data.error || 'Unknown error occurred');
+                    throw new Error(data.error || (data.results ? 'Some timeframes failed to refresh; existing data was kept. See /api/health.' : 'Unknown error occurred'));
                 }
             } catch (err) {
                 console.error('Reset Error:', err);
                 alert('Failed to reset data: ' + err.message);
-                event.target.innerText = 'Reset';
-                event.target.disabled = false;
+                btn.innerText = 'Reset';
+                btn.disabled = false;
             }
         }
 
@@ -373,12 +377,12 @@
                     let html = '';
                     if (levels.resistance) {
                         levels.resistance.forEach((level, i) => {
-                            html += `<span class="sr-tag" style="color: #ffeb3b">R${i+1}: ${level.mid.toFixed(2)} (S: ${level.score})</span>`;
+                            html += `<span class="sr-tag" style="color: #ffeb3b">R${i+1}: ${Number(level.mid).toFixed(2)} (S: ${Number(level.score).toFixed(1)})</span>`;
                         });
                     }
                     if (levels.support) {
                         levels.support.forEach((level, i) => {
-                            html += `<span class="sr-tag" style="color: #00cc99">S${i+1}: ${level.mid.toFixed(2)} (S: ${level.score})</span>`;
+                            html += `<span class="sr-tag" style="color: #00cc99">S${i+1}: ${Number(level.mid).toFixed(2)} (S: ${Number(level.score).toFixed(1)})</span>`;
                         });
                     }
                     srContainer.innerHTML = html;
@@ -394,12 +398,31 @@
                     }
                 }
 
+                let formingBar = null;
+
                 async function fetchData() {
                     try {
                         const res = await fetch(`/api/${globalMarket}/${globalTf}`);
                         const data = await res.json();
-                        
-                        candleSeries.setData(data.candles);
+                        const statusEl = document.getElementById('data-status');
+                        if (!res.ok || !Array.isArray(data.candles)) {
+                            statusEl.textContent = `Data unavailable (${data.error || 'HTTP ' + res.status})`;
+                            statusEl.style.color = '#ef5350';
+                            throw new Error('Chart data unavailable');
+                        }
+                        const closeUtc = new Date(data.candle_close_time * 1000).toISOString().replace('T', ' ').slice(0, 16);
+                        statusEl.textContent = `Closed candles to ${closeUtc} UTC · ${String(data.status).toUpperCase()}` +
+                            (data.forming_candle ? ' · grey = forming (not used in calculations)' : '');
+                        statusEl.style.color = data.status === 'ok' ? '#888' : '#ef5350';
+
+                        // Indicators are computed from closed candles only. The forming candle is shown
+                        // in grey and is the only bar that live prices update.
+                        const bars = data.candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close }));
+                        formingBar = data.forming_candle
+                            ? { time: data.forming_candle.time, open: data.forming_candle.open, high: data.forming_candle.high, low: data.forming_candle.low, close: data.forming_candle.close, color: '#787b86', wickColor: '#787b86' }
+                            : null;
+                        if (formingBar) bars.push(formingBar);
+                        candleSeries.setData(bars);
                         ma14Series.setData(data.indicators.ma14.map((v, i) => ({ time: data.candles[i].time, value: v })));
                         ma50Series.setData(data.indicators.ma50.map((v, i) => ({ time: data.candles[i].time, value: v })));
                         ma200Series.setData(data.indicators.ma200.map((v, i) => ({ time: data.candles[i].time, value: v })));
@@ -413,7 +436,7 @@
                         
                         if (data.indicators.macd) {
                             const macdData = data.indicators.macd;
-                            macdLine.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.macd || 0 })));
+                            macdLine.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.MACD || 0 })));
                             macdSignal.setData(macdData.map((v, i) => ({ time: data.candles[i].time, value: v?.signal || 0 })));
                             macdHist.setData(macdData.map((v, i) => ({ 
                                 time: data.candles[i].time, 
@@ -451,7 +474,7 @@
 
                 // 1. Set initial live price in header immediately after fetch
                 const lastCandle = currentData.candles[currentData.candles.length - 1];
-                const initialPrice = lastCandle.close;
+                const initialPrice = formingBar ? formingBar.close : lastCandle.close;
                 const priceEl = document.getElementById('live-price');
 
                 // Use locale string for consistency with WS updates
@@ -496,18 +519,24 @@
                     }
                 });
 
-                const ws = new WebSocket(`ws://${window.location.host}`);
-                console.log('ws',ws)
+                const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`);
                 ws.onopen = () => {
                     ws.send(JSON.stringify({ type: 'subscribe', market: globalMarket, timeframe: globalTf }));
                 };
 
                 ws.onmessage = (event) => {
-                    const msg = JSON.parse(event.data);
-                    if (msg.type === 'price') {
-                        // ... existing price update logic ...
-                        const lastCandle = currentData.candles[currentData.candles.length - 1];
-                        candleSeries.update({ ...lastCandle, close: msg.price });
+                    let msg;
+                    try {
+                        msg = JSON.parse(event.data);
+                    } catch (e) {
+                        return;
+                    }
+                    if (msg.type === 'price' && Number.isFinite(msg.price)) {
+                        // Live prices never modify closed candles.
+                        if (formingBar) {
+                            formingBar = { ...formingBar, close: msg.price, high: Math.max(formingBar.high, msg.price), low: Math.min(formingBar.low, msg.price) };
+                            candleSeries.update(formingBar);
+                        }
 
                         globalCurrentPrice = msg.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                         updatePageTitle();
@@ -566,7 +595,10 @@
 
             } catch (err) {
                 console.error('Critical Chart Error:', err);
-                document.getElementById('main-chart').innerHTML = `<div style="color:red; padding:20px;">Chart Error: ${err.message}</div>`;
+                const errBox = document.createElement('div');
+                errBox.style.cssText = 'color:red; padding:20px;';
+                errBox.textContent = `Chart Error: ${err.message}`;
+                document.getElementById('main-chart').replaceChildren(errBox);
             }
         };
     </script>

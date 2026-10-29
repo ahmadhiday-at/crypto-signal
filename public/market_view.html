@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <script src="https://unpkg.com/lucide@0.454.0"></script>
+    <script src="/js/market-status.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
@@ -33,8 +34,9 @@
                     <i data-lucide="chevron-down" class="w-5 h-5"></i>
                 </div>
             </div>
-            <div id="price-display" class="text-2xl mono font-medium text-gray-400">
-                0.00
+            <div class="flex flex-col leading-tight">
+                <span class="text-[10px] uppercase font-bold text-gray-500">Live price (display only)</span>
+                <div id="price-display" class="text-2xl mono font-medium text-gray-400">-</div>
             </div>
             <button onclick="copyMarketState()" class="flex items-center gap-2 px-3 py-1 rounded-lg glass text-xs font-semibold hover:bg-gray-700 transition-all text-gray-300">
                 <i data-lucide="copy" class="w-3 h-3"></i> Copy State
@@ -57,8 +59,16 @@
         </div>
     </div>
 
+    <!-- Market State freshness (DATA_CONTRACT.md §7) -->
+    <div id="state-status" class="glass rounded-xl px-4 py-2 mb-3 flex flex-wrap items-center gap-3 text-xs mono border-l-4 border-l-gray-500">
+        <span id="state-status-title" class="font-bold text-gray-400">LOADING</span>
+        <span id="state-status-detail" class="text-gray-400">Loading market state...</span>
+        <span id="state-status-close" class="text-gray-500"></span>
+        <span id="state-status-errors" class="text-red-400"></span>
+    </div>
+
     <!-- State Dashboard -->
-    <div id="state-dashboard" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+    <div id="state-dashboard" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 transition-opacity">
         <!-- Bias Card -->
         <div class="status-card glass p-3 rounded-xl">
             <div class="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold mb-1">
@@ -101,6 +111,7 @@
         <!-- Chart Area -->
         <div class="lg:col-span-3 flex flex-col gap-2">
             <!-- OHLC Info Bar -->
+            <div id="chart-status" class="text-[11px] mono text-gray-500 px-1">-</div>
             <div id="ohlc-bar" class="glass p-2 rounded-xl flex justify-between items-center px-4 text-[11px] mono text-gray-400 uppercase">
                 <span>O: <span id="ohlc-o" class="text-white">-</span></span>
                 <span>H: <span id="ohlc-h" class="text-white">-</span></span>
@@ -121,13 +132,13 @@
         <div class="flex flex-col gap-4">
             <div class="glass p-4 rounded-2xl">
                 <h3 class="text-xs uppercase font-bold text-gray-500 mb-4 flex items-center gap-2">
-                    <i data-lucide="bar-chart-3" class="w-3 h-3"></i> Probabilities
+                    <i data-lucide="bar-chart-3" class="w-3 h-3"></i> Scores (heuristic, uncalibrated)
                 </h3>
                 <div class="space-y-4">
                     <div>
                         <div class="flex justify-between text-xs mb-1">
-                            <span class="text-gray-400">Breakout Score</span>
-                            <span id="score-val" class="mono">0%</span>
+                            <span class="text-gray-400">Breakout Score (0-1, not a probability)</span>
+                            <span id="score-val" class="mono">-</span>
                         </div>
                         <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
                             <div id="score-bar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
@@ -136,11 +147,11 @@
                     <div class="grid grid-cols-2 gap-2">
                         <div class="bg-black/30 p-2 rounded-lg border border-white/5">
                             <div class="text-[10px] text-gray-500 uppercase">Dist. Support</div>
-                            <div id="dist-support" class="mono text-sm">0.00%</div>
+                            <div id="dist-support" class="mono text-sm">-</div>
                         </div>
                         <div class="bg-black/30 p-2 rounded-lg border border-white/5">
                             <div class="text-[10px] text-gray-500 uppercase">Dist. Resist</div>
-                            <div id="dist-resist" class="mono text-sm">0.00%</div>
+                            <div id="dist-resist" class="mono text-sm">-</div>
                         </div>
                     </div>
                 </div>
@@ -202,32 +213,37 @@
                 rsi: null
             },
             priceLines: [],
-            ws: null
+            ws: null,
+            entryTf: '15m'
         };
 
         async function resetData() {
-            if (!confirm('Are you sure you want to reset all market data? This will delete all snapshots and regenerate them from Binance.')) {
+            if (!confirm('Are you sure you want to reset all market data? This re-fetches every timeframe from Binance and rebuilds the market state. Existing data is kept if a fetch fails.')) {
                 return;
             }
+            const btn = event.currentTarget;
             try {
-                const btn = event.currentTarget;
                 btn.innerHTML = '<i data-lucide="loader" class="w-3 h-3 animate-spin"></i> Resetting...';
                 btn.disabled = true;
 
-                const res = await fetch('/api/reset');
-                const data = await res.json();
+                const res = await fetch('/api/reset', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'crypto-signal' }
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 409) throw new Error('A reset is already running');
 
-                if (data.success) {
+                if (res.ok && data.success) {
                     alert('Data reset successfully! The page will now reload.');
                     window.location.reload();
                 } else {
-                    throw new Error(data.error || 'Unknown error occurred');
+                    throw new Error(data.error || (data.results ? 'Some timeframes failed to refresh; existing data was kept. See /api/health.' : 'Unknown error occurred'));
                 }
             } catch (err) {
                 console.error('Reset Error:', err);
                 alert('Failed to reset data: ' + err.message);
-                event.currentTarget.innerHTML = '<i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset';
-                event.currentTarget.disabled = false;
+                btn.innerHTML = '<i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset';
+                btn.disabled = false;
                 lucide.createIcons();
             }
         }
@@ -251,12 +267,19 @@
             }
 
             lucide.createIcons();
+            if (!/^[A-Z0-9]{5,20}$/.test(state.market)) {
+                renderStatus(MarketStatus.describeMarketState(null, 404, state.entryTf), null);
+                return;
+            }
             await loadTfSelector();
             await loadMarketSelector();
             await setupChart();
             await refreshMarketState();
             await loadChartData();
             setupWebSocket();
+            // Re-read the server's freshness verdict every minute so the banner turns stale even if
+            // no update messages arrive.
+            setInterval(refreshMarketState, 60000);
         }
 
         async function loadMarketSelector() {
@@ -280,6 +303,7 @@
         async function loadTfSelector() {
             const res = await fetch('/api/config');
             const config = await res.json();
+            if (config.roles && config.roles.entry) state.entryTf = config.roles.entry;
             const container = document.getElementById('tf-selector');
             
             config.timeframes.forEach(tf => {
@@ -291,6 +315,7 @@
                     // Update UI
                     Array.from(container.children).forEach(b => b.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all text-gray-400 hover:text-white');
                     btn.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all bg-gray-700 text-white';
+                    subscribe();
                     await loadChartData();
                     await refreshMarketState();
                 };
@@ -298,86 +323,100 @@
             });
         }
 
-        async function refreshMarketState() {
-            try {
-                const res = await fetch(`/api/market/${state.market}`);
-                const data = await res.json();
-                
-                // Update Header
-                document.getElementById('price-display').innerText = data.price.toLocaleString();
+        function renderStatus(desc, data) {
+            const box = document.getElementById('state-status');
+            const colors = { ok: COLORS.bullish, degraded: COLORS.warning, stale: COLORS.bearish, unavailable: COLORS.neutral };
+            const c = colors[desc.level] || COLORS.neutral;
+            box.style.borderLeftColor = c.border;
+            const title = document.getElementById('state-status-title');
+            title.textContent = desc.title;
+            title.style.color = c.text;
+            document.getElementById('state-status-detail').textContent = desc.detail;
+            document.getElementById('state-status-close').textContent = data && typeof data.price === 'number'
+                ? `${state.entryTf} close: ${data.price.toLocaleString()}` : '';
+            document.getElementById('state-status-errors').textContent = desc.errors.length ? `errors: ${desc.errors.join(', ')}` : '';
+            // Anything not fresh is dimmed so it cannot be mistaken for current analysis.
+            document.getElementById('state-dashboard').style.opacity = desc.level === 'ok' ? '1' : '0.45';
+        }
 
+        function clearStateValues() {
+            ['state-bias', 'state-energy', 'state-pressure', 'state-setup', 'state-risk', 'score-val', 'dist-support', 'dist-resist']
+                .forEach(id => { const el = document.getElementById(id); el.textContent = '-'; el.style.color = ''; });
+            document.getElementById('score-bar').style.width = '0%';
+            document.getElementById('zones-list').replaceChildren();
+            applyZonesToChart({ support: [], resistance: [] });
+        }
+
+        const label = (v) => String(v).replace(/_/g, ' ').toUpperCase();
+
+        async function refreshMarketState() {
+            let res = null;
+            let data = null;
+            try {
+                res = await fetch(`/api/market/${state.market}`);
+                data = await res.json();
+            } catch (err) {
+                console.error('Market State Error:', err);
+            }
+
+            const desc = MarketStatus.describeMarketState(data, res ? res.status : 0, state.entryTf);
+            renderStatus(desc, desc.showValues ? data : null);
+            if (!desc.showValues) {
+                clearStateValues();
+                return;
+            }
+
+            try {
                 // Update Bias
                 const biasEl = document.getElementById('state-bias');
-                biasEl.innerText = data.regime_global.toUpperCase();
-                biasEl.style.color = data.regime_global.includes('up') || data.regime_global.includes('bull') ? COLORS.bullish.text : 
+                biasEl.textContent = label(data.regime_global);
+                biasEl.style.color = data.regime_global.includes('up') || data.regime_global.includes('bull') ? COLORS.bullish.text :
                                    data.regime_global.includes('down') || data.regime_global.includes('bear') ? COLORS.bearish.text : COLORS.neutral.text;
 
                 // Update Energy
                 const energyEl = document.getElementById('state-energy');
-                energyEl.innerText = data.market_energy.replace('_', ' ').toUpperCase();
-                energyEl.style.color = data.market_energy === 'explosive' ? COLORS.bullish.text : 
+                energyEl.textContent = label(data.market_energy);
+                energyEl.style.color = data.market_energy === 'explosive' ? COLORS.bullish.text :
                                      data.market_energy === 'cooling' ? COLORS.bearish.text : COLORS.neutral.text;
 
                 // Update Pressure
                 const pressureEl = document.getElementById('state-pressure');
-                pressureEl.innerText = data.market_pressure.replace('_', ' ').toUpperCase();
-                pressureEl.style.color = data.market_pressure.includes('bullish') ? COLORS.bullish.text : 
+                pressureEl.textContent = label(data.market_pressure);
+                pressureEl.style.color = data.market_pressure.includes('bullish') ? COLORS.bullish.text :
                                        data.market_pressure.includes('bearish') ? COLORS.bearish.text : COLORS.neutral.text;
 
                 // Update Setup (The Big Card)
                 const setupCard = document.getElementById('setup-card');
                 const setupEl = document.getElementById('state-setup');
-                setupEl.innerText = data.setup_state.replace('_', ' ').toUpperCase();
+                setupEl.textContent = label(data.setup_state);
                 const setupColor = data.setup_state.includes('ready') || data.setup_state.includes('entry') ? COLORS.bullish : COLORS.neutral;
-                setupCard.style.borderColorLeftColor = setupColor.border;
+                setupCard.style.borderLeftColor = setupColor.border;
                 setupEl.style.color = setupColor.text;
 
                 // Update Risk
                 const riskEl = document.getElementById('state-risk');
-                riskEl.innerText = data.fake_breakout_risk.toUpperCase();
-                riskEl.style.color = data.fake_breakout_risk === 'high' ? COLORS.bearish.text : 
+                riskEl.textContent = label(data.fake_breakout_risk);
+                riskEl.style.color = data.fake_breakout_risk === 'high' ? COLORS.bearish.text :
                                    data.fake_breakout_risk === 'medium' ? COLORS.warning.text : COLORS.bullish.text;
 
-                // Update Probabilities
-                const score = Math.round(data.breakout_score * 100);
-                document.getElementById('score-val').innerText = score + '%';
-                document.getElementById('score-bar').style.width = score + '%';
-                document.getElementById('dist-support').innerText = (data.distance_percent.to_support).toFixed(2) + '%';
-                document.getElementById('dist-resist').innerText = (data.distance_percent.to_resistance).toFixed(2) + '%';
+                // Server-side score only; the dashboard never recalculates it.
+                document.getElementById('score-val').textContent = data.breakout_score.toFixed(2);
+                document.getElementById('score-bar').style.width = Math.round(data.breakout_score * 100) + '%';
+                document.getElementById('dist-support').textContent = data.distance_percent.to_support.toFixed(2) + '%';
+                document.getElementById('dist-resist').textContent = data.distance_percent.to_resistance.toFixed(2) + '%';
 
-                // Update Technical Summary
-                const currentTfData = data.timeframes[state.currentTf] || {};
-                document.getElementById('sum-ma200').innerText = currentTfData.indicators?.ma200?.slice(-1)[0]?.value?.toLocaleString() || '-';
-                document.getElementById('sum-rsi').innerText = currentTfData.indicators?.rsi?.slice(-1)[0]?.toFixed(2) || '-';
-                const macd = currentTfData.indicators?.macd || {};
-                document.getElementById('sum-macd').innerText = `Sig: ${macd.signal?.slice(-1)[0]?.toFixed(2) || '-'} | Hist: ${macd.histogram?.slice(-1)[0]?.toFixed(2) || '-'}`;
-                
-                // OHLCV Summary
-                const lastC = currentTfData.candles?.slice(-1)[0] || {};
-                const vol = currentTfData.indicators?.volume?.slice(-1)[0] || 0;
-                
-                if (document.getElementById('ohlc-o')) {
-                    document.getElementById('ohlc-o').innerText = lastC.open?.toLocaleString() || '-';
-                    document.getElementById('ohlc-h').innerText = lastC.high?.toLocaleString() || '-';
-                    document.getElementById('ohlc-l').innerText = lastC.low?.toLocaleString() || '-';
-                    document.getElementById('ohlc-c').innerText = lastC.close?.toLocaleString() || '-';
-                    document.getElementById('ohlc-v').innerText = vol.toLocaleString();
-                }
-
-                // Update Zones List
                 renderZones(data.levels);
-
-                // Apply S/R Zones to Chart
                 applyZonesToChart(data.levels);
-
             } catch (err) {
-                console.error('Market State Error:', err);
+                console.error('Market State Render Error:', err);
+                renderStatus({ level: 'unavailable', title: 'UNAVAILABLE', detail: 'Market state could not be displayed.', errors: [] }, null);
+                clearStateValues();
             }
         }
 
         function renderZones(levels) {
             const container = document.getElementById('zones-list');
-            container.innerHTML = '';
+            container.replaceChildren();
 
             const allZones = [
                 ...levels.resistance.map(z => ({...z, type: 'RES'})),
@@ -385,22 +424,33 @@
             ].sort((a, b) => b.mid - a.mid);
 
             allZones.forEach(z => {
-                const color = z.type === 'RES' ? COLORS.bearish : COLORS.bullish;
+                const isRes = z.type === 'RES';
                 const div = document.createElement('div');
-                div.className = `flex justify-between items-center p-2 rounded-lg text-xs mono border-l-2 ${z.type === 'RES' ? 'border-l-red-500 bg-red-500/5' : 'border-l-green-500 bg-green-500/5'}`;
-                div.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="font-bold ${z.type === 'RES' ? 'text-red-400' : 'text-green-400'}">${z.type} Zone</span>
-                        <span class="text-gray-500 text-[10px]">TFs: ${z.tfs?.join(', ') || 'single'}</span>
-                    </div>
-                    <div class="text-right">
-                        <div class="font-semibold cursor-pointer hover:text-white transition-colors relative group" onclick="copyPrice('${z.mid}')">
-                            ${z.mid.toLocaleString()}
-                            <span class="absolute -top-6 left-1/2 -translate-x-1/2 scale-0 group-hover:scale-100 transition-transform bg-gray-700 text-[8px] px-1 rounded text-white">Copy</span>
-                        </div>
-                        <div class="text-[10px] text-gray-500">Score: ${z.score}</div>
-                    </div>
-                `;
+                div.className = `flex justify-between items-center p-2 rounded-lg text-xs mono border-l-2 ${isRes ? 'border-l-red-500 bg-red-500/5' : 'border-l-green-500 bg-green-500/5'}`;
+
+                const left = document.createElement('div');
+                left.className = 'flex flex-col';
+                const name = document.createElement('span');
+                name.className = `font-bold ${isRes ? 'text-red-400' : 'text-green-400'}`;
+                name.textContent = `${z.type} Zone`;
+                const tfs = document.createElement('span');
+                tfs.className = 'text-gray-500 text-[10px]';
+                tfs.textContent = `TFs: ${Array.isArray(z.tfs) ? z.tfs.join(', ') : 'single'}`;
+                left.append(name, tfs);
+
+                const right = document.createElement('div');
+                right.className = 'text-right';
+                const price = document.createElement('div');
+                price.className = 'font-semibold cursor-pointer hover:text-white transition-colors';
+                price.title = 'Copy';
+                price.textContent = Number(z.mid).toLocaleString();
+                price.onclick = () => copyPrice(String(z.mid));
+                const score = document.createElement('div');
+                score.className = 'text-[10px] text-gray-500';
+                score.textContent = `Score: ${z.score}`;
+                right.append(price, score);
+
+                div.append(left, right);
                 container.appendChild(div);
             });
         }
@@ -455,38 +505,9 @@
             const hist = Array.isArray(macdObj) ? macdObj[candleIdx]?.histogram : macdObj?.histogram?.[candleIdx];
             document.getElementById('sum-macd').innerText = `Sig: ${safeFix(sig)} | Hist: ${safeFix(hist)}`;
 
-            // 3. Breakout Score & Distances Update
-            if (data.levels && data.levels.support?.length > 0 && data.levels.resistance?.length > 0) {
-                const nearestSupport = data.levels.support[0].mid;
-                const nearestResistance = data.levels.resistance[0].mid;
-                const price = candle.close;
-                
-                const distSupportPct = (Math.abs(price - nearestSupport) / price) * 100;
-                const distResistancePct = (Math.abs(price - nearestResistance) / price) * 100;
-                
-                document.getElementById('dist-support').innerText = distSupportPct.toFixed(2) + '%';
-                document.getElementById('dist-resist').innerText = distResistancePct.toFixed(2) + '%';
 
-                const minDistance = Math.min(distSupportPct, distResistancePct);
-                const distanceFactor = Math.max(0, 1 - (minDistance / 1.0));
-                
-                let volumeFactor = 0.5;
-                if (vol) {
-                    const startIdx = Math.max(0, candleIdx - 20);
-                    const volSlice = ind.volume.slice(startIdx, candleIdx + 1);
-                    const avgVol = volSlice.reduce((a, b) => a + b, 0) / (volSlice.length || 1);
-                    if (vol > avgVol * 1.5) volumeFactor = 1.0;
-                    else if (vol > avgVol * 1.2) volumeFactor = 0.8;
-                    else if (vol < avgVol * 0.8) volumeFactor = 0.3;
-                }
-
-                let breakoutScore = distanceFactor * volumeFactor;
-                if (nearestSupport > nearestResistance) breakoutScore += 0.2; // compression
-                
-                const finalScore = Math.round(Math.min(1, breakoutScore) * 100);
-                document.getElementById('score-val').innerText = finalScore + '%';
-                document.getElementById('score-bar').style.width = finalScore + '%';
-            }
+            // Breakout score and distances always come from the server summary; they are not
+            // recalculated per candle on hover.
         }
 
         async function setupChart() {
@@ -554,7 +575,7 @@
                     });
                 });
 
-                // Dynamically sync OHLCV, Technical Summary, and Breakout Score on Hover
+                // Sync OHLCV and Technical Summary with the hovered (closed) candle
                 state.charts.main.subscribeCrosshairMove(param => {
                     if (!state.data || !state.data.candles) return;
                     if (param.time) {
@@ -587,8 +608,18 @@
             try {
                 const res = await fetch(`/api/${state.market}/${state.currentTf}`);
                 const data = await res.json();
+                const chartStatus = document.getElementById('chart-status');
+                if (!res.ok || !Array.isArray(data.candles)) {
+                    state.data = null;
+                    chartStatus.textContent = `${state.currentTf}: chart data unavailable (${data.error || 'HTTP ' + res.status})`;
+                    chartStatus.style.color = COLORS.bearish.text;
+                    return;
+                }
                 state.data = data;
-                
+                chartStatus.textContent = `${state.currentTf}: closed candles to ${MarketStatus.formatUtc(data.candle_close_time)} (${MarketStatus.formatAge(data.age_seconds)}) · ${String(data.status).toUpperCase()}` +
+                    (data.forming_candle ? ' · grey candle = forming, not used in calculations' : '');
+                chartStatus.style.color = data.status === 'ok' ? '' : COLORS.bearish.text;
+
                 if (data.candles) {
                     const formattedData = data.candles.map(c => ({
                         time: c.time,
@@ -597,6 +628,10 @@
                         low: c.low,
                         close: c.close
                     }));
+                    if (data.forming_candle) {
+                        const f = data.forming_candle;
+                        formattedData.push({ time: f.time, open: f.open, high: f.high, low: f.low, close: f.close, color: '#6b7280', wickColor: '#6b7280' });
+                    }
                     state.series.candles.setData(formattedData);
 
                     // Apply dynamic dashboard update for the latest candle
@@ -656,7 +691,7 @@
                     const lineData = macdData
                         .map((v, i) => ({
                             time: data.candles[i].time,
-                            value: v?.macd || 0
+                            value: v?.MACD || 0
                         }))
                         .filter(v => v.value !== null);
 
@@ -688,7 +723,7 @@
 
         function applyZonesToChart(levels) {
             // Clear old lines
-            state.priceLines.forEach(line => state.charts.main.removePriceLine(line));
+            state.priceLines.forEach(line => state.series.candles.removePriceLine(line));
             state.priceLines = [];
 
             const drawLevel = (lvl, color) => {
@@ -707,37 +742,47 @@
             levels.resistance.forEach(r => drawLevel(r, COLORS.bearish.text));
         }
 
+        function subscribe() {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify({ type: 'subscribe', market: state.market, timeframe: state.currentTf }));
+            }
+        }
+
+        function setConnection(connected) {
+            const el = document.getElementById('connection-status');
+            const dot = document.createElement('span');
+            dot.className = `w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`;
+            el.replaceChildren(dot, document.createTextNode(connected ? ' Connected' : ' Disconnected'));
+            el.classList.toggle('text-green-400', connected);
+            el.classList.toggle('text-red-400', !connected);
+        }
+
         function setupWebSocket() {
-            state.ws = new WebSocket(`ws://${window.location.host}`);
-            
+            state.ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`);
+
             state.ws.onopen = () => {
-                document.getElementById('connection-status').innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-green-500"></span> Connected
-                `;
-                document.getElementById('connection-status').classList.add('text-green-400');
-                
-                state.ws.send(JSON.stringify({ 
-                    type: 'subscribe', 
-                    market: state.market, 
-                    timeframe: state.currentTf 
-                }));
+                setConnection(true);
+                subscribe();
             };
 
             state.ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.type === 'price') {
-                    document.getElementById('price-display').innerText = parseFloat(data.price).toLocaleString();
-                } else if (data.type === 'update_ready') {
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch (err) {
+                    return;
+                }
+                if (data.type === 'price' && Number.isFinite(data.price)) {
+                    document.getElementById('price-display').innerText = data.price.toLocaleString();
+                } else if (data.type === 'summary_ready') {
                     refreshMarketState();
+                } else if (data.type === 'update_ready') {
                     loadChartData();
                 }
             };
 
             state.ws.onclose = () => {
-                document.getElementById('connection-status').innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-red-500"></span> Disconnected
-                `;
-                document.getElementById('connection-status').classList.add('text-red-400');
+                setConnection(false);
                 setTimeout(setupWebSocket, 5000);
             };
         }

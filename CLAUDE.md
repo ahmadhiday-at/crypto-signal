@@ -12,7 +12,15 @@ docker compose up -d            # app behind gluetun WireGuard VPN (see DOCKER_R
 docker compose up -d --build    # needed only when package.json / package-lock.json change
 ```
 
-There is no test suite, linter, or build step. Verify changes by running the server and hitting the endpoints (`/api/market/:symbol`, `/api/:symbol/:tf`, `/api/config`, `/api/reset`, `/view/market/:symbol`, `/view/:symbol/:tf`).
+```bash
+npm test                                   # all tests (node:test, no network, no Binance calls)
+node --test test/engine.test.js            # one file
+node --test --test-name-pattern="reset" "test/**/*.test.js"   # tests matching a name
+```
+
+There is no linter or build step. Tests use fakes from `test/helpers.js` (`fakeBinance`, `tempStorage`, `rawKlines`); never hit real Binance in tests. For an end-to-end check, point `BINANCE_REST_URL` at a local fake server and run `server.js` with `HOST=127.0.0.1` and a spare `PORT`.
+
+The Docker app container bind-mounts this folder and runs nodemon, so **editing `server.js` or `src/` hot-reloads the user's running app**. For multi-step changes, work in a separate git worktree and apply the finished diff.
 
 ## Changelog, versioning & docs (required for every change)
 
@@ -48,23 +56,26 @@ Not a change: diffs under `data/` produced by running the app — no version bum
 
 ## Architecture
 
-Node.js/Express (CommonJS) "Market State Reducer": pulls Binance klines, computes indicators and S/R zones per timeframe, then merges a fixed set of timeframes into one enhanced market-state JSON per symbol. Plain HTML pages in `public/` consume the REST API and WebSocket.
+Node.js/Express (CommonJS) "Market State Reducer": pulls Binance klines, computes indicators and S/R zones per timeframe from **closed candles only**, then merges the four role timeframes into one Market State per symbol (contract: `DATA_CONTRACT.md`, schema v2). Plain HTML pages in `public/` consume the REST API and WebSocket.
 
-Data flow, all orchestrated by `src/services/market.service.js`:
+Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`) gets storage, Binance client, indicator service, config and `notify` callbacks; `createApp` (`src/app.js`) builds Express around the engine; `createScheduler` (`src/jobs/scheduler.js`) drives it.
 
-1. **Per-timeframe snapshot** — `updateMarketData(market, tf)`: `binance.service.getKlines` (REST, `CANDLE_LIMIT` candles) → `indicator.service.calculateAll` (SMA14/50/200, RSI, MACD, ATR, ATR-clustered S/R zones, `context`/`momentum`/`regime`) → `storage.writeSnapshot` → `data/chart/{MARKET}_{tf}.json`, then broadcasts `update_ready` over WS. `calculateAll` throws if fewer than 200 candles.
-2. **MTF merge** — only when the updated tf equals `TF_ROLES.entry`, `updateMarketSnapshot(market)` reads the four role timeframes (`TF_HTF`/`TF_STRUCTURE`/`TF_MID`/`TF_ENTRY`), weights each level's score by `TF_WEIGHTS`, merges overlapping levels (a level whose `mid` falls inside an existing zone's `low..high`), keeps top 3 support/resistance, and passes it through `enhanceMarketState`. If any role snapshot is missing it aborts and returns `null`.
-3. **Enhancement** — `enhanceMarketState` is pure heuristics producing `context`, `zone_state`, `market_pressure`, `market_energy`, `breakout_score`, `setup_state`, `fake_breakout_risk`, `regime_global`, etc. Output → `data/market/{MARKET}.json`. These field names are the contract consumed by `public/market_view.html` and by the LLM prompts in `PROMPT_AI_*.md`; keep them stable.
+Data flow:
 
-Triggers for updates:
+1. **Per-timeframe update** — `engine.updateTimeframe(market, tf)` (single-flight per market+tf): `binance.getKlines` (validated rows, retries, 429/418/451 cooldowns) → `candles.normalizeCandles` + `splitClosed` (forming candle kept aside) → `indicator.calculateAll` (throws `CalculationError` with a code) → `validateSnapshot` → monotonic check → atomic write to `data/chart/{MARKET}_{tf}.json` → `update_ready` over WS. Failures keep the old file and record `last_error` in the in-memory health map.
+2. **Summary** — `engine.rebuildSummary(market)` (serialised per market) reads the role snapshots, `mergeSnapshots` (weighted level merge, top 3) → `enhanceMarketState` (unchanged heuristic formula; regression-tested in `test/enhance.test.js`) → adds `schema_version`, `generated_at`, `inputs`, `status`, `errors` → `validateMarketState` → write `data/market/{MARKET}.json` → `summary_ready` over WS. Not published if any role snapshot is missing or validation fails.
+3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns a 503 diagnostic body when no valid summary exists.
 
-- `server.js` startup → `initializeAllSnapshots()` refreshes any missing/stale snapshot (staleness via `TF_TO_SECONDS`) for every market × (`TIMEFRAMES` ∪ role TFs), then builds market snapshots.
-- `src/jobs/cron.jobs.js` schedules `updateMarketData` per market × tf using `TF_TO_CRON`; timeframes not in that map are silently skipped.
-- `binance.service.connectWebSocket` streams `@ticker` prices (relayed to clients via `ws.manager.broadcastPrice`) and also fires a `1m` update every minute on a 1s interval. It reconnects on close.
+Triggers (all go through the same engine functions):
 
-`src/data/storage.js` is the only persistence layer: JSON files written atomically (tmp + rename), reads return `null` on any error. `data/` is committed to git, so running the app produces diffs there; don't commit those unless asked.
+- `scheduler` fires 5 s after every UTC minute boundary → `engine.runBoundary(boundary)`: updates every timeframe closing at that boundary plus any that are behind (retry-throttled), then rebuilds the summary once.
+- Startup → `engine.initialize()`: removes temp files, loads the index of stored candle close times (invalid/legacy files count as missing), refreshes whatever is behind.
+- Binance ticker stream reconnect → `engine.refreshStale()`. Ticker prices are display-only (`price` WS message).
+- `POST /api/reset` → `engine.reset()` (force refetch; 409 if running; 502 if any timeframe failed).
 
-`src/websocket/ws.manager.js` shares the HTTP server; clients send `{type:"subscribe", market, timeframe}` and receive `price` / `update_ready` messages. Each socket tracks one subscription key.
+`src/data/storage.js` is the only persistence layer: names validated against strict regexes, unique temp file + fsync + rename, reads return `{data, reason}`. `data/` is committed to git, so running the app produces diffs there; don't commit those unless asked.
+
+`src/websocket/ws.manager.js` shares the HTTP server; same-origin only, 4 KB max payload, subscriptions validated against configured markets/timeframes.
 
 ## Configuration gotchas
 
@@ -72,16 +83,19 @@ Triggers for updates:
 - The server port is `PORT` (default 11000). `docker-compose.yml` uses the same variable for both the host and container side of the port mapping, so they stay in sync.
 - `MAPPING_CANDLE` (base S/R lookback per tf) and `BINANCE_REST_URL`/`BINANCE_WS_URL`/`CANDLE_LIMIT` are read directly from `process.env` inside services, not via `env.js`.
 - `MAPPING_CANDLE` keys are matched case-sensitively against the timeframe code (e.g. `1h`), so uppercase keys like `1H`/`4H`/`1D`/`1W` in `.env.example` never match and those timeframes fall back to 200.
-- Adding a new timeframe requires entries in `TF_TO_CRON`, `TF_TO_SECONDS`, and (if it should carry weight) `TF_WEIGHTS`.
+- Supported timeframes are the keys of `TF_SECONDS` in `src/services/candles.js`; unsupported entries in `TIMEFRAME_LIST` are dropped with a warning, and an unsupported role timeframe aborts startup. A new timeframe needs a `TF_SECONDS` entry and, if it should carry weight, a `TF_WEIGHTS` entry.
+- `HOST` (default `0.0.0.0`) is the Node listen address; Compose forces `HOST=0.0.0.0` in the container and publishes the port on `BIND_ADDR` (default `127.0.0.1`).
+- Every HTTP/WS request must carry a `Host` of `localhost`, `127.0.0.1`, `[::1]` or a name in `ALLOWED_HOSTS` (DNS-rebinding guard in `src/app.js`); otherwise 403 `host_not_allowed`.
+- The staleness threshold (2 × timeframe length), retry delays, cooldowns and the 5 s boundary delay are constants in `freshness.js`, `binance.service.js` and `scheduler.js`, not env vars.
 
 ## Docker / VPN
 
-`docker-compose.yml` runs the app in the network namespace of a `gluetun` WireGuard container (`network_mode: "service:vpn"`), so ports are published on the VPN container. This exists to avoid Binance HTTP 451 geo-blocks — a 451 from Binance is a network/VPN issue, not a code bug. WireGuard config lives in `gluetun/wireguard/` (gitignored secrets). The container mounts the source and runs `npm run dev`, so `.js` edits hot-reload; `.env` changes need `docker compose restart app`. `DOCKER_README.md` (Indonesian) has the full troubleshooting runbook.
+`docker-compose.yml` runs the app in the network namespace of a `gluetun` WireGuard container (`network_mode: "service:vpn"`), so ports are published on the VPN container. This routes Binance traffic through the VPN. A Binance HTTP 451 means an access restriction; whether VPN routing is acceptable under Binance's terms is an open, undecided policy question (DOCKER_README → "Akses Binance"), so never add automatic workarounds for it. The app pauses REST calls for 15 minutes after a 451. WireGuard config lives in `gluetun/wireguard/` (gitignored secrets). The container mounts the source and runs `npm run dev`, so `.js` edits hot-reload; `.env` changes need `docker compose restart app`. `DOCKER_README.md` (Indonesian) has the full troubleshooting runbook.
 
 ## Other docs
 
-- `.changelog/` — one file per released version (`v<version>.md`), see "Changelog, versioning & docs" above.
+- `.changelog/` — one file per released version (`v<version>.md`), see "Changelog, versioning & docs" above. Root `CHANGELOG.md` holds history up to 1.1.0 only.
 - `DATA_CONTRACT.md` — field-by-field contract for the Market State (`/api/market/:symbol`). Update it first when changing `enhanceMarketState` output.
-- `ARCHITECTURE.md` — design, plus the "Operating Model" section (candle finality, update ordering, concurrency, freshness, failure handling). Items marked **Proposed** there are agreed targets that are not implemented yet; the "Current" lines describe today's code.
+- `ARCHITECTURE.md` — design, plus the "Operating Model" section (candle finality, update ordering, concurrency, storage, freshness, failure handling) describing the implemented behaviour; items marked **Open** are unresolved decisions.
 - `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` — planned levels (scoring engine, backtesting, ML); aspirational.
 - `PROMPT_AI_*.md` — LLM prompts (Indonesian) that take the `/api/market/:symbol` JSON as input. Excluded from the docs-update rule; edit only when explicitly asked.

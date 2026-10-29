@@ -1,11 +1,22 @@
 const { SMA, RSI, MACD, ATR } = require('technicalindicators');
-const fs = require('fs').promises;
+
+class CalculationError extends Error {
+    constructor(code, message) {
+        super(message);
+        this.name = 'CalculationError';
+        this.code = code;
+    }
+}
+
+const lastOf = (arr) => (Array.isArray(arr) && arr.length > 0 ? arr[arr.length - 1] : undefined);
 
 class IndicatorService {
-    calculateAll(klines, market, timeframe) {
+    // `klines` must contain closed candles only, sorted and deduplicated. The forming candle is
+    // carried through for chart display only (`meta.forming`) and never enters a calculation.
+    calculateAll(klines, market, timeframe, meta = {}) {
         try {
             if (!klines || klines.length < 200) {
-                throw new Error('Insufficient data for indicator calculation (need at least 200 candles)');
+                throw new CalculationError('insufficient_data', 'Insufficient data for indicator calculation (need at least 200 closed candles)');
             }
 
             const closes = klines.map(k => k.close);
@@ -61,6 +72,15 @@ class IndicatorService {
                 volume: volumes
             };
 
+            const latest = [lastOf(ma14), lastOf(ma50), lastOf(ma200), lastOf(rsi), lastOf(atr),
+                lastOf(macdResult)?.MACD, lastOf(macdResult)?.signal, lastOf(macdResult)?.histogram, currentPrice];
+            if (!latest.every(v => typeof v === 'number' && Number.isFinite(v))) {
+                throw new CalculationError('calculation_failed', 'Indicator calculation produced non-finite values');
+            }
+            if (levels.support.length === 0 || levels.resistance.length === 0) {
+                throw new CalculationError('calculation_failed', 'Support/resistance calculation produced no levels');
+            }
+
             const interpretation = this.interpretMarket({
                 price: currentPrice,
                 support: levels.support,
@@ -68,7 +88,12 @@ class IndicatorService {
                 indicators: indicators
             });
 
+            const lastCandle = klines[klines.length - 1];
             return {
+                candle_close_time: lastCandle.close_time,
+                fetched_at: meta.fetchedAt ?? null,
+                gaps: meta.gaps ?? 0,
+                forming_candle: meta.forming || null,
                 price: currentPrice,
                 context: interpretation.context,
                 momentum: interpretation.momentum,
@@ -81,13 +106,13 @@ class IndicatorService {
                 resistance: levels.resistance,
                 market: market,
                 timeframe: timeframe,
-                timestamp: klines[klines.length - 1].time,
+                timestamp: lastCandle.time,
                 candles: klines,
                 indicators: indicators
             };
         } catch (err) {
-            console.error('Indicator Calculation Error:', err.message);
-            throw err;
+            if (err instanceof CalculationError) throw err;
+            throw new CalculationError('calculation_failed', `Indicator calculation failed: ${err.message}`);
         }
     }
 
@@ -230,3 +255,4 @@ class IndicatorService {
 }
 
 module.exports = new IndicatorService();
+module.exports.CalculationError = CalculationError;

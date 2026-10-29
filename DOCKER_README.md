@@ -181,7 +181,7 @@ services:
       TZ: Asia/Jakarta
 
     ports:
-      - "${PORT:-11000}:${PORT:-11000}"
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-11000}:${PORT:-11000}"
 
     restart: unless-stopped
 
@@ -193,6 +193,9 @@ services:
 
     env_file:
       - .env
+
+    environment:
+      HOST: 0.0.0.0
 
     volumes:
       - .:/app
@@ -242,7 +245,7 @@ Contoh:
 
 ```yaml
 ports:
-  - "${PORT:-11000}:${PORT:-11000}"
+  - "${BIND_ADDR:-127.0.0.1}:${PORT:-11000}:${PORT:-11000}"
 ```
 
 Jika `.env` berisi:
@@ -254,11 +257,11 @@ PORT=11000
 Docker akan membuat:
 
 ```text
-Windows :11000
+Windows 127.0.0.1:11000
        ↓
 VPN container :11000
        ↓
-Node.js :11000
+Node.js 0.0.0.0:11000
 ```
 
 Akses dari Windows:
@@ -266,6 +269,13 @@ Akses dari Windows:
 ```text
 http://localhost:11000
 ```
+
+### Keamanan port (sejak v2.0.0)
+
+- Secara default port hanya dipublish di **loopback host** (`127.0.0.1`), sehingga perangkat lain di jaringan (LAN/Wi-Fi) tidak dapat mengakses aplikasi. Aplikasi **tidak memiliki autentikasi**.
+- Untuk sengaja membuka akses ke jaringan, set `BIND_ADDR=0.0.0.0` di `.env`, tambahkan IP/hostname yang dipakai di browser ke `ALLOWED_HOSTS` (mis. `ALLOWED_HOSTS=192.168.1.20`), lalu jalankan `docker compose up -d`. Lakukan hanya di jaringan tepercaya.
+- Aplikasi hanya melayani request dengan header `Host` `localhost`, `127.0.0.1`, `[::1]` atau nama di `ALLOWED_HOSTS` (selain itu `403 host_not_allowed`). Ini mencegah serangan DNS rebinding dari halaman web lain.
+- Di dalam container, Compose men-set `HOST=0.0.0.0` agar Node.js menerima koneksi dari port yang dipublish. Nilai `HOST` di `.env` hanya berlaku untuk menjalankan aplikasi langsung (`npm start`) tanpa Docker.
 
 ---
 
@@ -294,6 +304,15 @@ PORT: process.env.PORT || 11000;
 ```
 
 Tidak perlu mengganti menjadi `APP_PORT`.
+
+Variabel terkait jaringan:
+
+| Variabel    | Dipakai oleh                  | Default     | Keterangan |
+| :---------- | :---------------------------- | :---------- | :--------- |
+| `PORT`      | Node.js dan Docker Compose    | `11000`     | Port aplikasi |
+| `HOST`      | Node.js (tanpa Docker)        | `0.0.0.0`   | Disarankan `127.0.0.1`. Di Docker selalu `0.0.0.0` (di-set oleh Compose) |
+| `BIND_ADDR` | Docker Compose (port publish) | `127.0.0.1` | `0.0.0.0` membuka akses dari jaringan |
+| `ALLOWED_HOSTS` | Node.js (HTTP & WebSocket) | kosong | Hostname/IP tambahan selain `localhost`, `127.0.0.1`, `[::1]` |
 
 ---
 
@@ -607,7 +626,7 @@ docker compose ps
 Expected:
 
 ```text
-crypto-signal-vpn   ...   0.0.0.0:11000->11000/tcp
+crypto-signal-vpn   ...   127.0.0.1:11000->11000/tcp
 ```
 
 Perhatikan bahwa port muncul pada:
@@ -826,7 +845,8 @@ Catatan operasional:
 - Exit IP VPN gratis biasanya dipakai bersama oleh banyak pengguna. Rate limit Binance dihitung per IP, sehingga `429` (rate limit) atau `418` (IP diblokir) dapat terjadi akibat traffic pengguna lain.
 - Exit IP dapat berubah lokasi tanpa pemberitahuan (lihat Bagian 23), sehingga `451` dapat muncul kembali kapan saja.
 - VPN `healthy` tidak berarti Binance dapat diakses. Selalu cek respons Binance secara langsung (Bagian 21 dan 22).
-- Perilaku aplikasi saat `451`, `429` atau `418` didefinisikan di [ARCHITECTURE.md → O6. Failure handling](./ARCHITECTURE.md#o6-failure-handling).
+- Perilaku aplikasi saat `451`, `429` atau `418` didefinisikan di [ARCHITECTURE.md → O6. Failure handling](./ARCHITECTURE.md#o6-failure-handling). Sejak v2.0.0, setelah `451` aplikasi **tidak mencoba ulang** dan menghentikan semua request REST ke Binance selama 15 menit; data terakhir tetap disimpan tetapi ditandai `stale` setelah melewati batas umur. Aplikasi tidak mengganti exit VPN atau mencoba mengakali pembatasan secara otomatis.
+- Status akses saat ini dapat dilihat di `GET /api/health` (`binance.cooldown`) dan di field `errors` pada `/api/market/:symbol`.
 
 ---
 
@@ -969,6 +989,14 @@ docker compose logs --tail=100 vpn
 ```bash
 docker compose logs --tail=100 app
 ```
+
+### Step 7 — Application health
+
+```bash
+curl -s http://localhost:11000/api/health
+```
+
+Periksa `binance.cooldown` (request Binance sedang dijeda karena `429`/`418`/`451`), `binance.stream.connected`, dan `last_error` per timeframe.
 
 ---
 

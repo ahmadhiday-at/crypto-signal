@@ -10,9 +10,12 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
 ### 🛠️ Technical Milestones
 - [x] **Multi-Timeframe Pipeline:** Implementation of parallel data fetching for 1m $\rightarrow$ 1d.
 - [x] **S/R Clustering Logic:** Implementation of a clustering algorithm to find price zones instead of single lines.
-- [x] **Regime Detection:** Logic to classify market as `trending_up`, `trending_down`, or `ranging`.
+- [x] **Regime Detection:** Logic to classify market as `trending` or `ranging` (direction-aware regimes such as `trending_up` / `trending_down` are not implemented).
 - [x] **The Reducer:** Logic to flatten MTF data into `data/market/{symbol}.json`.
 - [x] **Intelligence Layer:** Implementation of `enhanceMarketState` (Compression, Energy, Pressure, Breakout Score).
+- [x] **Closed-Candle Pipeline (v2.0.0):** Signals use closed candles only; UTC boundary scheduling with one summary build per boundary.
+- [x] **Data Contract v2 (v2.0.0):** `schema_version`, per-timeframe `inputs`, freshness `status` (`ok` / `degraded` / `stale`) and `errors`, validated before publishing. See [DATA_CONTRACT.md](./DATA_CONTRACT.md).
+- [ ] **Freshness threshold review:** Confirm the 2 × timeframe staleness threshold against real usage.
 
 **✅ Success Criteria:** The system can provide a JSON object that accurately describes the market state without requiring a human to look at a chart.
 
@@ -40,9 +43,10 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
 
 ### 🛠️ Technical Milestones
 - [x] **Premium Glassmorphism UI:** Built with Tailwind CSS.
-- [x] **Crosshair Synchronization:** Updates OHLCV, Technical Summary, and Breakout Score on hover.
+- [x] **Crosshair Synchronization:** Updates OHLCV and Technical Summary on hover (the breakout score is always the server value).
+- [x] **Freshness Banner (v2.0.0):** Shows `ok` / `degraded` / `stale`, data age and error codes; stale data is dimmed, missing data blanked.
 - [x] **Confluence Monitoring:** Visual list of S/R zones with price-copying.
-- [x] **Live WebSocket Integration:** Zero-latency price and state updates.
+- [x] **Live WebSocket Integration:** Live (display-only) prices and push notifications when snapshots or the Market State change.
 
 **✅ Success Criteria:** A dashboard that allows a trader to assess market state in under 5 seconds.
 

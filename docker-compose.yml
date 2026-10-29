@@ -18,7 +18,9 @@ services:
       TZ: Asia/Jakarta
 
     ports:
-      - "${PORT:-11000}:${PORT:-11000}"
+      # Published on the host's loopback only by default. Set BIND_ADDR=0.0.0.0 to expose it on the
+      # network (the app has no authentication).
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-11000}:${PORT:-11000}"
 
     restart: unless-stopped
 
@@ -30,6 +32,10 @@ services:
 
     env_file:
       - .env
+
+    environment:
+      # Inside the VPN namespace the app must listen on all interfaces so the published port reaches it.
+      HOST: 0.0.0.0
 
     volumes:
       - .:/app
