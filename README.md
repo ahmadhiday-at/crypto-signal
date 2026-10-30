@@ -52,7 +52,7 @@ The system now features a premium **Market Dashboard** (`/:symbol`, e.g. `/BTCUS
 ## 📁 Project Structure
 
 ```text
-trading-chart-app/
+crypto-signal/
 ├── src/
 │   ├── app.js          # Express app (security headers, host allowlist, routes)
 │   ├── api/            # Routes and Controllers (REST/UI)
@@ -83,7 +83,7 @@ trading-chart-app/
 
    ```bash
    git clone <your-repo-url>
-   cd trading-chart-app
+   cd crypto-signal
    ```
 
 2. **Install dependencies:**
@@ -143,7 +143,7 @@ trading-chart-app/
 | **System** | `/api/health`          | `GET`  | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
 | **System** | `/api/reset`           | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires the header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). Returns 502 if any timeframe fails (existing data is kept), 409 if a reset is already running, 429 within 60 s of the previous reset. |
 
-Unknown symbols, timeframes or `/api` paths return HTTP 404. `/api/:symbol/:tf` returns 503 `snapshot_unavailable` when no data could be fetched. Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403. The endpoints have no authentication: keep the server on localhost (see `HOST`, and `BIND_ADDR` for Docker).
+Under `/api`, unknown symbols, timeframes or paths return HTTP 404. The page routes do not validate: any `/:symbol` or `/:symbol/:tf` path returns the page (HTTP 200), which then shows "unavailable" if the API rejects the symbol or timeframe. `/` serves the reference chart (`public/index.html`) with its default of `BTCUSDT` / `15m`. `/api/:symbol/:tf` returns 503 `snapshot_unavailable` when no data could be fetched. Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403. The endpoints have no authentication: keep the server on localhost (see `HOST`, and `BIND_ADDR` for Docker).
 
 ---
 

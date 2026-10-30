@@ -38,7 +38,7 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
 
 ---
 
-## 🎨 LEVEL 2.5 — VISUAL STRATEGY LAYER (THE DASHBOARD) ✅
+## 🎨 LEVEL 2.5A — VISUAL STRATEGY LAYER (THE DASHBOARD) ✅
 **Objective:** Provide a high-performance UI for real-time state monitoring.
 
 ### 🛠️ Technical Milestones
@@ -52,7 +52,7 @@ This roadmap outlines the evolution of the Trading Chart App from a **Data Reduc
 
 ---
 
-## 🧱 LEVEL 2.5 — TRADE FILTER (CAPITAL PROTECTION)
+## 🧱 LEVEL 2.5B — TRADE FILTER (CAPITAL PROTECTION)
 **Objective:** Implement a "Hard Filter" to eliminate low-probability setups.
 
 ### 🛠️ Technical Milestones

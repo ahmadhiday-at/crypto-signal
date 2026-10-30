@@ -96,6 +96,16 @@ Calculates a `breakout_score` (0.0 to 1.0) from:
 
 The system provides two distinct interfaces for interacting with the Market State:
 
+Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static files and `/api`):
+
+| URL | Page |
+| :-- | :--- |
+| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard |
+| `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
+| `/` | Reference View via the static `public/index.html`, defaulting to `BTCUSDT` / `15m` |
+
+The page routes accept any path segment; the pages read the market and timeframe from the URL and show an unavailable state when the API returns 404.
+
 ### 1. Reference View (`public/index.html`)
 
 A standard trading view focused on accurate technical display and historical data review. Closed candles are drawn normally; the forming candle is drawn in grey and is the only bar that live prices update.

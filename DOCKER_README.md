@@ -1027,10 +1027,10 @@ volumes:
   - /app/node_modules
 ```
 
-Dengan demikian source code lokal:
+Dengan demikian folder project lokal (mis. `~/Workspaces/private/crypto/crypto-signal` di macOS atau `D:\Workspaces\www\crypto\crypto-signal` di Windows):
 
 ```text
-D:\Workspaces\www\crypto\crypto-signal
+<folder project crypto-signal>
 ```
 
 terhubung langsung ke:

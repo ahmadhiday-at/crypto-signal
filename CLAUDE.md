@@ -9,7 +9,7 @@ npm install
 npm run dev     # nodemon; watches server.js + src/, ignores data/
 npm start       # node server.js
 docker compose up -d            # app behind gluetun WireGuard VPN (see DOCKER_README.md)
-docker compose up -d --build    # needed only when package.json / package-lock.json change
+docker compose up -d --build    # needed when package.json, package-lock.json or the Dockerfile change
 ```
 
 ```bash
@@ -71,7 +71,9 @@ Triggers (all go through the same engine functions):
 - `scheduler` fires 5 s after every UTC minute boundary → `engine.runBoundary(boundary)`: updates every timeframe closing at that boundary plus any that are behind (retry-throttled), then rebuilds the summary once.
 - Startup → `engine.initialize()`: removes temp files, loads the index of stored candle close times (invalid/legacy files count as missing), refreshes whatever is behind.
 - Binance ticker stream reconnect → `engine.refreshStale()`. Ticker prices are display-only (`price` WS message).
-- `POST /api/reset` → `engine.reset()` (force refetch; 409 if running; 502 if any timeframe failed).
+- `POST /api/reset` → `engine.reset()` (force refetch; 409 if running; 429 within 60 s of the previous reset; 502 if any timeframe failed).
+
+Page routes (`src/api/routes/view.routes.js`) are mounted at `/` after static files and `/api`: `/:market` → dashboard, `/:market/:timeframe` → reference chart. They do not validate the market; the pages parse it from the URL (last one or two path segments).
 
 `src/data/storage.js` is the only persistence layer: names validated against strict regexes, unique temp file + fsync + rename, reads return `{data, reason}`. `data/` is committed to git, so running the app produces diffs there; don't commit those unless asked.
 
