@@ -196,4 +196,5 @@ test('view routes serve the dashboard at /:market and the chart at /:market/:tim
     assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Real-time Trading Chart' });
     assert.equal((await page('/js/market-status.js')).status, 200, 'static files still win over view routes');
     assert.equal((await req(s.base, '/api/config')).status, 200, 'api routes still win over view routes');
+    assert.equal((await req(s.base, '/api/config')).body.version, require('../package.json').version);
 });

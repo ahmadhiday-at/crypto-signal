@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.6.0](docs/changelog/v2.6.0.md) — 2026-10-30 — App version in `/api/config` and shown in both views.
 - [v2.5.0](docs/changelog/v2.5.0.md) — 2026-10-30 — Trade plan (entry zone, SL, TP1/TP2, RR, trailing) and low_rr filter; roadmap Levels 2.5B and 3 complete.
 - [v2.4.0](docs/changelog/v2.4.0.md) — 2026-10-30 — RSI/price divergence field and ±2 signal trigger; roadmap Level 2 complete.
 - [v2.3.0](docs/changelog/v2.3.0.md) — 2026-10-30 — Level 2.5B trade filter (no-man's land, volatility, buy-into-resistance) turns weak setups into WAIT.

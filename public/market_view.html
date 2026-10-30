@@ -61,6 +61,7 @@
             </button>
         </div>
         <div class="flex items-center gap-2">
+            <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
             <div id="connection-status" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold glass text-gray-400">
                 <span class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></span>
                 Connecting...
@@ -290,6 +291,7 @@
         async function loadMarketSelector() {
             const res = await fetch('/api/config');
             const config = await res.json();
+            if (config.version) document.getElementById('app-version').textContent = `v${config.version}`;
             const selector = document.getElementById('symbol-selector');
             
             config.markets.forEach(m => {

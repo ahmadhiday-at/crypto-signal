@@ -115,6 +115,7 @@
             <div id="header-sr" class="sr-header-group"></div>
         </div>
         <div class="nav-actions">
+            <span id="app-version" style="color:#787b86; font-size:11px; margin-right:8px;" title="App version"></span>
             <button class="btn btn-sm btn-outline-info" onclick="copyCurrentData()">Copy Data</button>
             <button class="btn btn-sm btn-outline-light" onclick="window.location.reload()">Refresh</button>
             <button class="btn btn-sm btn-outline-danger" onclick="resetData()">Reset</button>
@@ -246,6 +247,7 @@
             try {
                 const configRes = await fetch('/api/config');
                 const config = await configRes.json();
+                if (config.version) document.getElementById('app-version').textContent = `v${config.version}`;
 
                 const mSelect = document.getElementById('market-select');
                 const tSelect = document.getElementById('tf-select');

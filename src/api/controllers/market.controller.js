@@ -1,5 +1,17 @@
 // Request handlers. Every market/timeframe parameter is checked against the configured lists before
 // it reaches storage or Binance.
+const fs = require('fs');
+const path = require('path');
+
+// Read on each call so a version bump shows up without restarting the server.
+function appVersion() {
+    try {
+        return JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).version;
+    } catch (e) {
+        return null;
+    }
+}
+
 function createMarketController({ engine, config }) {
     const unknown = (res) => res.status(404).json({ error: 'unknown_market_or_timeframe' });
 
@@ -19,6 +31,7 @@ function createMarketController({ engine, config }) {
             markets: config.MARKETS.map(code => ({ code, label: code })),
             timeframes: config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code })),
             roles: config.TF_ROLES,
+            version: appVersion(),
         });
     }
 

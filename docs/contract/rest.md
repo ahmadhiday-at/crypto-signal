@@ -10,7 +10,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
 | UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
-| System | `/api/config` | `GET` | Markets, timeframes and TF roles. |
+| System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
 | System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
 | System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 
