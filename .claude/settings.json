@@ -2,8 +2,10 @@
   "permissions": {
     "deny": [
       "Read(**/PROMPT_AI_*.md)",
+      "Write(**/PROMPT_AI_*.md)",
       "Edit(**/PROMPT_AI_*.md)",
       "Read(**/.prompt_manual/**)",
+      "Write(**/.prompt_manual/**)",
       "Edit(**/.prompt_manual/**)"
     ]
   }
