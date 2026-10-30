@@ -107,3 +107,11 @@ test('filters are not evaluated for a WAIT score', () => {
     assert.equal(sig.filtered, false);
     assert.deepEqual(sig.filters, []);
 });
+
+test('RSI divergence adds +/-2', () => {
+    assert.deepEqual(computeSignal(base({ divergence: 'bullish' }), '1d').reasons, [{ code: 'bullish_divergence', points: 2 }]);
+    assert.equal(computeSignal(base({ divergence: 'bearish' }), '1d').score, -2);
+    const sig = computeSignal(base({ context: 'near_support', momentum: 'bullish', divergence: 'bullish', distance_percent: { to_support: 0.8, to_resistance: 3 } }), '1d');
+    assert.equal(sig.score, 6);
+    assert.equal(sig.action, 'BUY');
+});

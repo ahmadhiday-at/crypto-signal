@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.4.0](docs/changelog/v2.4.0.md) — 2026-10-30 — RSI/price divergence field and ±2 signal trigger; roadmap Level 2 complete.
 - [v2.3.0](docs/changelog/v2.3.0.md) — 2026-10-30 — Level 2.5B trade filter (no-man's land, volatility, buy-into-resistance) turns weak setups into WAIT.
 - [v2.2.0](docs/changelog/v2.2.0.md) — 2026-10-30 — Level 2 heuristic `signal` (BUY/SELL/WAIT, strength, reasons) in the Market State and dashboard.
 - [v2.1.0](docs/changelog/v2.1.0.md) — 2026-10-30 — Dashboard fits the viewport, panes aligned and synced (range + crosshair), Binance-style legends.

@@ -17,6 +17,7 @@ const valid = () => ({
     inputs: Object.fromEntries(['1d', '4h', '1h', '15m'].map(tf => [tf, { candle_close_time: 1, age_seconds: 9, status: 'ok' }])),
     status: 'ok', errors: [],
     volatility_ratio: 1.1,
+    divergence: 'none',
     signal: { action: 'WAIT', score: 2, strength: 'weak', reasons: [{ code: 'near_support', points: 2 }], filtered: false, filters: [] },
 });
 
@@ -43,6 +44,7 @@ test('rejects missing fields, wrong versions, invalid enums and non-finite numbe
     assert.ok(mutate(s => { s.signal.filtered = true; }).some(e => e.includes('signal.filtered')));
     assert.ok(mutate(s => { delete s.volatility_ratio; }).some(e => e.includes('volatility_ratio')));
     assert.deepEqual(mutate(s => { s.volatility_ratio = null; }), [], 'null ratio is allowed');
+    assert.ok(mutate(s => { s.divergence = 'hidden'; }).some(e => e.includes('divergence')));
     assert.deepEqual(validateMarketState(null), ['market state is not an object']);
 });
 

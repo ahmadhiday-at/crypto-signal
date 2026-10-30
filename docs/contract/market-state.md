@@ -72,6 +72,7 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `inputs` | object | `{ [tf]: {candle_close_time, age_seconds, status} }` for every role TF (see §6) | each role TF | D |
 | `status` | enum | `ok` \| `degraded` \| `stale` (see §6) | derived | D |
 | `errors` | string[] | unresolved error codes (see §6.3); empty when healthy | — | D |
+| `divergence` | enum | `bullish` \| `bearish` \| `none` — RSI/price divergence on the last two swing points of the entry TF (see §4.1) | entry TF | D, P |
 | `volatility_ratio` | number \| null | latest closed ATR ÷ mean ATR of the last 100 closed candles (1.0 = typical); `null` if ATR is unavailable | entry TF | D |
 | `signal` | object | `{action, score, strength, reasons, filtered, filters}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
 
@@ -110,12 +111,14 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 | `near_support` / `near_resistance` | +2 / −2 | `context` is `near_support` / `near_resistance` |
 | `bullish_momentum` / `bearish_momentum` | +2 / −2 | `momentum` is `bullish` / `bearish` |
 | `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `TF_HTF` timeframe in `tfs` and is ≤ 1% from `price` |
+| `bullish_divergence` / `bearish_divergence` | +2 / −2 | `divergence` is `bullish` / `bearish` (added in 2.4.0) |
 | `volume_surge` / `weak_volume` | ±1 | only when score ≠ 0: `volume_state` `high` adds 1 toward the current direction, `low` moves 1 toward zero |
 | `data_not_current` | 0 | `status` is not `ok`; forces `action` = `WAIT` |
 
 - `action`: `BUY` if score ≥ +5, `SELL` if score ≤ −5, otherwise `WAIT`; always `WAIT` when `status` ≠ `ok`.
 - `strength`: `strong` if |score| ≥ 7, `medium` if ≥ 5, otherwise `weak`.
 - `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above.
+- `divergence`: within the last 60 closed entry candles, swing lows/highs must exceed 3 bars on each side and the latest swing must be ≤ 10 bars old. Bullish = price lower low + RSI higher low; bearish = price higher high + RSI lower high. Starting values, to be reviewed.
 - Heuristic and uncalibrated (calibration is Level 5); not a trade instruction.
 
 **Trade filter (added in 2.3.0).** Evaluated only when the score gives BUY or SELL. Any failing filter turns `action` into `WAIT`, sets `filtered: true` and lists the codes in `filters[]` (score and reasons are kept). Thresholds are starting values to be reviewed.

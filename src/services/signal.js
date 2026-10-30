@@ -33,7 +33,8 @@ function tradeFilters(state, action) {
 
 const REASON_CODES = [
     'near_support', 'near_resistance', 'bullish_momentum', 'bearish_momentum',
-    'strong_htf_support', 'strong_htf_resistance', 'volume_surge', 'weak_volume', 'data_not_current',
+    'strong_htf_support', 'strong_htf_resistance', 'bullish_divergence', 'bearish_divergence',
+    'volume_surge', 'weak_volume', 'data_not_current',
 ];
 
 function strengthOf(score) {
@@ -63,6 +64,9 @@ function computeSignal(state, htfTf) {
     if (topResistance?.tfs?.includes(htfTf) && state.distance_percent?.to_resistance <= HTF_PROXIMITY_PERCENT) {
         add('strong_htf_resistance', -3);
     }
+
+    if (state.divergence === 'bullish') add('bullish_divergence', 2);
+    if (state.divergence === 'bearish') add('bearish_divergence', -2);
 
     // Volume changes conviction, not direction: one point toward or away from zero.
     if (score !== 0) {

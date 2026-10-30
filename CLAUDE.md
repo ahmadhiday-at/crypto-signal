@@ -33,7 +33,7 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 - Update/freshness/failure behaviour → `docs/architecture/operating-model.md`
 - Env vars, config → `docs/architecture/config.md`, `.env.example`
 - Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
-- Planned work → `docs/roadmap/level-2.5b.md` (active); other levels in `docs/roadmap/`
+- Planned work → `docs/roadmap/level-3.md` (active); other levels in `docs/roadmap/`
 
 ## When a task is done
 

@@ -19,6 +19,7 @@ const ENUMS = {
     regime_global: ['trending', 'ranging', 'unknown', 'weak_trend', 'mixed'],
     status: ['ok', 'degraded', 'stale'],
     signal_action: ['BUY', 'SELL', 'WAIT'],
+    divergence: ['bullish', 'bearish', 'none'],
     signal_strength: ['weak', 'medium', 'strong'],
     input_status: ['ok', 'stale', 'missing'],
 };
@@ -126,6 +127,7 @@ function validateMarketState(s) {
         if (sig.filtered !== (Array.isArray(sig.filters) && sig.filters.length > 0)) errors.push('signal.filtered must match signal.filters');
     }
     if (s.volatility_ratio !== null && !isNum(s.volatility_ratio)) errors.push('volatility_ratio must be a finite number or null');
+    if (!ENUMS.divergence.includes(s.divergence)) errors.push('divergence has invalid value ' + JSON.stringify(s.divergence));
 
     return errors;
 }

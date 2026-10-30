@@ -136,7 +136,7 @@ Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`
 2. **Summary** — `engine.rebuildSummary(market)` (serialised per market) reads the role snapshots, `mergeSnapshots` (weighted level merge, top 3) → `enhanceMarketState` (heuristic formula, regression-tested in `test/enhance.test.js`) → adds `schema_version`, `generated_at`, `inputs`, `status`, `errors` → `validateMarketState` → write `data/market/{MARKET}.json` → `summary_ready` over WS.
 3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
 
-Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed.
+Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
 
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 

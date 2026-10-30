@@ -2,6 +2,7 @@ const { tfSeconds, isBoundary, expectedLastClose, normalizeCandles, splitClosed,
 const { computeInputs, summaryStatus, inputStatus, FUTURE_TOLERANCE_S } = require('./freshness');
 const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = require('./contract');
 const { computeSignal } = require('./signal');
+const { detectDivergence } = require('./divergence');
 
 function enhanceMarketState(data) {
     const price = data.price;
@@ -190,6 +191,7 @@ function mergeSnapshots(market, snaps, roles, weights) {
             timestamp: entryData.timestamp,
             timeframes: timeframesState,
             volatility_ratio: volatilityRatio(entryData.indicators?.atr),
+            divergence: detectDivergence(entryData.candles, entryData.indicators?.rsi || []),
         },
         // enhanceMarketState compares the latest volume with the 20-candle average, so it needs the
         // recent history rather than only the latest value.
