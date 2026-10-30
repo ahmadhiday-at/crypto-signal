@@ -2,7 +2,7 @@
 
 This document is the single source of truth for the **Market State** object — the per-symbol summary served by `GET /api/market/:symbol` and stored in `data/market/{MARKET}.json`.
 
-The dashboard (`public/market_view.html`) and the AI prompts (`PROMPT_AI_*.md`) both depend on it. Any change to a field name, type, unit, or allowed value must be made here first, and the consumers must be updated in the same change.
+The dashboard (`public/market_view.html`) depends on it, and so do the AI prompts (`PROMPT_AI_*.md`), which the user maintains manually outside this workflow. Any change to a field name, type, unit, or allowed value must be made here first, and the dashboard must be updated in the same change.
 
 The server validates every Market State against this contract (`src/services/contract.js`) before writing it. An object that fails validation is not published; the previous file stays in place and the failure is reported as `invalid_summary`.
 
@@ -18,7 +18,7 @@ The server validates every Market State against this contract (`src/services/con
 **Change policy**
 
 - **Additive** (new optional field, new metadata): minor change, no consumer update required.
-- **Breaking** (rename, removal, type/unit change, change of meaning, new or removed enum value): bump `schema_version` and update the dashboard and the prompts in the same change.
+- **Breaking** (rename, removal, type/unit change, change of meaning, new or removed enum value): bump `schema_version` and update the dashboard in the same change; note the change in the changelog so the prompts can be updated manually.
 
 ---
 

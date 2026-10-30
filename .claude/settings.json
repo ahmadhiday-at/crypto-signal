@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/PROMPT_AI_*.md)",
+      "Edit(**/PROMPT_AI_*.md)"
+    ]
+  }
+}

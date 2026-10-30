@@ -50,7 +50,7 @@ Every change to code, config, or behavior must ship with three things in the sam
 
    List the updated docs in the changelog's "Dokumentasi" section.
 
-   **Skip `PROMPT_AI_*.md`:** never edit these files as part of this rule, even when a change affects the fields they reference. Only touch them when explicitly asked.
+   **Skip `PROMPT_AI_*.md`:** do not edit them as part of this rule (see "Other docs").
 
 Not a change: diffs under `data/` produced by running the app — no version bump, no changelog.
 
@@ -100,4 +100,4 @@ Page routes (`src/api/routes/view.routes.js`) are mounted at `/` after static fi
 - `DATA_CONTRACT.md` — field-by-field contract for the Market State (`/api/market/:symbol`). Update it first when changing `enhanceMarketState` output.
 - `ARCHITECTURE.md` — design, plus the "Operating Model" section (candle finality, update ordering, concurrency, storage, freshness, failure handling) describing the implemented behaviour; items marked **Open** are unresolved decisions.
 - `ROADMAP.md`, `CRYPTO AI SIGNAL SYSTEM ROADMAP.md` — planned levels (scoring engine, backtesting, ML); aspirational.
-- `PROMPT_AI_*.md` — LLM prompts (Indonesian) that take the `/api/market/:symbol` JSON as input. Excluded from the docs-update rule; edit only when explicitly asked.
+- `PROMPT_AI_*.md` — LLM prompts the user maintains manually outside this workflow; no code uses them. **Do not read, search, open or edit them** unless the user explicitly asks for a specific file. Reads and edits are blocked in `.claude/settings.json`; in shell searches exclude them too (e.g. `grep --exclude='PROMPT_AI_*'`).
