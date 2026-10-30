@@ -22,15 +22,18 @@ docker compose restart app      # after .env changes
 
 Express "Market State Reducer": fetches Binance klines, computes indicators and S/R zones per timeframe from **closed candles only**, merges the 4 role timeframes into one Market State per symbol (schema v2). A UTC boundary scheduler drives updates; freshness (`ok`/`degraded`/`stale`) is recomputed on every read. `public/` HTML pages use REST + WebSocket.
 
-Binance HTTP 451 = access restriction; VPN routing is an open policy question (`docs/DEPLOYMENT.md` → "Akses Binance"). Never add automatic workarounds.
+Binance HTTP 451 = access restriction; open policy question; never add automatic workarounds.
 
 ## Document map
 
-- Endpoints, `/api/market/:symbol` fields, `enhanceMarketState` output → `docs/DATA_CONTRACT.md` (update first)
-- Architecture, data flow, update/freshness/failure, code map, config notes → `docs/ARCHITECTURE.md`
-- Setup, env vars → `README.md`, `.env.example` (+ `docs/DEPLOYMENT.md` if Docker-related)
-- Docker/VPN/compose → `docs/DEPLOYMENT.md` (Indonesian)
-- Planned items → `docs/ROADMAP.md`
+- REST endpoints, 503 body → `docs/contract/rest.md`
+- `/api/market/:symbol` fields, `enhanceMarketState` output → `docs/contract/market-state.md` (update first)
+- WS message shapes → `docs/contract/websocket.md`
+- Code map, components → `docs/architecture/overview.md`
+- Update/freshness/failure behaviour → `docs/architecture/operating-model.md`
+- Env vars, config → `docs/architecture/config.md`, `.env.example`
+- Setup → `README.md`; Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
+- Planned work → `docs/roadmap/level-2.md` (active); other levels in `docs/roadmap/`
 
 ## When a task is done
 

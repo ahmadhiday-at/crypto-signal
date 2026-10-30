@@ -1,31 +1,6 @@
-# 📜 API & Data Contract
-
-This document covers the HTTP endpoints (§0) and the **Market State** contract (§1–§7).
-
----
-
-## 0. Endpoints
-
-| Category | Endpoint | Method | Description |
-| :------- | :------- | :----- | :---------- |
-| Data | `/api/market/:symbol` | `GET` | Market State (this contract) with freshness `status`. HTTP 503 with diagnostics when unavailable (§6.4). |
-| Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
-| UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
-| UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
-| System | `/api/config` | `GET` | Markets, timeframes and TF roles. |
-| System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
-| System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
-
-- Under `/api`, unknown symbols, timeframes or paths return 404.
-- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200), which shows "unavailable" if the API rejects it. `/` serves the reference chart (`public/index.html`), default `BTCUSDT` / `15m`.
-- Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403 `host_not_allowed`.
-- No authentication: keep the server on localhost (`HOST`; `BIND_ADDR` for Docker).
-
----
-
 # Market State contract
 
-This document is the single source of truth for the **Market State** object — the per-symbol summary served by `GET /api/market/:symbol` and stored in `data/market/{MARKET}.json`.
+Field-by-field contract for the Market State JSON; this document is the single source of truth for the **Market State** object — the per-symbol summary served by `GET /api/market/:symbol` and stored in `data/market/{MARKET}.json`.
 
 The dashboard (`public/market_view.html`) depends on it, and so do the AI prompts (`PROMPT_AI_*.md`), which the user maintains manually outside this workflow. Any change to a field name, type, unit, or allowed value must be made here first, and the dashboard must be updated in the same change.
 
@@ -146,7 +121,7 @@ For each role timeframe:
 
 `age_seconds`, `inputs[tf].status`, `status` and `errors` are **recomputed every time the object is served**, so a stored summary turns `stale` on its own once its inputs age, even if no update runs. The stored file keeps the values from when it was built.
 
-The 2× threshold is the documented starting value (ARCHITECTURE.md → O5), not a market-data guarantee.
+The 2× threshold is the documented starting value ([operating-model.md → O5](../architecture/operating-model.md#o5-freshness-and-degraded-state)), not a market-data guarantee.
 
 ### 6.2 Overall `status`
 
@@ -158,7 +133,7 @@ Precedence: `stale` > `degraded` > `ok`.
 | `degraded` | the entry TF is `ok`, and one or more non-entry role TFs are `stale` |
 | `ok` | every role TF input is `ok` |
 
-A summary is only built when every role TF has a valid snapshot, so a served summary never has a `missing` input; `missing` only appears in the unavailable response (§6.4).
+A summary is only built when every role TF has a valid snapshot, so a served summary never has a `missing` input; `missing` only appears in the unavailable response ([rest.md](./rest.md#unavailable-market-state-http-503)).
 
 ### 6.3 Error codes
 
@@ -178,23 +153,6 @@ A summary is only built when every role TF has a valid snapshot, so a served sum
 | `missing_input` | a role TF has no valid snapshot, so no summary can be built |
 | `invalid_summary` | the built summary failed contract validation and was not published |
 
-### 6.4 Unavailable response (HTTP 503)
-
-When no valid summary exists and none can be built, `GET /api/market/:symbol` returns HTTP 503 with a diagnostic object instead of a Market State. It carries no market fields:
-
-```json
-{
-  "schema_version": 2,
-  "market": "BTCUSDT",
-  "status": "stale",
-  "generated_at": null,
-  "inputs": { "1d": { "candle_close_time": null, "age_seconds": null, "status": "missing" } },
-  "errors": ["binance_451", "missing_input"],
-  "error": "market_state_unavailable"
-}
-```
-
-Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 ---
 
@@ -202,7 +160,7 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 These apply to every consumer, including AI prompts and anyone pasting the JSON into an LLM.
 
-1. **Check freshness before interpreting.** If `status` is not `ok`, show it prominently. AI analysis must return **WAIT** and state that the data is not current. An object with `error: "market_state_unavailable"` contains no market data at all.
+1. **Check freshness before interpreting.** If `status` is not `ok`, show it prominently. AI analysis must return **WAIT** and state that the data is not current. An object with `error: "market_state_unavailable"` contains no market data at all ([rest.md](./rest.md#unavailable-market-state-http-503)).
 2. **Never infer missing fields.** An absent field means "unknown", not a default.
 3. **Treat `breakout_score` as a ranking heuristic**, not a probability or confidence percentage.
 4. **Treat `setup_state` as a label**, not a trade instruction.

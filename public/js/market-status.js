@@ -1,4 +1,4 @@
-// Decides how the dashboard presents a Market State response (docs/DATA_CONTRACT.md §7).
+// Decides how the dashboard presents a Market State response (docs/contract/market-state.md §7).
 // Loaded by the browser as a plain script (window.MarketStatus) and by Node tests via require().
 (function (root) {
     var SCHEMA_VERSION = 2;

@@ -1,0 +1,33 @@
+# 🗺️ Roadmap
+
+Index of roadmap levels, principles and current position. Evolution from a **Market State Reducer** into an **AI Signal Engine**. The execution bot is a separate system.
+
+```
+DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET → AI
+```
+
+**Principles**
+- Don't start with AI; build the scoring system first.
+- Logging is mandatory before any AI work.
+- Keep signal generation and execution separate.
+
+**Current position:** Level 1 done; Level 2 (Scoring Engine) is the next priority, followed by the Trade Filter (2.5B), Logging + Feature Store (4) and the Backtest Engine (5).
+
+## Levels
+
+- [🧱 Level 1 — Market Engine (core) ✅](./level-1.md)
+- [🧱 Level 2 — Scoring Signal Engine 🕒 (next)](./level-2.md)
+- [🎨 Level 2.5A — Visual Strategy Layer (dashboard) ✅](./level-2.5a.md)
+- [🧱 Level 2.5B — Trade Filter (capital protection)](./level-2.5b.md)
+- [🧱 Level 3 — Signal Enrichment (actionability)](./level-3.md)
+- [🧱 Level 4 — Signal Logging & Dataset (foundation)](./level-4.md)
+- [🧱 Level 5 — Backtest Engine (quantification)](./level-5.md)
+- [🧱 Level 6 — Performance Analysis (optimization)](./level-6.md)
+- [🧱 Level 7 — AI Signal](./level-7.md)
+
+## 🔌 Auto Trading Bot (separate execution system)
+Consumes the signal engine's output.
+
+- **API integration:** Binance / Bybit / OKX execution.
+- **Risk management:** position size from % of account balance and SL distance.
+- **Execution:** limit orders at entry zones; set SL/TP and manage the trade.

@@ -1,4 +1,4 @@
-// Freshness model (ARCHITECTURE.md → O5). Ages are measured from candle close times, never from
+// Freshness model (docs/architecture/operating-model.md → O5). Ages are measured from candle close times, never from
 // file modification or generation time.
 const { tfSeconds } = require('./candles');
 

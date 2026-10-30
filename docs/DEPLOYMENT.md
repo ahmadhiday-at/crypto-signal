@@ -845,7 +845,7 @@ Catatan operasional:
 - Exit IP VPN gratis biasanya dipakai bersama oleh banyak pengguna. Rate limit Binance dihitung per IP, sehingga `429` (rate limit) atau `418` (IP diblokir) dapat terjadi akibat traffic pengguna lain.
 - Exit IP dapat berubah lokasi tanpa pemberitahuan (lihat Bagian 23), sehingga `451` dapat muncul kembali kapan saja.
 - VPN `healthy` tidak berarti Binance dapat diakses. Selalu cek respons Binance secara langsung (Bagian 21 dan 22).
-- Perilaku aplikasi saat `451`, `429` atau `418` didefinisikan di [ARCHITECTURE.md → O6. Failure handling](./ARCHITECTURE.md#o6-failure-handling). Sejak v2.0.0, setelah `451` aplikasi **tidak mencoba ulang** dan menghentikan semua request REST ke Binance selama 15 menit; data terakhir tetap disimpan tetapi ditandai `stale` setelah melewati batas umur. Aplikasi tidak mengganti exit VPN atau mencoba mengakali pembatasan secara otomatis.
+- Perilaku aplikasi saat `451`, `429` atau `418` didefinisikan di [operating-model.md → O6. Failure handling](./architecture/operating-model.md#o6-failure-handling). Sejak v2.0.0, setelah `451` aplikasi **tidak mencoba ulang** dan menghentikan semua request REST ke Binance selama 15 menit; data terakhir tetap disimpan tetapi ditandai `stale` setelah melewati batas umur. Aplikasi tidak mengganti exit VPN atau mencoba mengakali pembatasan secara otomatis.
 - Status akses saat ini dapat dilihat di `GET /api/health` (`binance.cooldown`) dan di field `errors` pada `/api/market/:symbol`.
 
 ---

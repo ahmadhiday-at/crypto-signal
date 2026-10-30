@@ -1,6 +1,6 @@
 # 📈 Crypto Signal: Market State Engine
 
-[![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.0.3-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
 A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1D, 4H, 1H and 15m timeframes into a single top-down view:
@@ -40,10 +40,10 @@ With Docker behind the VPN: `docker compose up -d` (see [docs/DEPLOYMENT.md](./d
 
 | Document | Contents |
 | :------- | :------- |
-| [docs/DATA_CONTRACT.md](./docs/DATA_CONTRACT.md) | Endpoints and the Market State JSON contract |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Architecture, Operating Model, code map, configuration notes |
+| [docs/contract/](./docs/contract/rest.md) | REST endpoints, Market State JSON contract, WebSocket messages |
+| [docs/architecture/](./docs/architecture/overview.md) | Overview + code map, Operating Model, configuration |
 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Docker + VPN runbook (Indonesian) |
-| [docs/ROADMAP.md](./docs/ROADMAP.md) | Roadmap levels 1–7 |
+| [docs/roadmap/](./docs/roadmap/README.md) | Roadmap levels 1–7 |
 | [CHANGELOG.md](./CHANGELOG.md) | Release index; details in `docs/changelog/` |
 
 ## License

@@ -1,6 +1,6 @@
 {
   "name": "trading-chart-app",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Real-time Trading Chart with S/R and Indicators",
   "main": "server.js",
   "scripts": {
