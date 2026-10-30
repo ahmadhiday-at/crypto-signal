@@ -184,3 +184,16 @@ test('requests addressed to an unknown host name are refused (DNS rebinding)', a
     assert.equal(ws.ok, false);
     assert.equal(s.binance.calls.length, 0);
 });
+
+test('view routes serve the dashboard at /:market and the chart at /:market/:timeframe', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const page = async (path) => {
+        const r = await fetch(s.base + path);
+        return { status: r.status, title: (/<title>([^<]*)/.exec(await r.text()) || [])[1] };
+    };
+    assert.deepEqual(await page('/BTCUSDT'), { status: 200, title: 'Market State Engine | Dashboard' });
+    assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Real-time Trading Chart' });
+    assert.equal((await page('/js/market-status.js')).status, 200, 'static files still win over view routes');
+    assert.equal((await req(s.base, '/api/config')).status, 200, 'api routes still win over view routes');
+});

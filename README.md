@@ -28,7 +28,7 @@ The system converts technical indicators into strategic insights:
 
 ## 💻 Core Interface: Market Dashboard
 
-The system now features a premium **Market Dashboard** (`/view/market/:symbol`) that provides:
+The system now features a premium **Market Dashboard** (`/:symbol`, e.g. `/BTCUSDT`) that provides:
 
 - **Glassmorphism UI:** High-contrast design for long-session trading.
 - **Freshness Banner:** Shows whether the Market State is `ok`, `degraded` or `stale`, the closed-candle time it is based on, and any data errors. Stale data is dimmed; missing data is blanked.
@@ -137,8 +137,8 @@ trading-chart-app/
 | :--------- | :--------------------- | :----- | :--------------------------------------------------- |
 | **Data**   | `/api/market/:symbol`  | `GET`  | Returns the **Market State** ([DATA_CONTRACT.md](./DATA_CONTRACT.md)) with freshness `status`. HTTP 503 with diagnostics when unavailable. |
 | **Data**   | `/api/:symbol/:tf`     | `GET`  | Returns the closed-candle snapshot for a specific TF, with `status` and `age_seconds`. |
-| **UI**     | `/view/market/:symbol` | `GET`  | Renders the premium **Market Dashboard**.            |
-| **UI**     | `/view/:symbol/:tf`    | `GET`  | Renders the reference **Multi-Pane Chart**.          |
+| **UI**     | `/:symbol`             | `GET`  | Renders the premium **Market Dashboard** (e.g. `/BTCUSDT`). |
+| **UI**     | `/:symbol/:tf`         | `GET`  | Renders the reference **Multi-Pane Chart** (e.g. `/BTCUSDT/1h`). |
 | **System** | `/api/config`          | `GET`  | Returns markets, timeframes and TF roles.            |
 | **System** | `/api/health`          | `GET`  | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
 | **System** | `/api/reset`           | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires the header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). Returns 502 if any timeframe fails (existing data is kept), 409 if a reset is already running, 429 within 60 s of the previous reset. |
