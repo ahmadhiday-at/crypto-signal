@@ -116,8 +116,10 @@ A high-performance "command center" designed for rapid state assessment.
 
 - **Glassmorphism UI:** Built with Tailwind CSS for high readability.
 - **Freshness banner:** Shows `status` (`ok` / `degraded` / `stale`), the entry-candle close time and age, and any error codes. Anything not `ok` is dimmed; when no Market State exists, all values are blanked. The verdict is re-read from the server every minute.
-- **Live vs closed:** The header shows the live ticker price, labelled as display-only. The banner shows the closed entry-candle price the analysis is based on.
-- **Dynamic Synchronization:** A "Crosshair Observer" synchronizes OHLCV and Technical Summary (MAs/RSI/MACD) with the hovered candle. The breakout score and distances always come from the server and are not recalculated on hover.
+- **Live vs closed:** The header shows the live ticker price (display-only) with its change and change % versus the close of the last closed candle of the selected timeframe. The banner shows the closed entry-candle price the analysis is based on.
+- **Layout:** fills the viewport (no page scroll at 1440×900 and up); chart panes split the height ~55/15/15/15 (candles, volume, MACD, RSI) and resize via `ResizeObserver`; the sidebar scrolls internally.
+- **Synced panes:** every pane uses the same bar times (indicator warm-up and the forming candle are whitespace), so logical indices match. Visible range and crosshair are synced from the pane under the mouse (the main pane otherwise); price scales share one width; only the bottom pane shows the time axis.
+- **Legends (Binance style):** follow the crosshair and default to the last closed candle. Main: date, O/H/L/C, Change and Change % vs Open, Range % = (H−L)/L, MA(14/50/200). Panes: Vol, MACD/Signal/Hist, RSI(14). One browser-locale number format is used across the dashboard and the price axes. The breakout score and distances always come from the server and are not recalculated on hover.
 - **Actionable Insights:** Direct display of confluence zones with integrated price-copying functionality.
 
 ## 🚀 Design Goals
