@@ -1,6 +1,6 @@
 # 📈 Crypto Signal: Market State Engine
 
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
 A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1D, 4H, 1H and 15m timeframes into a single top-down view:

@@ -10,7 +10,49 @@ const VOLATILITY_EXTREME = 2.0;
 const VOLATILITY_DEAD = 0.5;
 const CONFIRMED_BREAKOUT = ['medium', 'strong'];
 
-const FILTER_CODES = ['no_mans_land', 'volatility_extreme', 'volatility_dead', 'buy_into_resistance', 'sell_into_support'];
+const FILTER_CODES = ['no_mans_land', 'volatility_extreme', 'volatility_dead', 'buy_into_resistance', 'sell_into_support', 'low_rr'];
+
+// Level 3 trade plan (docs/roadmap/level-3.md). Starting values, to be reviewed.
+const STOP_ATR_BUFFER = 0.5;
+const TRAILING_ATR = 1.5;
+const MIN_RISK_REWARD = 1.5;
+
+const num = (v) => typeof v === 'number' && Number.isFinite(v);
+const round = (v) => (num(v) ? +v.toPrecision(10) : null);
+
+// Entry zone, stop loss, targets, risk/reward and a trailing stop for a BUY (long) or SELL (short).
+// Returns null when the inputs needed for a plan are missing.
+function tradePlan(state, action, htfTf) {
+    const price = state.price;
+    const atr = state.indicators?.atr;
+    const long = action === 'BUY';
+    const zone = long ? state.levels?.support?.[0] : state.levels?.resistance?.[0];
+    if (!num(price) || !num(atr) || !zone || !num(zone.low) || !num(zone.high)) return null;
+
+    const stop = long ? zone.low - STOP_ATR_BUFFER * atr : zone.high + STOP_ATR_BUFFER * atr;
+    const beyond = (l) => num(l.mid) && (long ? l.mid > price : l.mid < price);
+    const targets = (long ? state.levels?.resistance : state.levels?.support || []) || [];
+    const ahead = targets.filter(beyond).sort((a, b) => (long ? a.mid - b.mid : b.mid - a.mid));
+    const tp1 = ahead[0]?.mid ?? null;
+    const major = ahead
+        .filter(l => l !== ahead[0] && Array.isArray(l.tfs) && l.tfs.includes(htfTf))
+        .sort((a, b) => b.score - a.score)[0];
+    const tp2 = major ? major.mid : null;
+
+    const risk = long ? price - stop : stop - price;
+    const reward = num(tp1) ? (long ? tp1 - price : price - tp1) : null;
+    const rr = risk > 0 && num(reward) && reward > 0 ? reward / risk : null;
+
+    return {
+        side: long ? 'long' : 'short',
+        entry_zone: [round(zone.low), round(zone.high)],
+        stop_loss: round(stop),
+        take_profit_1: round(tp1),
+        take_profit_2: round(tp2),
+        risk_reward: num(rr) ? +rr.toFixed(2) : null,
+        trailing_stop: round(long ? price - TRAILING_ATR * atr : price + TRAILING_ATR * atr),
+    };
+}
 
 // Returns the filter codes that reject a BUY/SELL; an empty list means the setup passes.
 function tradeFilters(state, action) {
@@ -76,14 +118,16 @@ function computeSignal(state, htfTf) {
     }
 
     let action = score >= THRESHOLD ? 'BUY' : score <= -THRESHOLD ? 'SELL' : 'WAIT';
+    const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf);
     const filters = action === 'WAIT' ? [] : tradeFilters(state, action);
+    if (action !== 'WAIT' && !(plan?.risk_reward >= MIN_RISK_REWARD)) filters.push('low_rr');
     if (filters.length) action = 'WAIT';
     if (state.status !== 'ok') {
         reasons.push({ code: 'data_not_current', points: 0 });
         action = 'WAIT';
     }
 
-    return { action, score, strength: strengthOf(score), reasons, filtered: filters.length > 0, filters };
+    return { action, score, strength: strengthOf(score), reasons, filtered: filters.length > 0, filters, plan };
 }
 
-module.exports = { computeSignal, tradeFilters, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT };
+module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD };

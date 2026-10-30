@@ -74,7 +74,7 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `errors` | string[] | unresolved error codes (see §6.3); empty when healthy | — | D |
 | `divergence` | enum | `bullish` \| `bearish` \| `none` — RSI/price divergence on the last two swing points of the entry TF (see §4.1) | entry TF | D, P |
 | `volatility_ratio` | number \| null | latest closed ATR ÷ mean ATR of the last 100 closed candles (1.0 = typical); `null` if ATR is unavailable | entry TF | D |
-| `signal` | object | `{action, score, strength, reasons, filtered, filters}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
+| `signal` | object | `{action, score, strength, reasons, filtered, filters, plan}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
 
 ### 3.1 Level object
 
@@ -129,6 +129,21 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 | `volatility_extreme` / `volatility_dead` | `volatility_ratio` > 2.0 / < 0.5 (ignored when `null`) |
 | `buy_into_resistance` | BUY while `context` is `near_resistance` and `breakout_confirmation` is not `medium`/`strong` |
 | `sell_into_support` | SELL while `context` is `near_support` and `breakout_confirmation` is not `medium`/`strong` |
+| `low_rr` | `plan.risk_reward` is `null` or < 1.5 (added in 2.5.0) |
+
+**Trade plan (added in 2.5.0).** `plan` is `null` when the score gives `WAIT`, or when price, ATR or the zone is missing. Otherwise it is built for the raw BUY (long) / SELL (short) and kept even when the setup is filtered. `atr` = `indicators.atr` (entry TF); starting values, to be reviewed.
+
+| Field | Long (BUY) | Short (SELL) |
+| :---- | :--------- | :----------- |
+| `side` | `long` | `short` |
+| `entry_zone` | `[low, high]` of `levels.support[0]` | `[low, high]` of `levels.resistance[0]` |
+| `stop_loss` | zone low − 0.5 × ATR | zone high + 0.5 × ATR |
+| `take_profit_1` | nearest resistance `mid` above `price`, or `null` | nearest support `mid` below `price`, or `null` |
+| `take_profit_2` | highest-scored `TF_HTF` resistance beyond TP1, or `null` | highest-scored `TF_HTF` support beyond TP1, or `null` |
+| `risk_reward` | (TP1 − price) ÷ (price − stop), 2 decimals; `null` if not computable | (price − TP1) ÷ (stop − price) |
+| `trailing_stop` | price − 1.5 × ATR | price + 1.5 × ATR |
+
+Targets come only from the top 3 levels per side in `levels`.
 
 ## 5. Known semantics
 

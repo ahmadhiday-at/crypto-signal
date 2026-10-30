@@ -139,6 +139,7 @@
                     <span id="signal-meta" class="text-xs text-gray-400">-</span>
                 </div>
                 <div id="signal-reasons" class="mt-1 space-y-0.5 text-[11px] mono"></div>
+                <div id="signal-plan" class="mt-2 pt-2 border-t border-white/5 space-y-0.5 text-[11px] mono hidden"></div>
             </div>
 
             <div class="glass p-3 rounded-xl shrink-0">
@@ -365,6 +366,7 @@
             no_mans_land: "No-man's land (>1% from zones)", volatility_extreme: 'Extreme volatility (ATR > 2× avg)',
             volatility_dead: 'Dead market (ATR < 0.5× avg)', buy_into_resistance: 'Buy into resistance, no breakout',
             sell_into_support: 'Sell into support, no breakdown',
+            low_rr: 'Risk/reward to TP1 below 1.5',
         };
 
         // Server-computed signal (docs/contract/market-state.md); the dashboard only displays it.
@@ -373,7 +375,7 @@
             const metaEl = document.getElementById('signal-meta');
             const list = document.getElementById('signal-reasons');
             list.replaceChildren();
-            if (!sig) { actionEl.textContent = '-'; actionEl.style.color = ''; metaEl.textContent = '-'; return; }
+            if (!sig) { actionEl.textContent = '-'; actionEl.style.color = ''; metaEl.textContent = '-'; renderPlan(null, false); return; }
             actionEl.textContent = sig.action;
             actionEl.style.color = sig.action === 'BUY' ? COLORS.bullish.text : sig.action === 'SELL' ? COLORS.bearish.text : COLORS.neutral.text;
             metaEl.textContent = `${sig.strength} · score ${sig.score > 0 ? '+' : ''}${sig.score} (±5 to act)`;
@@ -395,6 +397,38 @@
                 row.style.color = COLORS.warning.text;
                 row.textContent = `Filtered: ${FILTER_LABELS[code] || code}`;
                 list.appendChild(row);
+            });
+            renderPlan(sig.plan, sig.filtered);
+        }
+
+        function renderPlan(plan, filtered) {
+            const box = document.getElementById('signal-plan');
+            box.replaceChildren();
+            box.classList.toggle('hidden', !plan);
+            if (!plan) return;
+            const head = document.createElement('div');
+            head.className = 'text-gray-500 uppercase text-[10px] font-bold';
+            head.textContent = `Plan (${plan.side})${filtered ? ' · not active, filtered' : ''}`;
+            box.appendChild(head);
+            const rows = [
+                ['Entry zone', `${fmtPrice(plan.entry_zone[0])} – ${fmtPrice(plan.entry_zone[1])}`],
+                ['Stop loss', fmtPrice(plan.stop_loss), COLORS.bearish.text],
+                ['TP1', plan.take_profit_1 === null ? '-' : fmtPrice(plan.take_profit_1), COLORS.bullish.text],
+                ['TP2', plan.take_profit_2 === null ? '-' : fmtPrice(plan.take_profit_2), COLORS.bullish.text],
+                ['Risk/reward', plan.risk_reward === null ? '-' : fmtNum(plan.risk_reward)],
+                ['Trailing stop', fmtPrice(plan.trailing_stop)],
+            ];
+            rows.forEach(([k, v, color]) => {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between';
+                const a = document.createElement('span');
+                a.className = 'text-gray-400';
+                a.textContent = k;
+                const b = document.createElement('span');
+                b.textContent = v;
+                if (color) b.style.color = color;
+                row.append(a, b);
+                box.appendChild(row);
             });
         }
 

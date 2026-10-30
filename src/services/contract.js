@@ -125,6 +125,20 @@ function validateMarketState(s) {
         if (typeof sig.filtered !== 'boolean') errors.push('signal.filtered must be a boolean');
         if (!Array.isArray(sig.filters) || !sig.filters.every(f => FILTER_CODES.includes(f))) errors.push('signal.filters must list known filter codes');
         if (sig.filtered !== (Array.isArray(sig.filters) && sig.filters.length > 0)) errors.push('signal.filtered must match signal.filters');
+        const p = sig.plan;
+        if (p !== null) {
+            const numOrNull = (v) => v === null || isNum(v);
+            if (!isObj(p) || !['long', 'short'].includes(p.side)) errors.push('signal.plan must be null or a plan with side long/short');
+            else {
+                if (!Array.isArray(p.entry_zone) || p.entry_zone.length !== 2 || !p.entry_zone.every(isNum) || p.entry_zone[0] > p.entry_zone[1]) {
+                    errors.push('signal.plan.entry_zone must be [low, high]');
+                }
+                if (!isNum(p.stop_loss) || !isNum(p.trailing_stop)) errors.push('signal.plan.stop_loss and trailing_stop must be numbers');
+                if (!numOrNull(p.take_profit_1) || !numOrNull(p.take_profit_2) || !numOrNull(p.risk_reward)) {
+                    errors.push('signal.plan targets and risk_reward must be numbers or null');
+                }
+            }
+        }
     }
     if (s.volatility_ratio !== null && !isNum(s.volatility_ratio)) errors.push('volatility_ratio must be a finite number or null');
     if (!ENUMS.divergence.includes(s.divergence)) errors.push('divergence has invalid value ' + JSON.stringify(s.divergence));

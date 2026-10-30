@@ -11,15 +11,15 @@ DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET
 - Logging is mandatory before any AI work.
 - Keep signal generation and execution separate.
 
-**Current position:** Levels 1, 2 and 2.5A done; 2.5B done except the RR validator, which waits for the stop loss / take profit of Level 3. Next: Level 3 (Signal Enrichment), then the RR validator, Logging + Feature Store (4) and the Backtest Engine (5).
+**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Next: Level 4 (Signal Logging & Dataset), then the Backtest Engine (5).
 
 ## Levels
 
 - [🧱 Level 1 — Market Engine (core) ✅](./level-1.md)
 - [🧱 Level 2 — Scoring Signal Engine ✅](./level-2.md)
 - [🎨 Level 2.5A — Visual Strategy Layer (dashboard) ✅](./level-2.5a.md)
-- [🧱 Level 2.5B — Trade Filter (capital protection)](./level-2.5b.md)
-- [🧱 Level 3 — Signal Enrichment (actionability)](./level-3.md)
+- [🧱 Level 2.5B — Trade Filter (capital protection) ✅](./level-2.5b.md)
+- [🧱 Level 3 — Signal Enrichment (actionability) ✅](./level-3.md)
 - [🧱 Level 4 — Signal Logging & Dataset (foundation)](./level-4.md)
 - [🧱 Level 5 — Backtest Engine (quantification)](./level-5.md)
 - [🧱 Level 6 — Performance Analysis (optimization)](./level-6.md)
