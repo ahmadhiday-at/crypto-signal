@@ -72,7 +72,8 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `inputs` | object | `{ [tf]: {candle_close_time, age_seconds, status} }` for every role TF (see §6) | each role TF | D |
 | `status` | enum | `ok` \| `degraded` \| `stale` (see §6) | derived | D |
 | `errors` | string[] | unresolved error codes (see §6.3); empty when healthy | — | D |
-| `signal` | object | `{action, score, strength, reasons}` — heuristic Level 2 signal (see §4.1); recomputed on every read | derived | D, P |
+| `volatility_ratio` | number \| null | latest closed ATR ÷ mean ATR of the last 100 closed candles (1.0 = typical); `null` if ATR is unavailable | entry TF | D |
+| `signal` | object | `{action, score, strength, reasons, filtered, filters}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
 
 ### 3.1 Level object
 
@@ -116,6 +117,15 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 - `strength`: `strong` if |score| ≥ 7, `medium` if ≥ 5, otherwise `weak`.
 - `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above.
 - Heuristic and uncalibrated (calibration is Level 5); not a trade instruction.
+
+**Trade filter (added in 2.3.0).** Evaluated only when the score gives BUY or SELL. Any failing filter turns `action` into `WAIT`, sets `filtered: true` and lists the codes in `filters[]` (score and reasons are kept). Thresholds are starting values to be reviewed.
+
+| Filter code | Rejects when |
+| :---------- | :----------- |
+| `no_mans_land` | `context` is `mid_range` and the nearer of `distance_percent.to_support` / `to_resistance` is > 1% |
+| `volatility_extreme` / `volatility_dead` | `volatility_ratio` > 2.0 / < 0.5 (ignored when `null`) |
+| `buy_into_resistance` | BUY while `context` is `near_resistance` and `breakout_confirmation` is not `medium`/`strong` |
+| `sell_into_support` | SELL while `context` is `near_support` and `breakout_confirmation` is not `medium`/`strong` |
 
 ## 5. Known semantics
 

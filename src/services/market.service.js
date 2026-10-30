@@ -188,7 +188,8 @@ function mergeSnapshots(market, snaps, roles, weights) {
                 resistance: mergedResistance.sort((a, b) => b.score - a.score).slice(0, 3)
             },
             timestamp: entryData.timestamp,
-            timeframes: timeframesState
+            timeframes: timeframesState,
+            volatility_ratio: volatilityRatio(entryData.indicators?.atr),
         },
         // enhanceMarketState compares the latest volume with the 20-candle average, so it needs the
         // recent history rather than only the latest value.
@@ -197,6 +198,15 @@ function mergeSnapshots(market, snaps, roles, weights) {
 }
 
 const RESET_COOLDOWN_S = 60;
+
+// Latest closed ATR divided by the mean ATR of the last 100 closed candles (1.0 = typical).
+function volatilityRatio(atr) {
+    const values = (atr || []).filter(v => typeof v === 'number' && Number.isFinite(v));
+    if (values.length === 0) return null;
+    const window = values.slice(-100);
+    const mean = window.reduce((a, b) => a + b, 0) / window.length;
+    return mean > 0 ? +(values[values.length - 1] / mean).toFixed(3) : null;
+}
 
 function codeOf(err) {
     return err && ERROR_CODES.includes(err.code) ? err.code : 'calculation_failed';

@@ -360,6 +360,11 @@
             strong_htf_support: 'Strong HTF support ≤1%', strong_htf_resistance: 'Strong HTF resistance ≤1%',
             volume_surge: 'Volume surge', weak_volume: 'Weak volume', data_not_current: 'Data not current → WAIT',
         };
+        const FILTER_LABELS = {
+            no_mans_land: "No-man's land (>1% from zones)", volatility_extreme: 'Extreme volatility (ATR > 2× avg)',
+            volatility_dead: 'Dead market (ATR < 0.5× avg)', buy_into_resistance: 'Buy into resistance, no breakout',
+            sell_into_support: 'Sell into support, no breakdown',
+        };
 
         // Server-computed signal (docs/contract/market-state.md); the dashboard only displays it.
         function renderSignal(sig) {
@@ -384,6 +389,12 @@
                 list.appendChild(row);
             });
             if (sig.reasons.length === 0) list.textContent = 'No triggers';
+            (sig.filters || []).forEach(code => {
+                const row = document.createElement('div');
+                row.style.color = COLORS.warning.text;
+                row.textContent = `Filtered: ${FILTER_LABELS[code] || code}`;
+                list.appendChild(row);
+            });
         }
 
         async function refreshMarketState() {

@@ -1,6 +1,6 @@
 // Validation for the Market State (docs/contract/market-state.md) and per-timeframe snapshots.
 const SCHEMA_VERSION = 2;
-const { REASON_CODES } = require('./signal');
+const { REASON_CODES, FILTER_CODES } = require('./signal');
 
 const ENUMS = {
     context: ['near_support', 'near_resistance', 'compression_zone', 'mid_range'],
@@ -121,7 +121,11 @@ function validateMarketState(s) {
         if (!Array.isArray(sig.reasons) || !sig.reasons.every(r => isObj(r) && REASON_CODES.includes(r.code) && Number.isInteger(r.points))) {
             errors.push('signal.reasons must be {code, points} items with known codes');
         }
+        if (typeof sig.filtered !== 'boolean') errors.push('signal.filtered must be a boolean');
+        if (!Array.isArray(sig.filters) || !sig.filters.every(f => FILTER_CODES.includes(f))) errors.push('signal.filters must list known filter codes');
+        if (sig.filtered !== (Array.isArray(sig.filters) && sig.filters.length > 0)) errors.push('signal.filtered must match signal.filters');
     }
+    if (s.volatility_ratio !== null && !isNum(s.volatility_ratio)) errors.push('volatility_ratio must be a finite number or null');
 
     return errors;
 }
