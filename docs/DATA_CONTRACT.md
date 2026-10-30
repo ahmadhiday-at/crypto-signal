@@ -1,4 +1,29 @@
-# 📜 Data Contract: Market State
+# 📜 API & Data Contract
+
+This document covers the HTTP endpoints (§0) and the **Market State** contract (§1–§7).
+
+---
+
+## 0. Endpoints
+
+| Category | Endpoint | Method | Description |
+| :------- | :------- | :----- | :---------- |
+| Data | `/api/market/:symbol` | `GET` | Market State (this contract) with freshness `status`. HTTP 503 with diagnostics when unavailable (§6.4). |
+| Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
+| UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
+| UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
+| System | `/api/config` | `GET` | Markets, timeframes and TF roles. |
+| System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
+| System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
+
+- Under `/api`, unknown symbols, timeframes or paths return 404.
+- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200), which shows "unavailable" if the API rejects it. `/` serves the reference chart (`public/index.html`), default `BTCUSDT` / `15m`.
+- Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403 `host_not_allowed`.
+- No authentication: keep the server on localhost (`HOST`; `BIND_ADDR` for Docker).
+
+---
+
+# Market State contract
 
 This document is the single source of truth for the **Market State** object — the per-symbol summary served by `GET /api/market/:symbol` and stored in `data/market/{MARKET}.json`.
 

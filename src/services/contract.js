@@ -1,4 +1,4 @@
-// Validation for the Market State (DATA_CONTRACT.md) and per-timeframe snapshots.
+// Validation for the Market State (docs/DATA_CONTRACT.md) and per-timeframe snapshots.
 const SCHEMA_VERSION = 2;
 
 const ENUMS = {

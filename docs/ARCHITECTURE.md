@@ -179,7 +179,7 @@ Boundaries are computed in UTC, so daily and 4-hourly candles align with Binance
 | Timeout, network error, HTTP 5xx | Retry up to 3 times with backoff (1s, 2s, 4s), then keep the last good file and record `timeout` / `network` / `binance_http` |
 | HTTP 429 (rate limit) | No retry. Pause all REST calls for `Retry-After` (default 60 s), record `binance_429` |
 | HTTP 418 (IP banned) | No retry. Pause all REST calls for `Retry-After`, at least 120 s, record `binance_418` |
-| HTTP 451 (restricted location) | No retry. Pause all REST calls for 15 minutes, record `binance_451`. The app never switches VPN exits or otherwise works around the restriction; see DOCKER_README → Akses Binance |
+| HTTP 451 (restricted location) | No retry. Pause all REST calls for 15 minutes, record `binance_451`. The app never switches VPN exits or otherwise works around the restriction; see [DEPLOYMENT.md → Akses Binance](./DEPLOYMENT.md#akses-binance-dan-kebijakan-penggunaan) |
 | Other HTTP 4xx | No retry, record `binance_http` |
 | Malformed response | Nothing stored, record `invalid_response` |
 | Fewer than 200 closed candles / non-finite indicator values | Nothing stored, record `insufficient_data` / `calculation_failed` |
@@ -205,3 +205,25 @@ These assumptions shape the design above. Revisit the design if they change.
 1. **Determinism:** Given the same set of closed input candles, the Market State must always be the same (see [O1](#o1-candle-finality)).
 2. **Low Latency:** Data reduction occurs server-side to minimize client-side processing overhead.
 3. **Responsive Intelligence:** The dashboard provides real-time, context-aware metrics that adapt as the user explores the chart.
+
+## Code Map
+
+Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`) gets storage, Binance client, indicator service, config and `notify` callbacks; `createApp` (`src/app.js`) builds Express around the engine; `createScheduler` (`src/jobs/scheduler.js`) drives it.
+
+1. **Per-timeframe update** — `engine.updateTimeframe(market, tf)` (single-flight per market+tf): `binance.getKlines` (validated rows, retries, 429/418/451 cooldowns) → `candles.normalizeCandles` + `splitClosed` (forming candle kept aside) → `indicator.calculateAll` (throws `CalculationError` with a code) → `validateSnapshot` → monotonic check → atomic write to `data/chart/{MARKET}_{tf}.json` → `update_ready` over WS. Failures keep the old file and record `last_error` in the in-memory health map.
+2. **Summary** — `engine.rebuildSummary(market)` (serialised per market) reads the role snapshots, `mergeSnapshots` (weighted level merge, top 3) → `enhanceMarketState` (heuristic formula, regression-tested in `test/enhance.test.js`) → adds `schema_version`, `generated_at`, `inputs`, `status`, `errors` → `validateMarketState` → write `data/market/{MARKET}.json` → `summary_ready` over WS.
+3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
+
+Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
+
+Other modules: `src/data/storage.js` is the only persistence layer (strict name regexes, unique temp file + fsync + rename, reads return `{data, reason}`). `src/websocket/ws.manager.js` shares the HTTP server (same-origin, 4 KB max payload, validated subscriptions). Page routes (`src/api/routes/view.routes.js`) are mounted at `/` after static files and `/api`; pages parse the market/timeframe from the last one or two URL segments.
+
+## Configuration Notes
+
+- All config is in `src/config/env.js` (dotenv). Lists are comma-separated (`MARKET_LIST`, `TIMEFRAME_LIST`, `TIMEFRAME_LABELS`).
+- `PORT` (default 11000) is used by Node and by both sides of the Docker Compose port mapping.
+- `MAPPING_CANDLE`, `BINANCE_REST_URL`, `BINANCE_WS_URL` and `CANDLE_LIMIT` are read from `process.env` inside services, not via `env.js`. `MAPPING_CANDLE` keys are case-sensitive (`1h`, not `1H`); non-matching timeframes fall back to 200.
+- Supported timeframes are the keys of `TF_SECONDS` in `src/services/candles.js`. Unsupported `TIMEFRAME_LIST` entries are dropped with a warning; an unsupported role timeframe aborts startup. A new timeframe needs a `TF_SECONDS` entry and, to carry weight, a `TF_WEIGHTS` entry.
+- `HOST` (default `0.0.0.0`) is the Node listen address; Compose forces `HOST=0.0.0.0` in the container and publishes on `BIND_ADDR` (default `127.0.0.1`). `ALLOWED_HOSTS` extends the Host allowlist (`localhost`, `127.0.0.1`, `[::1]`).
+- The staleness threshold, retry delays, cooldowns and the 5 s boundary delay are constants in `freshness.js`, `binance.service.js` and `scheduler.js`, not env vars.
+- `data/` is committed to git; running the app produces diffs there.

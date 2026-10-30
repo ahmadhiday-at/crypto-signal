@@ -4,7 +4,7 @@
 
 <!--
 Hapus bagian yang tidak relevan. Nama file harus sama persis dengan versi di package.json:
-.changelog/v<version>.md. Jangan mengubah file changelog yang sudah dirilis.
+docs/changelog/v<version>.md, plus satu baris di CHANGELOG.md. Jangan mengubah file changelog yang sudah dirilis.
 -->
 
 ## ⚠️ Breaking changes
