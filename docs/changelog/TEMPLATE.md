@@ -1,44 +1,18 @@
 # v<version>
 
-<Ringkasan satu-dua kalimat tentang isi rilis ini.>
+<Satu kalimat: apa isi rilis ini.>
 
-<!--
-Hapus bagian yang tidak relevan. Nama file harus sama persis dengan versi di package.json:
-docs/changelog/v<version>.md, plus satu baris di CHANGELOG.md. Jangan mengubah file changelog yang sudah dirilis.
--->
+<!-- Ringkas: 1 baris per poin, maks ±5 poin per bagian, tanpa prosa/penjelasan panjang.
+Hapus bagian kosong. Breaking/Aksi wajib ditulis jika ada. Jangan ubah file yang sudah dirilis. -->
 
-## ⚠️ Breaking changes
+**Breaking:** <field/endpoint/WS/format data/env var yang tidak kompatibel>
+**Aksi:** <`--build`, `restart app`, env var baru, hapus `data/`, atau "Tidak ada">
 
-- <Perubahan yang tidak kompatibel: field/endpoint/WS message/format data/env var.>
+- Tambah: <fitur/endpoint/field/env var baru>
+- Ubah: <perubahan perilaku kompatibel>
+- Perbaiki: <gejala → penyebab singkat>
+- Keamanan: <masalah yang diperbaiki>
 
-## Ditambahkan
-
-- <Fitur, endpoint, field, env var baru.>
-
-## Diubah
-
-- <Perubahan perilaku yang kompatibel.>
-
-## Diperbaiki
-
-- <Bug yang diperbaiki: gejala, penyebab, perbaikan.>
-
-## Keamanan
-
-- <Masalah keamanan yang ditemukan dan diperbaiki.>
-
-## Pengujian
-
-- <Perintah yang dijalankan dan hasilnya, mis. `npm test`: N test lulus.>
-
-## Dokumentasi
-
-- <File .md yang diperbarui dan apa yang berubah.>
-
-## Tindakan yang diperlukan
-
-- <`docker compose up -d --build`, `docker compose restart app`, env var baru, hapus `data/`, atau "Tidak ada".>
-
-## Keterbatasan
-
-- <Yang belum selesai, belum diverifikasi, atau perlu keputusan.>
+**Tes:** <perintah + hasil, mis. `npm test` 73/73>
+**Docs:** <file1, file2>
+**Belum:** <yang belum selesai/diverifikasi>

@@ -40,7 +40,7 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 Every code/config/behaviour change ships with:
 
 1. `npm version <patch|minor|major> --no-git-tag-version`, once per task. patch = fix/refactor, no contract change; minor = new feature/endpoint/field/timeframe/env var; major = breaking: renaming/removing a field in `enhanceMarketState` or `/api/*` output, changing WS shapes (`price`, `update_ready`, `subscribe`), changing `data/` paths/format, renaming/removing an env var.
-2. `docs/changelog/vX.Y.Z.md` (exact package.json version) per `docs/changelog/TEMPLATE.md`. Note required actions (new env var, restart, `--build`, deleting `data/`); list updated docs under "Dokumentasi". Never edit a released changelog file.
+2. `docs/changelog/vX.Y.Z.md` (exact package.json version) per `docs/changelog/TEMPLATE.md`: terse, one line per point; always fill **Breaking**/**Aksi** when relevant. Never edit a released changelog file.
 3. Add at TOP of `CHANGELOG.md` list (read ≤20 lines): `- [vX.Y.Z](docs/changelog/vX.Y.Z.md) — YYYY-MM-DD — one-sentence summary`
 4. Update affected docs per Document map.
 
