@@ -16,6 +16,7 @@ const valid = () => ({
     generated_at: 10,
     inputs: Object.fromEntries(['1d', '4h', '1h', '15m'].map(tf => [tf, { candle_close_time: 1, age_seconds: 9, status: 'ok' }])),
     status: 'ok', errors: [],
+    signal: { action: 'WAIT', score: 2, strength: 'weak', reasons: [{ code: 'near_support', points: 2 }] },
 });
 
 test('a complete v2 market state is valid', () => {
@@ -34,6 +35,9 @@ test('rejects missing fields, wrong versions, invalid enums and non-finite numbe
     assert.ok(mutate(s => { s.levels.support = []; }).some(e => e.includes('levels.support')));
     assert.ok(mutate(s => { delete s.inputs['1h']; }).some(e => e.includes('inputs.1h')));
     assert.ok(mutate(s => { s.errors = [1]; }).some(e => e.includes('errors')));
+    assert.ok(mutate(s => { delete s.signal; }).some(e => e.includes('signal')));
+    assert.ok(mutate(s => { s.signal.action = 'HOLD'; }).some(e => e.includes('signal.action')));
+    assert.ok(mutate(s => { s.signal.reasons = [{ code: 'gut_feeling', points: 1 }]; }).some(e => e.includes('signal.reasons')));
     assert.deepEqual(validateMarketState(null), ['market state is not an object']);
 });
 

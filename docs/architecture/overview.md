@@ -136,6 +136,8 @@ Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`
 2. **Summary** — `engine.rebuildSummary(market)` (serialised per market) reads the role snapshots, `mergeSnapshots` (weighted level merge, top 3) → `enhanceMarketState` (heuristic formula, regression-tested in `test/enhance.test.js`) → adds `schema_version`, `generated_at`, `inputs`, `status`, `errors` → `validateMarketState` → write `data/market/{MARKET}.json` → `summary_ready` over WS.
 3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
 
+Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed.
+
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 
 Other modules: `src/data/storage.js` is the only persistence layer (strict name regexes, unique temp file + fsync + rename, reads return `{data, reason}`). `src/websocket/ws.manager.js` shares the HTTP server (same-origin, 4 KB max payload, validated subscriptions). Page routes (`src/api/routes/view.routes.js`) are mounted at `/` after static files and `/api`; pages parse the market/timeframe from the last one or two URL segments.

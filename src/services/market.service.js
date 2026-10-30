@@ -1,6 +1,7 @@
 const { tfSeconds, isBoundary, expectedLastClose, normalizeCandles, splitClosed, countGaps } = require('./candles');
 const { computeInputs, summaryStatus, inputStatus, FUTURE_TOLERANCE_S } = require('./freshness');
 const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = require('./contract');
+const { computeSignal } = require('./signal');
 
 function enhanceMarketState(data) {
     const price = data.price;
@@ -355,6 +356,7 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
             status: summaryStatus(inputs, roleTfs, entryTf),
             errors: currentErrors(market),
         };
+        summary.signal = computeSignal(summary, roles.htf);
 
         const problems = validateMarketState(summary);
         if (problems.length) {
@@ -487,8 +489,13 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
         const inputs = computeInputs(closeTimes, roleTfs, nowSec());
         return {
             httpStatus: 200,
-            body: { ...stored, inputs, status: summaryStatus(inputs, roleTfs, entryTf), errors: currentErrors(market) },
+            body: withSignal({ ...stored, inputs, status: summaryStatus(inputs, roleTfs, entryTf), errors: currentErrors(market) }),
         };
+    }
+
+    // The signal depends on the status, which is recomputed on every read, so it is recomputed too.
+    function withSignal(state) {
+        return { ...state, signal: computeSignal(state, roles.htf) };
     }
 
     async function getTimeframeSnapshot(market, tf) {

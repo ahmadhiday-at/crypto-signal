@@ -132,6 +132,17 @@
         <div class="flex flex-col gap-2 min-h-0 overflow-y-auto custom-scrollbar pr-1">
             <div class="glass p-3 rounded-xl shrink-0">
                 <h3 class="text-[10px] uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">
+                    <i data-lucide="signal" class="w-3 h-3"></i> Signal (heuristic, not advice)
+                </h3>
+                <div class="flex items-baseline justify-between mono">
+                    <span id="signal-action" class="text-lg font-bold">-</span>
+                    <span id="signal-meta" class="text-xs text-gray-400">-</span>
+                </div>
+                <div id="signal-reasons" class="mt-1 space-y-0.5 text-[11px] mono"></div>
+            </div>
+
+            <div class="glass p-3 rounded-xl shrink-0">
+                <h3 class="text-[10px] uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">
                     <i data-lucide="bar-chart-3" class="w-3 h-3"></i> Scores (heuristic, uncalibrated)
                 </h3>
                 <div class="flex justify-between text-xs mb-1">
@@ -336,11 +347,44 @@
             ['state-bias', 'state-energy', 'state-pressure', 'state-setup', 'state-risk', 'score-val', 'dist-support', 'dist-resist']
                 .forEach(id => { const el = document.getElementById(id); el.textContent = '-'; el.style.color = ''; });
             document.getElementById('score-bar').style.width = '0%';
+            renderSignal(null);
             document.getElementById('zones-list').replaceChildren();
             applyZonesToChart({ support: [], resistance: [] });
         }
 
         const label = (v) => String(v).replace(/_/g, ' ').toUpperCase();
+
+        const REASON_LABELS = {
+            near_support: 'Near support', near_resistance: 'Near resistance',
+            bullish_momentum: 'Bullish momentum', bearish_momentum: 'Bearish momentum',
+            strong_htf_support: 'Strong HTF support ≤1%', strong_htf_resistance: 'Strong HTF resistance ≤1%',
+            volume_surge: 'Volume surge', weak_volume: 'Weak volume', data_not_current: 'Data not current → WAIT',
+        };
+
+        // Server-computed signal (docs/contract/market-state.md); the dashboard only displays it.
+        function renderSignal(sig) {
+            const actionEl = document.getElementById('signal-action');
+            const metaEl = document.getElementById('signal-meta');
+            const list = document.getElementById('signal-reasons');
+            list.replaceChildren();
+            if (!sig) { actionEl.textContent = '-'; actionEl.style.color = ''; metaEl.textContent = '-'; return; }
+            actionEl.textContent = sig.action;
+            actionEl.style.color = sig.action === 'BUY' ? COLORS.bullish.text : sig.action === 'SELL' ? COLORS.bearish.text : COLORS.neutral.text;
+            metaEl.textContent = `${sig.strength} · score ${sig.score > 0 ? '+' : ''}${sig.score} (±5 to act)`;
+            sig.reasons.forEach(r => {
+                const row = document.createElement('div');
+                row.className = 'flex justify-between';
+                const name = document.createElement('span');
+                name.className = 'text-gray-400';
+                name.textContent = REASON_LABELS[r.code] || r.code;
+                const pts = document.createElement('span');
+                pts.textContent = r.points === 0 ? '' : (r.points > 0 ? '+' : '') + r.points;
+                pts.style.color = r.points > 0 ? COLORS.bullish.text : r.points < 0 ? COLORS.bearish.text : '';
+                row.append(name, pts);
+                list.appendChild(row);
+            });
+            if (sig.reasons.length === 0) list.textContent = 'No triggers';
+        }
 
         async function refreshMarketState() {
             let res = null;
@@ -398,6 +442,7 @@
                 document.getElementById('dist-support').textContent = fmtNum(data.distance_percent.to_support) + '%';
                 document.getElementById('dist-resist').textContent = fmtNum(data.distance_percent.to_resistance) + '%';
 
+                renderSignal(data.signal || null);
                 renderZones(data.levels);
                 applyZonesToChart(data.levels);
             } catch (err) {

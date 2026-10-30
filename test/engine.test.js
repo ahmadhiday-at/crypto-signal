@@ -87,6 +87,8 @@ test('served status turns stale as data ages, without any new update', async () 
     assert.equal(r.body.status, 'stale');
     assert.equal(r.body.inputs['15m'].status, 'stale');
     assert.equal(r.body.inputs['15m'].age_seconds, 31 * 60 + 5, 'measured from the candle close, not the fetch');
+    assert.equal(r.body.signal.action, 'WAIT', 'stale data never yields BUY/SELL');
+    assert.ok(r.body.signal.reasons.some(x => x.code === 'data_not_current'));
 });
 
 test('only stale higher timeframes give a degraded status', async () => {

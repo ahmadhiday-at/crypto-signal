@@ -72,6 +72,7 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `inputs` | object | `{ [tf]: {candle_close_time, age_seconds, status} }` for every role TF (see §6) | each role TF | D |
 | `status` | enum | `ok` \| `degraded` \| `stale` (see §6) | derived | D |
 | `errors` | string[] | unresolved error codes (see §6.3); empty when healthy | — | D |
+| `signal` | object | `{action, score, strength, reasons}` — heuristic Level 2 signal (see §4.1); recomputed on every read | derived | D, P |
 
 ### 3.1 Level object
 
@@ -98,6 +99,23 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 Any value not listed here is a contract violation and is rejected before publishing.
 
 ---
+
+### 4.1 Signal (added in 2.2.0)
+
+Weighted points over fields of the same object; `score` is the sum of `reasons[].points`.
+
+| Code | Points | When |
+| :--- | :----- | :--- |
+| `near_support` / `near_resistance` | +2 / −2 | `context` is `near_support` / `near_resistance` |
+| `bullish_momentum` / `bearish_momentum` | +2 / −2 | `momentum` is `bullish` / `bearish` |
+| `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `TF_HTF` timeframe in `tfs` and is ≤ 1% from `price` |
+| `volume_surge` / `weak_volume` | ±1 | only when score ≠ 0: `volume_state` `high` adds 1 toward the current direction, `low` moves 1 toward zero |
+| `data_not_current` | 0 | `status` is not `ok`; forces `action` = `WAIT` |
+
+- `action`: `BUY` if score ≥ +5, `SELL` if score ≤ −5, otherwise `WAIT`; always `WAIT` when `status` ≠ `ok`.
+- `strength`: `strong` if |score| ≥ 7, `medium` if ≥ 5, otherwise `weak`.
+- `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above.
+- Heuristic and uncalibrated (calibration is Level 5); not a trade instruction.
 
 ## 5. Known semantics
 
@@ -163,7 +181,7 @@ These apply to every consumer, including AI prompts and anyone pasting the JSON 
 1. **Check freshness before interpreting.** If `status` is not `ok`, show it prominently. AI analysis must return **WAIT** and state that the data is not current. An object with `error: "market_state_unavailable"` contains no market data at all ([rest.md](./rest.md#unavailable-market-state-http-503)).
 2. **Never infer missing fields.** An absent field means "unknown", not a default.
 3. **Treat `breakout_score` as a ranking heuristic**, not a probability or confidence percentage.
-4. **Treat `setup_state` as a label**, not a trade instruction.
+4. **Treat `setup_state` and `signal` as labels**, not trade instructions; `signal` is an uncalibrated heuristic.
 5. **Do not trust objects without `schema_version: 2`.** They are not produced by the current server.
 
 > The AI prompt files (`PROMPT_AI_*.md`) do not yet include rule 1. Updating them is a separate, explicitly requested step.

@@ -6,9 +6,10 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
 - [/] **Weighted point system**
   - [x] `ScoringMatrix` based on timeframe weights (15m, 1h, 4h, 1d).
   - [x] Consolidate S/R scores across MTF with dynamic merging.
-  - [ ] Total score → signal strength (Weak, Medium, Strong).
+  - [x] Total score → signal strength (Weak, Medium, Strong) — `signal` in the Market State (v2.2.0).
+  - [ ] Bullish/bearish divergence trigger (deferred; needs a new indicator calculation).
 - [x] **Heuristic breakout score:** `breakout_score` (0.0–1.0) from proximity and volume. Uncalibrated; it becomes a probability only after calibration in Level 5.
-- [ ] **Dynamic reasoning engine:** return an array of triggers, e.g. `["Strong HTF Support", "Bullish Divergence", "Volume Surge"]`.
+- [x] **Dynamic reasoning engine (v2.2.0):** `signal.reasons` lists the triggers with their points (support/resistance, momentum, strong HTF zone, volume). Rules: [market-state.md §4.1](../contract/market-state.md#41-signal-added-in-220).
 
 Scoring example (instead of `if near_support + bullish → BUY`):
 

@@ -1,5 +1,6 @@
 // Validation for the Market State (docs/contract/market-state.md) and per-timeframe snapshots.
 const SCHEMA_VERSION = 2;
+const { REASON_CODES } = require('./signal');
 
 const ENUMS = {
     context: ['near_support', 'near_resistance', 'compression_zone', 'mid_range'],
@@ -17,6 +18,8 @@ const ENUMS = {
     fake_breakout_risk: ['low', 'medium', 'high'],
     regime_global: ['trending', 'ranging', 'unknown', 'weak_trend', 'mixed'],
     status: ['ok', 'degraded', 'stale'],
+    signal_action: ['BUY', 'SELL', 'WAIT'],
+    signal_strength: ['weak', 'medium', 'strong'],
     input_status: ['ok', 'stale', 'missing'],
 };
 
@@ -108,6 +111,17 @@ function validateMarketState(s) {
     }
 
     if (!Array.isArray(s.errors) || !s.errors.every(e => typeof e === 'string')) errors.push('errors must be a string array');
+
+    const sig = s.signal;
+    if (!isObj(sig)) errors.push('signal must be an object');
+    else {
+        if (!ENUMS.signal_action.includes(sig.action)) errors.push('signal.action is invalid');
+        if (!ENUMS.signal_strength.includes(sig.strength)) errors.push('signal.strength is invalid');
+        if (!Number.isInteger(sig.score)) errors.push('signal.score must be an integer');
+        if (!Array.isArray(sig.reasons) || !sig.reasons.every(r => isObj(r) && REASON_CODES.includes(r.code) && Number.isInteger(r.points))) {
+            errors.push('signal.reasons must be {code, points} items with known codes');
+        }
+    }
 
     return errors;
 }

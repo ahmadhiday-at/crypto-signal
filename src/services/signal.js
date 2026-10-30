@@ -1,0 +1,56 @@
+// Level 2 scoring (docs/roadmap/level-2.md): a weighted point system over existing Market State
+// fields, producing a heuristic BUY/SELL/WAIT signal with its reasons. Pure and deterministic.
+
+const THRESHOLD = 5;
+const HTF_PROXIMITY_PERCENT = 1;
+
+const REASON_CODES = [
+    'near_support', 'near_resistance', 'bullish_momentum', 'bearish_momentum',
+    'strong_htf_support', 'strong_htf_resistance', 'volume_surge', 'weak_volume', 'data_not_current',
+];
+
+function strengthOf(score) {
+    const a = Math.abs(score);
+    if (a >= 7) return 'strong';
+    if (a >= THRESHOLD) return 'medium';
+    return 'weak';
+}
+
+// `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
+function computeSignal(state, htfTf) {
+    const reasons = [];
+    let score = 0;
+    const add = (code, points) => { reasons.push({ code, points }); score += points; };
+
+    if (state.context === 'near_support') add('near_support', 2);
+    if (state.context === 'near_resistance') add('near_resistance', -2);
+
+    if (state.momentum === 'bullish') add('bullish_momentum', 2);
+    if (state.momentum === 'bearish') add('bearish_momentum', -2);
+
+    const topSupport = state.levels?.support?.[0];
+    const topResistance = state.levels?.resistance?.[0];
+    if (topSupport?.tfs?.includes(htfTf) && state.distance_percent?.to_support <= HTF_PROXIMITY_PERCENT) {
+        add('strong_htf_support', 3);
+    }
+    if (topResistance?.tfs?.includes(htfTf) && state.distance_percent?.to_resistance <= HTF_PROXIMITY_PERCENT) {
+        add('strong_htf_resistance', -3);
+    }
+
+    // Volume changes conviction, not direction: one point toward or away from zero.
+    if (score !== 0) {
+        const dir = Math.sign(score);
+        if (state.volume_state === 'high') add('volume_surge', dir);
+        if (state.volume_state === 'low') add('weak_volume', -dir);
+    }
+
+    let action = score >= THRESHOLD ? 'BUY' : score <= -THRESHOLD ? 'SELL' : 'WAIT';
+    if (state.status !== 'ok') {
+        reasons.push({ code: 'data_not_current', points: 0 });
+        action = 'WAIT';
+    }
+
+    return { action, score, strength: strengthOf(score), reasons };
+}
+
+module.exports = { computeSignal, REASON_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT };
