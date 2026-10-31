@@ -1263,6 +1263,12 @@ docker compose exec app npm run backtest -- BTCUSDT --days 365
 
 Jika Binance membalas HTTP 451, CLI berhenti dengan pesan error (lihat bagian 20); tidak ada workaround otomatis.
 
+Sweep parameter (sejak v2.9.0): bandingkan beberapa nilai sekaligus pada history yang sama (maks 64 kombinasi). Kunci: `threshold`, `min_rr`, `w_<tf>` (bobot zona TF role).
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365 --sweep threshold=4,5,6,7 --sweep min_rr=1,1.5,2
+```
+
 ### Start
 
 ```bash

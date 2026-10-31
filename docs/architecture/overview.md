@@ -128,7 +128,7 @@ A high-performance "command center" designed for rapid state assessment.
 
 ### 3. Backtest report (`public/backtest.html`)
 
-Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
+Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve, the parameter sweep table (when `--sweep` was used), win rate/expectancy per condition at the signal candle (breakdown, taken or filtered; values with fewer than 20 trades greyed) and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
 
 ## 🚀 Design Goals
 
@@ -148,7 +148,7 @@ Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `b
 
 Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engine as `signalLog`. After each published summary, `onSummary(market, summary, entryCandles)` first closes open records (WIN/LOSS/EXPIRED/UNKNOWN), then appends a new candidate. Errors are logged and never block publishing. `engine.initialize()` reloads open records; `engine.signalRecords(market)` serves `GET /api/signals/:symbol`.
 
-Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path) → `createReports().write`. The server only reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`).
+Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path; `--sweep` variants reuse each step's snapshots and only re-merge when the weights differ; `breakdown` groups trades per feature) → `createReports().write`. The server only reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`).
 
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 

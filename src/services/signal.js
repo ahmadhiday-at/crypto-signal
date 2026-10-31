@@ -79,15 +79,16 @@ const REASON_CODES = [
     'volume_surge', 'weak_volume', 'data_not_current',
 ];
 
-function strengthOf(score) {
+function strengthOf(score, threshold = THRESHOLD) {
     const a = Math.abs(score);
     if (a >= 7) return 'strong';
-    if (a >= THRESHOLD) return 'medium';
+    if (a >= threshold) return 'medium';
     return 'weak';
 }
 
 // `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
-function computeSignal(state, htfTf) {
+// `threshold` and `minRiskReward` are overridden only by the backtest sweep (Level 6).
+function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD } = {}) {
     const reasons = [];
     let score = 0;
     const add = (code, points) => { reasons.push({ code, points }); score += points; };
@@ -117,17 +118,17 @@ function computeSignal(state, htfTf) {
         if (state.volume_state === 'low') add('weak_volume', -dir);
     }
 
-    let action = score >= THRESHOLD ? 'BUY' : score <= -THRESHOLD ? 'SELL' : 'WAIT';
+    let action = score >= threshold ? 'BUY' : score <= -threshold ? 'SELL' : 'WAIT';
     const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf);
     const filters = action === 'WAIT' ? [] : tradeFilters(state, action);
-    if (action !== 'WAIT' && !(plan?.risk_reward >= MIN_RISK_REWARD)) filters.push('low_rr');
+    if (action !== 'WAIT' && !(plan?.risk_reward >= minRiskReward)) filters.push('low_rr');
     if (filters.length) action = 'WAIT';
     if (state.status !== 'ok') {
         reasons.push({ code: 'data_not_current', points: 0 });
         action = 'WAIT';
     }
 
-    return { action, score, strength: strengthOf(score), reasons, filtered: filters.length > 0, filters, plan };
+    return { action, score, strength: strengthOf(score, threshold), reasons, filtered: filters.length > 0, filters, plan };
 }
 
 module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD };

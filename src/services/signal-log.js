@@ -15,11 +15,11 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const round = (v, d = 4) => (num(v) ? +v.toFixed(d) : null);
 
 // The direction the score points to before filters, or null when it is not a candidate.
-function candidateDirection(state) {
+function candidateDirection(state, threshold = THRESHOLD) {
     const s = state.signal;
     if (!s || state.status !== 'ok') return null;
-    if (s.score >= THRESHOLD) return 'BUY';
-    if (s.score <= -THRESHOLD) return 'SELL';
+    if (s.score >= threshold) return 'BUY';
+    if (s.score <= -threshold) return 'SELL';
     return null;
 }
 
@@ -70,8 +70,8 @@ function evaluate(record, candles) {
 
 // A signal record for a candidate state at the entry candle `last`, or null when the state is not
 // a candidate or its plan has no SL/TP1. Shared with the backtest.
-function recordFrom(market, entryTf, state, last) {
-    const direction = candidateDirection(state);
+function recordFrom(market, entryTf, state, last, threshold = THRESHOLD) {
+    const direction = candidateDirection(state, threshold);
     const plan = state.signal?.plan;
     if (!direction || !last || !plan || !num(plan.stop_loss) || !num(plan.take_profit_1)) return null;
     return {

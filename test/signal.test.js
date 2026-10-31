@@ -168,3 +168,14 @@ test('no target or no ATR → no RR → low_rr', () => {
 test('WAIT by score has no plan', () => {
     assert.equal(computeSignal(base({ momentum: 'bullish' }), '1d').plan, null);
 });
+
+test('threshold and minRiskReward overrides (backtest sweep)', () => {
+    const state = base({ context: 'near_support', momentum: 'bullish' });
+    assert.equal(computeSignal(state, '1d').action, 'WAIT', 'score 4 is below the default threshold');
+    const low = computeSignal(state, '1d', { threshold: 4 });
+    assert.equal(low.action, 'BUY');
+    assert.equal(low.strength, 'medium');
+    const strict = computeSignal(state, '1d', { threshold: 4, minRiskReward: 5 });
+    assert.equal(strict.action, 'WAIT');
+    assert.deepEqual(strict.filters, ['low_rr']);
+});

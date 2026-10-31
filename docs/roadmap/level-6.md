@@ -3,8 +3,9 @@
 Roadmap level: goals, milestones and success criteria. Overview: [README.md](./README.md).
 **Objective:** find the best-performing patterns through data mining.
 
-- [ ] **Pattern correlation:** which `market_energy` + regime combinations have the highest win rate (e.g. range markets favour bounces, trending markets favour breakouts).
-- [ ] **Weight optimization:** A/B test `WEIGHT_1D` vs `WEIGHT_15M` settings.
+- [x] **Pattern correlation tool (v2.9.0):** report `breakdown` per side, |score|, regime, context, momentum, volume, `market_energy`, breakout confirmation, `fake_breakout_risk`, divergence, UTC session and rejecting filter; shown on `/backtest/:symbol`.
+- [x] **Parameter sweep tool (v2.9.0):** `npm run backtest -- SYMBOL --sweep threshold=4,5,6 --sweep min_rr=1,1.5 --sweep w_15m=1,2` replays every combination on the same history (A/B of weights, threshold, min RR).
+- [ ] **Pick and validate new parameters:** sweep → choose → confirm on another period/symbol and with fees before changing the live defaults (avoid in-sample overfitting).
 - [ ] **False-breakout analysis:** why `fake_breakout_risk` was wrong in specific cases.
 
 **Success criteria:** weight changes that raise the win rate by at least 5%.

@@ -4,7 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { runBacktest, metrics, createReports } = require('../src/services/backtest');
+const { runBacktest, metrics, breakdown, createReports } = require('../src/services/backtest');
+const { parseArgs } = require('../scripts/backtest');
 const { createHistory } = require('../src/services/history');
 const { evaluate, EXPIRY_CANDLES } = require('../src/services/signal-log');
 const { parseKlines, tfSeconds } = require('../src/services/candles');
@@ -84,6 +85,57 @@ test('fees lower net R by fee% × price / risk', () => {
     const feeR = 0.002 * a.price / Math.abs(a.price - a.sl);
     assert.ok(Math.abs((a.net_r - b.net_r) - feeR) < 1e-3);
     assert.equal(paid.params.fee_pct, 0.2);
+});
+
+test('sweep: each variant equals a separate run with those parameters; the base is not replayed twice', () => {
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
+    const plain = runBacktest(args);
+    assert.equal(plain.sweep, null);
+    const swept = runBacktest({ ...args, variants: [{ threshold: 5 }, { threshold: 6 }, { min_rr: 0 }, { weights: { '15m': 4 } }] });
+    assert.equal(swept.sweep.length, 4, 'threshold 5 equals the base');
+    assert.equal(swept.sweep[0].base, true);
+    assert.deepEqual(swept.taken, plain.taken, 'main report unchanged by the sweep');
+
+    const cases = [[1, { threshold: 6 }], [2, { minRiskReward: 0 }], [3, { weights: { ...testConfig.TF_WEIGHTS, '15m': 4 } }]];
+    for (const [idx, over] of cases) {
+        const alone = runBacktest({ ...args, ...over });
+        assert.deepEqual(swept.sweep[idx].taken, alone.taken.summary);
+        assert.deepEqual(swept.sweep[idx].filtered, alone.filtered.summary);
+    }
+    assert.equal(swept.sweep[2].params.min_rr, 0);
+    assert.equal(swept.sweep[3].params.weights['15m'], 4);
+});
+
+test('breakdown: every dimension splits the trades; filtered trades count once per filter', () => {
+    const report = runBacktest({ market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 });
+    for (const group of ['taken', 'filtered']) {
+        const b = report[group].breakdown;
+        const total = report[group].summary.trades;
+        for (const dim of ['side', 'score', 'regime', 'context', 'market_energy', 'fake_breakout_risk', 'session_utc']) {
+            if (!total) continue;
+            assert.equal(b[dim].reduce((a, r) => a + r.trades, 0), total, `${group}/${dim}`);
+        }
+    }
+    const t = (filters, result, net_r) => ({ signal: 'BUY', score: 5, filtered: true, filters, result, net_r, closed_at: 1, features: {} });
+    const f = breakdown([t(['low_rr'], 'WIN', 1), t(['low_rr', 'no_mans_land'], 'LOSS', -1)]).filter;
+    assert.deepEqual(f.map(r => [r.value, r.trades]), [['low_rr', 2], ['no_mans_land', 1]]);
+    assert.equal(breakdown([{ ...t([], 'WIN', 1), filtered: false }]).filter, undefined);
+});
+
+test('CLI --sweep: combinations, validation and limits', () => {
+    const tfs = ['1d', '4h', '1h', '15m'];
+    const a = parseArgs(['btcusdt', '--sweep', 'threshold=4,5', '--sweep', 'w_15m=1,2'], tfs);
+    assert.equal(a.market, 'BTCUSDT');
+    assert.deepEqual(a.variants, [
+        { threshold: 4, weights: { '15m': 1 } }, { threshold: 4, weights: { '15m': 2 } },
+        { threshold: 5, weights: { '15m': 1 } }, { threshold: 5, weights: { '15m': 2 } },
+    ]);
+    assert.deepEqual(parseArgs([], tfs).variants, []);
+    assert.throws(() => parseArgs(['--sweep', 'w_5m=1'], tfs), /w_<tf>/);
+    assert.throws(() => parseArgs(['--sweep', 'threshold=4.5'], tfs), /integers/);
+    assert.throws(() => parseArgs(['--sweep', 'threshold=4', '--sweep', 'threshold=5'], tfs), /once/);
+    const many = Array.from({ length: 9 }, (_, i) => i + 1).join(',');
+    assert.throws(() => parseArgs(['--sweep', `threshold=${many}`, '--sweep', `min_rr=${many}`], tfs), /max 64/);
 });
 
 test('history: downloads in pages, then only the missing tail', async () => {

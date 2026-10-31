@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.9.0](docs/changelog/v2.9.0.md) — 2026-10-31 — Level 6 tools: backtest breakdown per market condition and `--sweep` parameter comparison; Level 5 real-run result documented.
 - [v2.8.0](docs/changelog/v2.8.0.md) — 2026-10-31 — Level 5 backtest: `npm run backtest` CLI, cached history, report API and `/backtest/:symbol` page.
 - [v2.7.0](docs/changelog/v2.7.0.md) — 2026-10-31 — Level 4 signal log: candidates, WIN/LOSS/EXPIRED outcomes and a CSV dataset at `/api/signals/:symbol`.
 - [v2.6.0](docs/changelog/v2.6.0.md) — 2026-10-30 — App version in `/api/config` and shown in both views.

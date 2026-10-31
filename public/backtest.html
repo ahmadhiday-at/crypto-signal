@@ -61,6 +61,31 @@
             <div id="equity" style="height: 320px;"></div>
         </div>
 
+        <div id="sweep-card" class="hidden glass rounded-lg p-3">
+            <div class="text-xs mb-2"><span class="k">Parameter sweep (taken trades, best expectancy first; ★ = live parameters)</span></div>
+            <div class="overflow-auto" style="max-height: 360px;">
+                <table class="w-full text-xs mono">
+                    <thead><tr class="k text-left">
+                        <th>Parameters</th><th class="text-right">Trades</th><th class="text-right">Win rate</th><th class="text-right">Expectancy R</th>
+                        <th class="text-right">Total R</th><th class="text-right">PF</th><th class="text-right">Max DD R</th><th class="text-right">Filtered exp R</th>
+                    </tr></thead>
+                    <tbody id="sweep"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass rounded-lg p-3">
+            <div class="flex flex-wrap items-center gap-3 mb-2 text-xs">
+                <span class="k">Breakdown by condition at the signal candle</span>
+                <select id="breakdown-group" class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+                    <option value="taken">Taken</option>
+                    <option value="filtered">Filtered</option>
+                </select>
+                <span class="k">Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
+            </div>
+            <div id="breakdown" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+        </div>
+
         <div class="glass rounded-lg p-3">
             <div class="flex items-center gap-3 mb-2 text-xs">
                 <span class="k">Trades (newest first, up to 200)</span>
@@ -168,6 +193,62 @@
             </tr>`).join('') || '<tr><td colspan="11" class="k">No trades</td></tr>';
         }
 
+        const MIN_SAMPLE = 20;
+        const DIM_LABELS = {
+            side: 'Side', score: '|Score|', regime: 'Regime (entry TF)', context: 'Context', momentum: 'Momentum',
+            volume_state: 'Volume', market_energy: 'Market energy', breakout_confirmation: 'Breakout confirmation',
+            fake_breakout_risk: 'Fake breakout risk', divergence: 'Divergence', session_utc: 'Session (UTC hours)', filter: 'Rejected by filter',
+        };
+
+        function paramLabel(p, base) {
+            const parts = [];
+            parts.push(`threshold ${p.threshold}`);
+            parts.push(`min RR ${p.min_rr}`);
+            for (const [tf, w] of Object.entries(p.weights || {})) {
+                if (w !== base.weights?.[tf]) parts.push(`w ${tf} ${w}`);
+            }
+            return parts.join(' · ');
+        }
+
+        function renderSweep(report) {
+            if (!report.sweep) return;
+            document.getElementById('sweep-card').classList.remove('hidden');
+            const base = report.sweep.find(r => r.base)?.params || report.params;
+            const rows = [...report.sweep].sort((a, b) => (b.taken.expectancy_r ?? -Infinity) - (a.taken.expectancy_r ?? -Infinity));
+            document.getElementById('sweep').innerHTML = rows.map(r => {
+                const s = r.taken;
+                return `<tr class="border-t border-gray-800 ${s.trades < MIN_SAMPLE ? 'opacity-50' : ''}">
+                    <td>${r.base ? '★ ' : ''}${esc(paramLabel(r.params, base))}</td>
+                    <td class="text-right">${esc(s.trades)}</td>
+                    <td class="text-right">${esc(fmtPct(s.win_rate))}</td>
+                    <td class="text-right ${tone(s.expectancy_r)}">${esc(fmtNum(s.expectancy_r, 3))}</td>
+                    <td class="text-right ${tone(s.total_r)}">${esc(fmtNum(s.total_r))}</td>
+                    <td class="text-right">${esc(fmtNum(s.profit_factor))}</td>
+                    <td class="text-right">${esc(fmtNum(s.max_drawdown_r))}</td>
+                    <td class="text-right ${tone(r.filtered.expectancy_r)}">${esc(fmtNum(r.filtered.expectancy_r, 3))}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderBreakdown(report) {
+            const group = report[document.getElementById('breakdown-group').value];
+            const dims = group.breakdown || {};
+            document.getElementById('breakdown').innerHTML = Object.entries(dims).map(([dim, rows]) => `
+                <div class="min-w-0 overflow-x-auto">
+                    <div class="text-xs font-semibold mb-1">${esc(DIM_LABELS[dim] || dim)}</div>
+                    <table class="w-full text-xs mono">
+                        <thead><tr class="k text-left"><th>Value</th><th class="text-right">Trades</th><th class="text-right">Win</th><th class="text-right">Exp R</th><th class="text-right">Total R</th></tr></thead>
+                        <tbody>${rows.map(r => `<tr class="border-t border-gray-800 ${r.trades < MIN_SAMPLE ? 'opacity-50' : ''}">
+                            <td>${esc(r.value)}</td>
+                            <td class="text-right">${esc(r.trades)}</td>
+                            <td class="text-right">${esc(fmtPct(r.win_rate))}</td>
+                            <td class="text-right ${tone(r.expectancy_r)}">${esc(fmtNum(r.expectancy_r, 3))}</td>
+                            <td class="text-right ${tone(r.total_r)}">${esc(fmtNum(r.total_r))}</td>
+                        </tr>`).join('')}</tbody>
+                    </table>
+                </div>`).join('') || '<div class="text-xs k">No breakdown in this report (generated before v2.9.0).</div>';
+        }
+
         async function load() {
             fetch('/api/config').then(r => r.json()).then(c => {
                 if (c.version) document.getElementById('app-version').textContent = `v${c.version}`;
@@ -184,12 +265,19 @@
             document.getElementById('period').textContent =
                 `${fmtTime(report.period.start)} → ${fmtTime(report.period.end)} · entry ${report.entry_tf} · generated ${fmtTime(report.generated_at)}`;
             document.getElementById('expiry').textContent = report.params.expiry_candles;
+            if (isNum(report.params.min_rr)) {
+                document.getElementById('period').textContent += ` · threshold ${report.params.threshold} · min RR ${report.params.min_rr}`;
+            }
             document.getElementById('fee-note').textContent = report.params.fee_pct
                 ? `Fee ${fmtNum(report.params.fee_pct)}% round trip included.`
                 : 'No fees or slippage included.';
             renderGroup('taken', report.taken);
             renderGroup('filtered', report.filtered);
             renderEquity(report);
+            renderSweep(report);
+            document.getElementById('min-sample').textContent = MIN_SAMPLE;
+            renderBreakdown(report);
+            document.getElementById('breakdown-group').addEventListener('change', () => renderBreakdown(report));
             renderTrades(report);
             document.getElementById('trade-filter').addEventListener('change', () => renderTrades(report));
         }

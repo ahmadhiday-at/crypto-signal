@@ -2,11 +2,12 @@
 // enhanceMarketState → computeSignal) on each closed entry candle of a history, opens a
 // hypothetical trade per candidate with the signal-log rules, and labels it with `evaluate`.
 // Results are in R (multiples of the planned risk); fees are an optional round-trip % of price.
+// Level 6 (docs/roadmap/level-6.md): per-feature breakdown and a parameter sweep on one replay.
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { composeMarketState } = require('./market.service');
-const { computeSignal, THRESHOLD } = require('./signal');
+const { computeSignal, THRESHOLD, MIN_RISK_REWARD } = require('./signal');
 const { recordFrom, evaluate, EXPIRY_CANDLES } = require('./signal-log');
 
 const MARKET_RE = /^[A-Z0-9]{2,20}$/;
@@ -54,16 +55,78 @@ function metrics(trades) {
     };
 }
 
+// Trade features used by the breakdown tables (Level 6 pattern correlation).
+const BREAKDOWN_DIMENSIONS = ['side', 'score', 'regime', 'context', 'momentum', 'volume_state', 'market_energy', 'breakout_confirmation', 'fake_breakout_risk', 'divergence', 'session_utc', 'filter'];
+
+function featuresOf(state, record) {
+    const f = record.features;
+    const hour = new Date(record.candle_close_time * 1000).getUTCHours();
+    const block = Math.floor(hour / 4) * 4;
+    return {
+        regime: f.regime, context: f.context, momentum: f.momentum, volume_state: f.volume_state,
+        market_energy: state.market_energy ?? null, breakout_confirmation: f.breakout_confirmation,
+        fake_breakout_risk: state.fake_breakout_risk ?? null, divergence: f.divergence,
+        session_utc: `${String(block).padStart(2, '0')}-${String(block + 4).padStart(2, '0')}`,
+    };
+}
+
+function valuesOf(trade, dim) {
+    if (dim === 'side') return [trade.signal];
+    if (dim === 'score') return [String(Math.abs(trade.score))];
+    if (dim === 'filter') return trade.filtered ? trade.filters : [];
+    return [String(trade.features?.[dim] ?? 'none')];
+}
+
+// Per dimension, the summary of the trades sharing each value, most trades first. A filtered
+// trade counts once under each filter that rejected it.
+function breakdown(trades) {
+    const out = {};
+    for (const dim of BREAKDOWN_DIMENSIONS) {
+        const groups = new Map();
+        for (const t of trades) {
+            for (const v of valuesOf(t, dim)) {
+                if (!groups.has(v)) groups.set(v, []);
+                groups.get(v).push(t);
+            }
+        }
+        if (!groups.size) continue;
+        out[dim] = [...groups].map(([value, list]) => ({ value, ...metrics(list).summary }))
+            .sort((a, b) => b.trades - a.trades || String(a.value).localeCompare(String(b.value)));
+    }
+    return out;
+}
+
+// One parameter set of the replay. `weights` changes the zone merge, `threshold` and `min_rr` the signal.
+function normalizeParams(base, over = {}) {
+    return {
+        threshold: over.threshold ?? base.threshold,
+        min_rr: over.min_rr ?? base.min_rr,
+        weights: { ...base.weights, ...(over.weights || {}) },
+    };
+}
+
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
-// candles each snapshot sees (the live app uses CANDLE_LIMIT − 1).
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, onProgress }) {
+// candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
+// overrides replayed on the same snapshots; the base parameters always run and give the main report.
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, variants = [], onProgress }) {
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
     const snaps = {};
-    const trades = [];
-    // Each group (taken / filtered) holds at most one open trade per direction, like the signal log.
-    const busyUntil = { taken: {}, filtered: {} };
+    const base = normalizeParams({ threshold, min_rr: minRiskReward, weights });
+    // A variant equal to the base parameters is not replayed twice.
+    const seen = new Set();
+    const unique = [base, ...variants.map(v => normalizeParams(base, v))].filter((p) => {
+        const key = JSON.stringify([p.threshold, p.min_rr, Object.entries(p.weights).sort()]);
+        return !seen.has(key) && seen.add(key);
+    });
+    const runs = unique.map(params => ({
+        params,
+        weightsKey: JSON.stringify(params.weights),
+        trades: [],
+        // Each group (taken / filtered) holds at most one open trade per direction, like the signal log.
+        busyUntil: { taken: {}, filtered: {} },
+    }));
     let steps = 0;
     let skipped = 0;
 
@@ -90,35 +153,43 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         }
         if (!ready) { skipped++; continue; }
 
-        let state;
-        try {
-            state = { ...composeMarketState(market, snaps, roles, weights), generated_at: t, status: 'ok' };
-        } catch (e) {
-            skipped++;
-            continue;
+        // Variants with the same weights share one merged state.
+        const states = new Map();
+        let failed = false;
+        for (const run of runs) {
+            if (!states.has(run.weightsKey)) {
+                try {
+                    states.set(run.weightsKey, { ...composeMarketState(market, snaps, roles, run.params.weights), generated_at: t, status: 'ok' });
+                } catch (e) {
+                    states.set(run.weightsKey, null);
+                }
+            }
+            const merged = states.get(run.weightsKey);
+            if (!merged) { if (run === runs[0]) failed = true; continue; }
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { threshold: run.params.threshold, minRiskReward: run.params.min_rr }) };
+
+            const record = recordFrom(market, roles.entry, state, entry[i], run.params.threshold);
+            if (!record) continue;
+            const group = record.filtered ? 'filtered' : 'taken';
+            if ((run.busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
+
+            const outcome = evaluate(record, entry.slice(i, i + EXPIRY_CANDLES + 2));
+            const risk = Math.abs(record.price - record.sl);
+            const feeR = risk > 0 ? (feePct / 100) * record.price / risk : 0;
+            run.trades.push({
+                id: record.id, time: record.candle_close_time, signal: record.signal, filtered: record.filtered,
+                filters: record.filters, strength: record.strength, score: state.signal.score,
+                price: record.price, sl: record.sl, tp1: record.tp1, risk_reward: record.risk_reward,
+                features: featuresOf(state, record),
+                result: outcome ? outcome.result : null,
+                rr: outcome ? outcome.rr : null,
+                net_r: outcome && Number.isFinite(outcome.rr) ? r4(outcome.rr - feeR) : null,
+                closed_at: outcome ? outcome.closed_at : null,
+                bars: outcome ? outcome.bars : null,
+            });
+            run.busyUntil[group][record.signal] = outcome ? outcome.closed_at : Infinity;
         }
-        state.signal = computeSignal(state, roles.htf);
-
-        const record = recordFrom(market, roles.entry, state, entry[i]);
-        if (!record) continue;
-        const group = record.filtered ? 'filtered' : 'taken';
-        if ((busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
-
-        const outcome = evaluate(record, entry.slice(i, i + EXPIRY_CANDLES + 2));
-        const risk = Math.abs(record.price - record.sl);
-        const feeR = risk > 0 ? (feePct / 100) * record.price / risk : 0;
-        const trade = {
-            id: record.id, time: record.candle_close_time, signal: record.signal, filtered: record.filtered,
-            filters: record.filters, strength: record.strength, score: state.signal.score,
-            price: record.price, sl: record.sl, tp1: record.tp1, risk_reward: record.risk_reward,
-            result: outcome ? outcome.result : null,
-            rr: outcome ? outcome.rr : null,
-            net_r: outcome && Number.isFinite(outcome.rr) ? r4(outcome.rr - feeR) : null,
-            closed_at: outcome ? outcome.closed_at : null,
-            bars: outcome ? outcome.bars : null,
-        };
-        trades.push(trade);
-        busyUntil[group][record.signal] = outcome ? outcome.closed_at : Infinity;
+        if (failed) skipped++;
     }
 
     const groupReport = (list) => {
@@ -126,20 +197,28 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         return {
             ...all,
             by_side: { BUY: metrics(list.filter(t => t.signal === 'BUY')).summary, SELL: metrics(list.filter(t => t.signal === 'SELL')).summary },
+            breakdown: breakdown(list),
         };
     };
 
+    const main = runs[0];
     return {
         market,
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { threshold: THRESHOLD, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
+        params: { threshold: main.params.threshold, min_rr: main.params.min_rr, weights: main.params.weights, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
         steps,
         skipped_steps: skipped,
-        taken: groupReport(trades.filter(t => !t.filtered)),
-        filtered: groupReport(trades.filter(t => t.filtered)),
-        trades,
+        taken: groupReport(main.trades.filter(t => !t.filtered)),
+        filtered: groupReport(main.trades.filter(t => t.filtered)),
+        sweep: variants.length ? runs.map((run, idx) => ({
+            base: idx === 0,
+            params: run.params,
+            taken: metrics(run.trades.filter(t => !t.filtered)).summary,
+            filtered: metrics(run.trades.filter(t => t.filtered)).summary,
+        })) : null,
+        trades: main.trades,
     };
 }
 
@@ -167,4 +246,4 @@ function createReports({ dir }) {
     };
 }
 
-module.exports = { runBacktest, metrics, createReports };
+module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS };
