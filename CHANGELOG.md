@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.8.0](docs/changelog/v2.8.0.md) — 2026-10-31 — Level 5 backtest: `npm run backtest` CLI, cached history, report API and `/backtest/:symbol` page.
 - [v2.7.0](docs/changelog/v2.7.0.md) — 2026-10-31 — Level 4 signal log: candidates, WIN/LOSS/EXPIRED outcomes and a CSV dataset at `/api/signals/:symbol`.
 - [v2.6.0](docs/changelog/v2.6.0.md) — 2026-10-30 — App version in `/api/config` and shown in both views.
 - [v2.5.0](docs/changelog/v2.5.0.md) — 2026-10-30 — Trade plan (entry zone, SL, TP1/TP2, RR, trailing) and low_rr filter; roadmap Levels 2.5B and 3 complete.

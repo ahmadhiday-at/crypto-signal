@@ -18,7 +18,12 @@ function renderChartPage(req, res) {
     }
 }
 
+function renderBacktestPage(req, res) {
+    res.sendFile(path.join(__dirname, '../../../public/backtest.html'));
+}
+
 module.exports = {
+    renderBacktestPage,
     renderMarketDashboard,
     renderChartPage
 };

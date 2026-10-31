@@ -68,6 +68,34 @@ function evaluate(record, candles) {
     return null;
 }
 
+// A signal record for a candidate state at the entry candle `last`, or null when the state is not
+// a candidate or its plan has no SL/TP1. Shared with the backtest.
+function recordFrom(market, entryTf, state, last) {
+    const direction = candidateDirection(state);
+    const plan = state.signal?.plan;
+    if (!direction || !last || !plan || !num(plan.stop_loss) || !num(plan.take_profit_1)) return null;
+    return {
+        type: 'signal',
+        id: `${market}-${last.time}-${direction}`,
+        timestamp: state.generated_at,
+        market,
+        timeframe: entryTf,
+        candle_time: last.time,
+        candle_close_time: last.close_time,
+        signal: direction,
+        filtered: state.signal.filtered,
+        filters: state.signal.filters,
+        strength: state.signal.strength,
+        price: state.price,
+        entry_zone: plan.entry_zone,
+        sl: plan.stop_loss,
+        tp1: plan.take_profit_1,
+        tp2: plan.take_profit_2,
+        risk_reward: plan.risk_reward,
+        features: featuresOf(state),
+    };
+}
+
 function createSignalLog({ dir, entryTf, log = console }) {
     // market -> Map(id -> record) of records without an outcome yet.
     const open = new Map();
@@ -136,34 +164,10 @@ function createSignalLog({ dir, entryTf, log = console }) {
             pending.delete(r.id);
         }
 
-        const direction = candidateDirection(state);
-        const plan = state.signal?.plan;
-        if (!direction || !plan || !num(plan.stop_loss) || !num(plan.take_profit_1)) return;
+        const record = recordFrom(market, entryTf, state, candles[candles.length - 1]);
+        if (!record) return;
         // One open record per direction: a setup that persists over several candles is logged once.
-        if ([...pending.values()].some(r => r.signal === direction)) return;
-
-        const last = candles[candles.length - 1];
-        if (!last) return;
-        const record = {
-            type: 'signal',
-            id: `${market}-${last.time}-${direction}`,
-            timestamp: state.generated_at,
-            market,
-            timeframe: entryTf,
-            candle_time: last.time,
-            candle_close_time: last.close_time,
-            signal: direction,
-            filtered: state.signal.filtered,
-            filters: state.signal.filters,
-            strength: state.signal.strength,
-            price: state.price,
-            entry_zone: plan.entry_zone,
-            sl: plan.stop_loss,
-            tp1: plan.take_profit_1,
-            tp2: plan.take_profit_2,
-            risk_reward: plan.risk_reward,
-            features: featuresOf(state),
-        };
+        if ([...pending.values()].some(r => r.signal === record.signal)) return;
         await append(market, record);
         const { type, ...rest } = record;
         pending.set(record.id, { ...rest, result: null, rr: null, closed_at: null, bars: null });
@@ -193,4 +197,4 @@ function toCsv(rows) {
     return [CSV_COLUMNS.join(','), ...lines].join('\n') + '\n';
 }
 
-module.exports = { createSignalLog, evaluate, candidateDirection, toCsv, EXPIRY_CANDLES, RESULTS };
+module.exports = { createSignalLog, evaluate, candidateDirection, recordFrom, toCsv, EXPIRY_CANDLES, RESULTS };

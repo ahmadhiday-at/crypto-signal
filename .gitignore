@@ -46,6 +46,9 @@ memory
 
 # Signal log (Level 4): grows per machine
 data/signals/
+# Backtest history cache and reports (Level 5)
+data/history/
+data/backtest/
 
 
 

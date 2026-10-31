@@ -214,6 +214,16 @@ function codeOf(err) {
     return err && ERROR_CODES.includes(err.code) ? err.code : 'calculation_failed';
 }
 
+// Builds the Market State fields (without freshness or signal) from the role snapshots.
+// Shared by the live engine and the backtest. Throws when a side has no merged level.
+function composeMarketState(market, snaps, roles, weights) {
+    const { raw, volumeHistory } = mergeSnapshots(market, snaps, roles, weights);
+    if (raw.levels.support.length === 0 || raw.levels.resistance.length === 0) throw new Error('no merged levels');
+    const enhanced = enhanceMarketState({ ...raw, indicators: { ...raw.indicators, volume: volumeHistory } });
+    enhanced.indicators = raw.indicators;
+    return enhanced;
+}
+
 function createMarketEngine({ storage, binance, indicators, config, signalLog = null, now = () => Date.now(), notify = {}, log = console }) {
     const nowSec = () => Math.floor(now() / 1000);
     const roles = config.TF_ROLES;
@@ -349,10 +359,7 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
 
         let enhanced;
         try {
-            const { raw, volumeHistory } = mergeSnapshots(market, snaps, roles, config.TF_WEIGHTS);
-            if (raw.levels.support.length === 0 || raw.levels.resistance.length === 0) throw new Error('no merged levels');
-            enhanced = enhanceMarketState({ ...raw, indicators: { ...raw.indicators, volume: volumeHistory } });
-            enhanced.indicators = raw.indicators;
+            enhanced = composeMarketState(market, snaps, roles, config.TF_WEIGHTS);
         } catch (err) {
             summaryErrors.set(market, { code: 'calculation_failed', at: t });
             log.error(`[MTF] ${market}: summary calculation failed: ${err.message}`);
@@ -586,4 +593,4 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
     };
 }
 
-module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots };
+module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots, composeMarketState };

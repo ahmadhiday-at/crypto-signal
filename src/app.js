@@ -21,7 +21,7 @@ function createHostCheck(allowedHosts) {
   return (hostHeader) => allowed.has(hostnameOf(hostHeader));
 }
 
-function createApp({ engine, config, log = console }) {
+function createApp({ engine, config, reports = null, log = console }) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -49,7 +49,7 @@ function createApp({ engine, config, log = console }) {
   });
 
   app.use(express.static(path.join(__dirname, "../public")));
-  app.use("/api", createApiRouter(createMarketController({ engine, config })));
+  app.use("/api", createApiRouter(createMarketController({ engine, config, reports })));
   app.use("/", viewRoutes);
 
   // Never leak internal error details to clients.

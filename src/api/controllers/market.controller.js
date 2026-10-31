@@ -13,7 +13,7 @@ function appVersion() {
     }
 }
 
-function createMarketController({ engine, config }) {
+function createMarketController({ engine, config, reports = null }) {
     const unknown = (res) => res.status(404).json({ error: 'unknown_market_or_timeframe' });
 
     async function getMarketAnalysis(req, res, next) {
@@ -63,6 +63,19 @@ function createMarketController({ engine, config }) {
         }
     }
 
+    // Latest backtest report written by `npm run backtest` (docs/contract/rest.md).
+    async function getBacktest(req, res, next) {
+        try {
+            const { market } = req.params;
+            if (!engine.isMarket(market)) return unknown(res);
+            const report = reports ? await reports.read(market) : null;
+            if (!report) return res.status(404).json({ error: 'backtest_not_found' });
+            res.json(report);
+        } catch (err) {
+            next(err);
+        }
+    }
+
     function getHealth(req, res) {
         res.json(engine.healthReport());
     }
@@ -83,7 +96,7 @@ function createMarketController({ engine, config }) {
         }
     }
 
-    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getHealth, resetData };
+    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getHealth, resetData };
 }
 
 module.exports = { createMarketController };

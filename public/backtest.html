@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backtest Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
+        .k { color: #848e9c; }
+        th, td { padding: 4px 8px; white-space: nowrap; }
+        thead th { position: sticky; top: 0; background: #1e222e; }
+    </style>
+</head>
+<body class="min-h-screen p-3 flex flex-col gap-3">
+    <div class="flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-baseline gap-3">
+            <a id="back-link" href="/" class="text-2xl font-bold mono tracking-tighter text-white hover:text-blue-400">-</a>
+            <span class="text-sm font-semibold text-gray-400">Backtest</span>
+            <span id="period" class="text-xs mono text-gray-500"></span>
+        </div>
+        <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
+    </div>
+
+    <div class="glass rounded-lg px-3 py-2 text-xs text-yellow-200/80 border-l-4 border-l-yellow-500">
+        Hypothetical results, not executed trades: entry at the close of the signal candle, exit at TP1 or SL
+        (both in one candle counts as SL), expiry after <span id="expiry">96</span> entry candles. Results are in R (multiples of the planned risk).
+        <span id="fee-note"></span>
+    </div>
+
+    <div id="empty" class="hidden glass rounded-lg p-6 text-sm text-gray-300">
+        No backtest report for this symbol yet. Run:
+        <pre class="mono text-xs mt-2 text-blue-300" id="empty-cmd"></pre>
+    </div>
+
+    <div id="report" class="hidden flex flex-col gap-3">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div class="glass rounded-lg p-3">
+                <div class="flex justify-between items-baseline mb-2">
+                    <span class="font-bold text-sm text-green-400">Taken <span class="k font-normal">(passed every filter)</span></span>
+                </div>
+                <div id="m-taken" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono text-sm"></div>
+                <div id="s-taken" class="mt-2 text-[11px] mono k"></div>
+            </div>
+            <div class="glass rounded-lg p-3">
+                <div class="flex justify-between items-baseline mb-2">
+                    <span class="font-bold text-sm text-orange-400">Filtered <span class="k font-normal">(rejected by a filter, for comparison)</span></span>
+                </div>
+                <div id="m-filtered" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono text-sm"></div>
+                <div id="s-filtered" class="mt-2 text-[11px] mono k"></div>
+            </div>
+        </div>
+
+        <div class="glass rounded-lg p-3">
+            <div class="text-xs mb-1"><span class="k">Equity curve (cumulative R)</span>
+                <span class="ml-3 text-green-400">● Taken</span><span class="ml-3 text-orange-400">● Filtered</span></div>
+            <div id="equity" style="height: 320px;"></div>
+        </div>
+
+        <div class="glass rounded-lg p-3">
+            <div class="flex items-center gap-3 mb-2 text-xs">
+                <span class="k">Trades (newest first, up to 200)</span>
+                <select id="trade-filter" class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+                    <option value="taken">Taken</option>
+                    <option value="filtered">Filtered</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div class="overflow-auto" style="max-height: 420px;">
+                <table class="w-full text-xs mono">
+                    <thead><tr class="k text-left">
+                        <th>Signal time</th><th>Side</th><th>Score</th><th class="text-right">Price</th><th class="text-right">SL</th>
+                        <th class="text-right">TP1</th><th class="text-right">Plan RR</th><th>Result</th><th class="text-right">Net R</th><th class="text-right">Bars</th><th>Filters</th>
+                    </tr></thead>
+                    <tbody id="trades"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const NF = {};
+        const nf = (d) => NF[d] || (NF[d] = new Intl.NumberFormat(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
+        const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+        const fmtNum = (v, d = 2) => isNum(v) ? nf(d).format(v) : '-';
+        const fmtPct = (v) => isNum(v) ? nf(1).format(v * 100) + '%' : '-';
+        const fmtTime = (s) => isNum(s) ? new Date(s * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '-';
+        const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const tone = (v) => !isNum(v) ? '' : v > 0 ? 'text-green-400' : v < 0 ? 'text-red-400' : '';
+
+        const market = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || 'BTCUSDT').toUpperCase();
+        document.title = `${market} Backtest`;
+        const back = document.getElementById('back-link');
+        back.textContent = market;
+        back.href = `/${encodeURIComponent(market)}`;
+
+        function cell(label, value, cls = '') {
+            return `<div><div class="text-[10px] uppercase k">${esc(label)}</div><div class="${cls}">${esc(value)}</div></div>`;
+        }
+
+        function renderGroup(name, g) {
+            const s = g.summary;
+            document.getElementById(`m-${name}`).innerHTML = [
+                cell('Trades', String(s.trades)),
+                cell('Win rate (TP1)', fmtPct(s.win_rate)),
+                cell('Expectancy', `${fmtNum(s.expectancy_r, 3)} R`, tone(s.expectancy_r)),
+                cell('Total', `${fmtNum(s.total_r)} R`, tone(s.total_r)),
+                cell('Profit factor', fmtNum(s.profit_factor)),
+                cell('Max drawdown', `${fmtNum(s.max_drawdown_r)} R`),
+                cell('Avg win / loss', `${fmtNum(s.avg_win_r)} / ${fmtNum(s.avg_loss_r)}`),
+                cell('W / L / Exp', `${s.wins} / ${s.losses} / ${s.expired}`),
+            ].join('');
+            const side = (k) => {
+                const b = g.by_side[k];
+                return `${k}: ${b.trades} trades, win ${fmtPct(b.win_rate)}, exp ${fmtNum(b.expectancy_r, 3)} R`;
+            };
+            const extra = [];
+            if (s.open) extra.push(`${s.open} still open at the end`);
+            if (s.unknown) extra.push(`${s.unknown} unknown`);
+            document.getElementById(`s-${name}`).textContent = [side('BUY'), side('SELL'), ...extra].join(' · ');
+        }
+
+        // lightweight-charts needs strictly increasing times: keep the last point per second.
+        function curveData(points) {
+            const byTime = new Map();
+            for (const p of points) byTime.set(p.time, p.equity);
+            return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
+        }
+
+        function renderEquity(report) {
+            const el = document.getElementById('equity');
+            const chart = LightweightCharts.createChart(el, {
+                layout: { background: { color: 'transparent' }, textColor: '#848e9c' },
+                grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
+                timeScale: { timeVisible: true, borderColor: 'rgba(255,255,255,0.1)' },
+                rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
+                localization: { priceFormatter: (v) => fmtNum(v) },
+                autoSize: true,
+            });
+            chart.addLineSeries({ color: '#0ecb81', lineWidth: 2 }).setData(curveData(report.taken.equity));
+            chart.addLineSeries({ color: '#f0a020', lineWidth: 1 }).setData(curveData(report.filtered.equity));
+            // autoSize applies the container size on the next frame; fit after that.
+            requestAnimationFrame(() => chart.timeScale().fitContent());
+        }
+
+        function renderTrades(report) {
+            const mode = document.getElementById('trade-filter').value;
+            const list = report.trades
+                .filter(t => mode === 'all' || (mode === 'filtered') === t.filtered)
+                .slice(-200).reverse();
+            const resultTone = { WIN: 'text-green-400', LOSS: 'text-red-400', EXPIRED: 'text-gray-400' };
+            document.getElementById('trades').innerHTML = list.map(t => `<tr class="border-t border-gray-800">
+                <td>${esc(fmtTime(t.time))}</td>
+                <td class="${t.signal === 'BUY' ? 'text-green-400' : 'text-red-400'}">${esc(t.signal)}</td>
+                <td>${esc(t.score)}</td>
+                <td class="text-right">${esc(fmtNum(t.price))}</td>
+                <td class="text-right">${esc(fmtNum(t.sl))}</td>
+                <td class="text-right">${esc(fmtNum(t.tp1))}</td>
+                <td class="text-right">${esc(fmtNum(t.risk_reward))}</td>
+                <td class="${resultTone[t.result] || 'k'}">${esc(t.result ?? 'OPEN')}</td>
+                <td class="text-right ${tone(t.net_r)}">${esc(fmtNum(t.net_r))}</td>
+                <td class="text-right">${esc(t.bars ?? '-')}</td>
+                <td class="k">${esc((t.filters || []).join(', '))}</td>
+            </tr>`).join('') || '<tr><td colspan="11" class="k">No trades</td></tr>';
+        }
+
+        async function load() {
+            fetch('/api/config').then(r => r.json()).then(c => {
+                if (c.version) document.getElementById('app-version').textContent = `v${c.version}`;
+            }).catch(() => {});
+
+            const res = await fetch(`/api/backtest/${encodeURIComponent(market)}`);
+            if (!res.ok) {
+                document.getElementById('empty').classList.remove('hidden');
+                document.getElementById('empty-cmd').textContent = `docker compose exec app npm run backtest -- ${market}`;
+                return;
+            }
+            const report = await res.json();
+            document.getElementById('report').classList.remove('hidden');
+            document.getElementById('period').textContent =
+                `${fmtTime(report.period.start)} → ${fmtTime(report.period.end)} · entry ${report.entry_tf} · generated ${fmtTime(report.generated_at)}`;
+            document.getElementById('expiry').textContent = report.params.expiry_candles;
+            document.getElementById('fee-note').textContent = report.params.fee_pct
+                ? `Fee ${fmtNum(report.params.fee_pct)}% round trip included.`
+                : 'No fees or slippage included.';
+            renderGroup('taken', report.taken);
+            renderGroup('filtered', report.filtered);
+            renderEquity(report);
+            renderTrades(report);
+            document.getElementById('trade-filter').addEventListener('change', () => renderTrades(report));
+        }
+
+        load();
+    </script>
+</body>
+</html>

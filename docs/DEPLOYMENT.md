@@ -1253,6 +1253,16 @@ Aplikasi Windows lainnya
 
 # 32. Quick Commands
 
+### Backtest (sejak v2.8.0)
+
+Jalankan di dalam container `app` supaya request ke Binance lewat VPN. Data historis di-cache di `data/history/`, report di `data/backtest/` (keduanya gitignored), lalu buka `/backtest/BTCUSDT`.
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365
+```
+
+Jika Binance membalas HTTP 451, CLI berhenti dengan pesan error (lihat bagian 20); tidak ada workaround otomatis.
+
 ### Start
 
 ```bash

@@ -37,6 +37,7 @@ To avoid hitting API rate limits, the system keeps the latest state in a local f
 - **`data/chart/{MARKET}_{tf}.json`**: Stores the processed indicators for a specific timeframe.
 - **`data/market/{MARKET}.json`**: Stores the final Market State (contract: [market-state.md](../contract/market-state.md)).
 
+- **`data/history/{MARKET}_{tf}.json`, `data/backtest/{MARKET}.json`** (gitignored): backtest candle cache and latest report (Roadmap Level 5).
 - **`data/signals/{MARKET}.jsonl`** (gitignored): append-only signal log with outcomes (Roadmap Level 4; [rest.md → Signal log](../contract/rest.md#signal-log)).
 
 Write and consistency rules are in [Operating Model → O4](./operating-model.md#o4-storage-and-writes).
@@ -103,6 +104,7 @@ Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static fi
 | URL | Page |
 | :-- | :--- |
 | `/:market` (e.g. `/BTCUSDT`) | Market Dashboard |
+| `/backtest/:market` | Backtest report (`public/backtest.html`) |
 | `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
 | `/` | Reference View via the static `public/index.html`, defaulting to `BTCUSDT` / `15m` |
 
@@ -124,6 +126,10 @@ A high-performance "command center" designed for rapid state assessment.
 - **Legends (Binance style):** follow the crosshair and default to the last closed candle. Main: date, O/H/L/C, Change and Change % vs Open, Range % = (H−L)/L, MA(14/50/200). Panes: Vol, MACD/Signal/Hist, RSI(14). One browser-locale number format is used across the dashboard and the price axes. The breakout score and distances always come from the server and are not recalculated on hover.
 - **Actionable Insights:** Direct display of confluence zones with integrated price-copying functionality.
 
+### 3. Backtest report (`public/backtest.html`)
+
+Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
+
 ## 🚀 Design Goals
 
 1. **Determinism:** Given the same set of closed input candles, the Market State must always be the same (see [O1](./operating-model.md#o1-candle-finality)).
@@ -141,6 +147,8 @@ Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`
 Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
 
 Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engine as `signalLog`. After each published summary, `onSummary(market, summary, entryCandles)` first closes open records (WIN/LOSS/EXPIRED/UNKNOWN), then appends a new candidate. Errors are logged and never block publishing. `engine.initialize()` reloads open records; `engine.signalRecords(market)` serves `GET /api/signals/:symbol`.
+
+Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path) → `createReports().write`. The server only reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`).
 
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 

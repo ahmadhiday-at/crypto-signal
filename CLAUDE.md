@@ -9,6 +9,7 @@ Node.js ≥22 (Docker: Node 24). No linter/build step.
 ```bash
 npm run dev    # nodemon: server.js + src/, ignores data/
 npm test       # node:test, no network
+npm run backtest -- BTCUSDT --days 365   # hits Binance; in Docker: docker compose exec app npm run backtest -- …
 node --test --test-name-pattern="reset" "test/**/*.test.js"
 docker compose up -d            # add --build if package*.json or Dockerfile changed
 docker compose restart app      # after .env changes
@@ -33,7 +34,8 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 - Update/freshness/failure behaviour → `docs/architecture/operating-model.md`
 - Env vars, config → `docs/architecture/config.md`, `.env.example`
 - Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
-- Planned work → `docs/roadmap/level-5.md` (next; Level 4 collecting data); other levels in `docs/roadmap/`
+- Backtest report fields → `docs/contract/rest.md` (Backtest report)
+- Planned work → `docs/roadmap/level-5.md` (tool done, real run pending), then `level-6.md`; other levels in `docs/roadmap/`
 
 ## When a task is done
 

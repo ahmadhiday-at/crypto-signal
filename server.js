@@ -7,6 +7,7 @@ const binanceService = require('./src/services/binance.service');
 const { createMarketEngine } = require('./src/services/market.service');
 const { createScheduler } = require('./src/jobs/scheduler');
 const { createSignalLog } = require('./src/services/signal-log');
+const { createReports } = require('./src/services/backtest');
 const path = require('path');
 
 const engine = createMarketEngine({
@@ -21,7 +22,7 @@ const engine = createMarketEngine({
     },
 });
 
-const app = createApp({ engine, config });
+const app = createApp({ engine, config, reports: createReports({ dir: path.join(__dirname, 'data/backtest') }) });
 const server = http.createServer(app);
 
 wsManager.init(server, {
