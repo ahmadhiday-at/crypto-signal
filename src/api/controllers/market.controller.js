@@ -2,6 +2,7 @@
 // it reaches storage or Binance.
 const fs = require('fs');
 const path = require('path');
+const { toCsv } = require('../../services/signal-log');
 
 // Read on each call so a version bump shows up without restarting the server.
 function appVersion() {
@@ -46,6 +47,22 @@ function createMarketController({ engine, config }) {
         }
     }
 
+    // ?format=csv returns the flattened dataset (docs/contract/rest.md).
+    async function getSignals(req, res, next) {
+        try {
+            const { market } = req.params;
+            if (!engine.isMarket(market)) return unknown(res);
+            const body = await engine.signalRecords(market);
+            if (!body) return res.status(404).json({ error: 'signal_log_disabled' });
+            if (req.query.format === 'csv') {
+                return res.type('text/csv').set('Content-Disposition', `attachment; filename="${market}_signals.csv"`).send(toCsv(body.records));
+            }
+            res.json(body);
+        } catch (err) {
+            next(err);
+        }
+    }
+
     function getHealth(req, res) {
         res.json(engine.healthReport());
     }
@@ -66,7 +83,7 @@ function createMarketController({ engine, config }) {
         }
     }
 
-    return { getMarketAnalysis, getConfig, getSnapshot, getHealth, resetData };
+    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getHealth, resetData };
 }
 
 module.exports = { createMarketController };

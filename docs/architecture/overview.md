@@ -32,10 +32,12 @@ Transforms raw price data into mathematical and structural insights.
 
 ### 3. Data Management (`src/data/`)
 
-To avoid hitting API rate limits, the system keeps the latest state in a local filesystem cache. It holds no history.
+To avoid hitting API rate limits, the system keeps the latest state in a local filesystem cache. Apart from the signal log it holds no history.
 
 - **`data/chart/{MARKET}_{tf}.json`**: Stores the processed indicators for a specific timeframe.
 - **`data/market/{MARKET}.json`**: Stores the final Market State (contract: [market-state.md](../contract/market-state.md)).
+
+- **`data/signals/{MARKET}.jsonl`** (gitignored): append-only signal log with outcomes (Roadmap Level 4; [rest.md → Signal log](../contract/rest.md#signal-log)).
 
 Write and consistency rules are in [Operating Model → O4](./operating-model.md#o4-storage-and-writes).
 
@@ -137,6 +139,8 @@ Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`
 3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
 
 Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
+
+Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engine as `signalLog`. After each published summary, `onSummary(market, summary, entryCandles)` first closes open records (WIN/LOSS/EXPIRED/UNKNOWN), then appends a new candidate. Errors are logged and never block publishing. `engine.initialize()` reloads open records; `engine.signalRecords(market)` serves `GET /api/signals/:symbol`.
 
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 

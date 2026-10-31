@@ -8,6 +8,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | :------- | :------- | :----- | :---------- |
 | Data | `/api/market/:symbol` | `GET` | Market State ([market-state.md](./market-state.md)) with freshness `status`. HTTP 503 with diagnostics when unavailable (see below). |
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
+| Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset. See [Signal log](#signal-log). |
 | UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
 | System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
@@ -36,3 +37,13 @@ When no valid summary exists and none can be built, `GET /api/market/:symbol` re
 ```
 
 Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
+
+## Signal log
+
+`GET /api/signals/:symbol` (Roadmap Level 4). Source: `data/signals/{MARKET}.jsonl` (gitignored, append-only).
+
+- **When a record is created:** after a published summary with `status: "ok"`, `|signal.score| ≥ 5` and a plan with `stop_loss` and `take_profit_1`. Filtered candidates are logged too (`filtered: true`, `filters`). At most one open record per market and direction.
+- **Record:** `id`, `timestamp` (summary `generated_at`), `market`, `timeframe` (entry), `candle_time`, `candle_close_time`, `signal` (`BUY`/`SELL`, direction before filters), `filtered`, `filters`, `strength`, `price` (entry = closed entry-candle close), `entry_zone`, `sl`, `tp1`, `tp2`, `risk_reward`, `features` (`context`, `momentum`, `regime`, `volume_state`, `breakout_confirmation`, `divergence`, `volatility_ratio`, `distance_to_support`, `distance_to_resistance`, `rsi`, `atr`, `score`, `strength`, `reasons`), then `result`, `rr`, `closed_at`, `bars` (`null` while open).
+- **Outcome** (checked on each later closed entry candle): SL touched → `LOSS`, `rr` −1; TP1 touched → `WIN`, `rr` = `risk_reward`; both in one candle → `LOSS`; neither within 96 candles → `EXPIRED`, `rr` = (close − price) / risk (sign by side); the candle after the signal no longer in history → `UNKNOWN`.
+- **`stats`:** `total`, `open`, `WIN`, `LOSS`, `EXPIRED`, `UNKNOWN`.
+- **CSV:** one row per record, features flattened; lists joined with `|`.

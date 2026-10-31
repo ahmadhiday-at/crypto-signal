@@ -214,7 +214,7 @@ function codeOf(err) {
     return err && ERROR_CODES.includes(err.code) ? err.code : 'calculation_failed';
 }
 
-function createMarketEngine({ storage, binance, indicators, config, now = () => Date.now(), notify = {}, log = console }) {
+function createMarketEngine({ storage, binance, indicators, config, signalLog = null, now = () => Date.now(), notify = {}, log = console }) {
     const nowSec = () => Math.floor(now() / 1000);
     const roles = config.TF_ROLES;
     const roleTfs = [...new Set(Object.values(roles))];
@@ -391,6 +391,14 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
             log.error(`[MTF] ${market}: ${err.message}`);
             return { published: false, reason: 'storage_failed' };
         }
+        if (signalLog) {
+            // Logging must never block publishing the Market State.
+            try {
+                await signalLog.onSummary(market, summary, snaps[entryTf].candles);
+            } catch (err) {
+                log.error(`[SignalLog] ${market}: ${err.message}`);
+            }
+        }
         if (notify.summaryUpdated) notify.summaryUpdated(market);
         return { published: true, status: summary.status };
     }
@@ -445,6 +453,13 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
         await storage.ensureDirs();
         await storage.cleanupTempFiles();
         await loadIndex();
+        if (signalLog) {
+            try {
+                await signalLog.load(markets);
+            } catch (err) {
+                log.error(`[SignalLog] load failed: ${err.message}`);
+            }
+        }
         return refreshStale();
     }
 
@@ -524,6 +539,18 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
         return { httpStatus: 200, body: { ...snap, status: f.status, age_seconds: f.age_seconds } };
     }
 
+    // Logged signals with outcomes and per-result counts, or null when logging is off.
+    async function signalRecords(market) {
+        if (!signalLog) return null;
+        const records = await signalLog.records(market);
+        const stats = { total: records.length, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 };
+        for (const r of records) {
+            if (r.result === null) stats.open++;
+            else stats[r.result] = (stats[r.result] || 0) + 1;
+        }
+        return { market, stats, records };
+    }
+
     function healthReport() {
         const report = {};
         for (const m of markets) {
@@ -553,6 +580,7 @@ function createMarketEngine({ storage, binance, indicators, config, now = () => 
         getMarketState,
         getTimeframeSnapshot,
         healthReport,
+        signalRecords,
         timeframes: allTfs,
         roleTimeframes: roleTfs,
     };

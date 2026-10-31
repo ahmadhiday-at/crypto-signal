@@ -6,12 +6,15 @@ const wsManager = require('./src/websocket/ws.manager');
 const binanceService = require('./src/services/binance.service');
 const { createMarketEngine } = require('./src/services/market.service');
 const { createScheduler } = require('./src/jobs/scheduler');
+const { createSignalLog } = require('./src/services/signal-log');
+const path = require('path');
 
 const engine = createMarketEngine({
     storage: require('./src/data/storage'),
     binance: binanceService,
     indicators: require('./src/services/indicator.service'),
     config,
+    signalLog: createSignalLog({ dir: path.join(__dirname, 'data/signals'), entryTf: config.TF_ROLES.entry }),
     notify: {
         timeframeUpdated: (market, timeframe) => wsManager.broadcastUpdate(market, timeframe),
         summaryUpdated: (market) => wsManager.broadcastSummary(market),

@@ -11,7 +11,7 @@ DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET
 - Logging is mandatory before any AI work.
 - Keep signal generation and execution separate.
 
-**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Next: Level 4 (Signal Logging & Dataset), then the Backtest Engine (5).
+**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Level 4 logging is live (v2.7.0) and collecting toward 1,000 labeled trades. Next: the Backtest Engine (5).
 
 ## Levels
 
@@ -20,7 +20,7 @@ DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET
 - [🎨 Level 2.5A — Visual Strategy Layer (dashboard) ✅](./level-2.5a.md)
 - [🧱 Level 2.5B — Trade Filter (capital protection) ✅](./level-2.5b.md)
 - [🧱 Level 3 — Signal Enrichment (actionability) ✅](./level-3.md)
-- [🧱 Level 4 — Signal Logging & Dataset (foundation)](./level-4.md)
+- [🧱 Level 4 — Signal Logging & Dataset (foundation) — collecting](./level-4.md)
 - [🧱 Level 5 — Backtest Engine (quantification)](./level-5.md)
 - [🧱 Level 6 — Performance Analysis (optimization)](./level-6.md)
 - [🧱 Level 7 — AI Signal](./level-7.md)

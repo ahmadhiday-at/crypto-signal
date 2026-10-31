@@ -39,7 +39,7 @@ Boundaries are computed in UTC, so daily and 4-hourly candles align with Binance
 - Every file read is validated. Corrupt JSON, legacy (pre-2.0.0) snapshots, files that fail validation and files whose candle close time is more than 60 seconds in the future (clock problem) are treated as missing and refetched; they are never served. A file that turns bad after startup is refetched on the next tick.
 - A failed update leaves the previous file in place.
 - The Market State records the input candle close time for each role timeframe (`inputs`), so a summary can be traced back to its inputs.
-- **Scope:** `data/` is a cache of the latest state only, with no history. Reproducing past summaries requires the signal log planned in Roadmap Level 4.
+- **Scope:** `data/chart` and `data/market` are a cache of the latest state only, with no history. `data/signals/*.jsonl` (since 2.7.0) is append-only: one line per new signal, one per outcome; a truncated last line from a crash is skipped on read.
 
 ## O5. Freshness and degraded state
 
