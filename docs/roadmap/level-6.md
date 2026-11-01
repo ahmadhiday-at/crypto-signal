@@ -10,6 +10,6 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
 - [x] **Setup sweep (v2.11.0):** `stop_atr`, `target` (tp1/tp2/fixed R), `side`, `skip_energy` added to `--sweep`.
 - **Setup validation run (2026-11-01):** BTC/SOL/BNB, 1 year, fee 0.1%, split 0.7, 64 variants (threshold 5/6 × target tp1/tp2/1.5R/2R × SL 0.5/1 ATR × side both/sell × skip_energy none/explosive+building). Best in-sample everywhere: SELL-only, threshold 6, target tp2 or 2R (IS +0.13 to +0.21 R). Out-of-sample: SOL +0.19 R (28 trades), BTC ≈ 0 R, BNB −0.32 R. No variant is positive in- and out-of-sample on all three pairs. The SELL edge likely reflects the year's downtrend (BTC ≈ 109k → 77k), not a stable pattern. **Live parameters unchanged.** Next: regime-aware rules (trade with the 1d trend) instead of a fixed side, or more history.
 - [ ] **Pick and validate new parameters:** sweep → choose → confirm on another period/symbol and with fees before changing the live defaults (avoid in-sample overfitting).
-- [ ] **False-breakout analysis:** why `fake_breakout_risk` was wrong in specific cases.
+- [ ] **False-breakout analysis** (moved to [Level 6.5](./level-6.5.md) C): why `fake_breakout_risk` was wrong in specific cases.
 
 **Success criteria:** weight changes that raise the win rate by at least 5%.

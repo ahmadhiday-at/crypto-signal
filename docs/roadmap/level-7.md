@@ -2,6 +2,7 @@
 
 Roadmap level: goals, milestones and success criteria. Overview: [README.md](./README.md).
 **Objective:** use machine learning to replace heuristics with patterns.
+**Prerequisite:** [Level 6.5](./level-6.5.md) success criterion (positive out-of-sample expectancy after fees on BTC/SOL/BNB).
 
 - [ ] **Weight optimizer (ML):** adjust scoring weights dynamically per regime.
 - [ ] **Pattern recognition:** LSTM/Transformer for non-linear patterns (swing failure, fake breakouts, consolidation).

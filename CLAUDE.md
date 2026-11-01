@@ -36,7 +36,7 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 - Env vars, config → `docs/architecture/config.md`, `.env.example`
 - Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
 - Backtest report fields → `docs/contract/rest.md` (Backtest report)
-- Planned work → `docs/roadmap/level-6.md` (active: pick/validate parameters); other levels in `docs/roadmap/`
+- Planned work → `docs/roadmap/level-6.5.md` (active: signal quality); other levels in `docs/roadmap/`
 
 ## When a task is done
 
