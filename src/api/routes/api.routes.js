@@ -26,6 +26,7 @@ function createApiRouter(controller) {
     router.get('/config', controller.getConfig);
     router.get('/signals/:market', controller.getSignals);
     router.get('/backtest/:market', controller.getBacktest);
+    router.get('/edge/:market', controller.getEdge);
     router.get('/health', controller.getHealth);
     router.post('/reset', requireSameOriginAction, controller.resetData);
     router.all('/reset', (req, res) => res.set('Allow', 'POST').status(405).json({ error: 'method_not_allowed' }));

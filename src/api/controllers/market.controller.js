@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { toCsv } = require('../../services/signal-log');
+const { edgeSummary, liveParams } = require('../../services/edge');
 
 // Read on each call so a version bump shows up without restarting the server.
 function appVersion() {
@@ -76,6 +77,21 @@ function createMarketController({ engine, config, reports = null }) {
         }
     }
 
+    // How proven the signal is: latest backtest + live signal log (docs/contract/rest.md).
+    async function getEdge(req, res, next) {
+        try {
+            const { market } = req.params;
+            if (!engine.isMarket(market)) return unknown(res);
+            const [report, log] = await Promise.all([
+                reports ? reports.read(market) : null,
+                engine.signalRecords(market),
+            ]);
+            res.json(edgeSummary(market, report, log, liveParams(config)));
+        } catch (err) {
+            next(err);
+        }
+    }
+
     function getHealth(req, res) {
         res.json(engine.healthReport());
     }
@@ -96,7 +112,7 @@ function createMarketController({ engine, config, reports = null }) {
         }
     }
 
-    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getHealth, resetData };
+    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getHealth, resetData };
 }
 
 module.exports = { createMarketController };

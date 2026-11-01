@@ -14,7 +14,7 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
 ## Milestones (in order)
 
 **A. Honest output**
-- [ ] **Edge indicator on the dashboard:** next to the signal, the latest backtest result for the symbol (taken expectancy, win rate, trades, fee, date) and live Signal Log stats (Level 4); label the signal "unproven" / "negative edge" when expectancy ≤ 0 or the sample is too small.
+- [x] **Edge indicator on the dashboard (v2.12.0):** `GET /api/edge/:symbol`; next to the signal, the latest backtest result for the symbol (taken expectancy, win rate, trades, fee, date) and live Signal Log stats (Level 4); label the signal "unproven" / "negative edge" when expectancy ≤ 0 or the sample is too small.
 
 **B. Signal logic** (each change is a sweepable backtest option first; live defaults change only after step B4)
 - [ ] **B1. HTF trend filter:** BUY only when the 1d/4h trend is up or ranging, SELL only when down; new filter code `against_htf_trend`. Replaces the fixed-side result (SELL-only worked only because the year fell).

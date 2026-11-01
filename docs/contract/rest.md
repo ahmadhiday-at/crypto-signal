@@ -10,6 +10,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
 | Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
+| Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
 | UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
 | UI | `/backtest/:symbol` | `GET` | Backtest report page: metrics, equity curve, trades. |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
@@ -62,3 +63,26 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 - **`validation`** (since 2.10.0): `null` without `--split`. `--split R` (0.5–0.9) sets `split_at` = start + R × (end − start). `{split_at, min_trades (30), selected, rows}`; each row `{base, params, in_sample, out_of_sample}` holds the taken-trade `summary` of signals before / from `split_at`. `selected` is the row index with the best in-sample `expectancy_r` among rows with at least `min_trades` in-sample trades (`null` if none).
 - **`summary`:** `trades` (closed as WIN/LOSS/EXPIRED), `wins`, `losses`, `expired`, `win_rate`, `avg_win_r`, `avg_loss_r`, `expectancy_r`, `total_r`, `profit_factor` (gross win R / gross loss R), `max_drawdown_r` (on cumulative R), `open`, `unknown`.
 - **Fees:** `net_r` = `rr` − `fee_pct`/100 × price / risk. Results are hypothetical: entry at the signal candle close, no order execution.
+
+## Edge
+
+`GET /api/edge/:symbol` (Roadmap Level 6.5 A). Built on each request from `data/backtest/{MARKET}.json` and the signal log; shown in the dashboard Signal card.
+
+```json
+{
+  "market": "BTCUSDT",
+  "verdict": "negative",
+  "reasons": ["negative_expectancy"],
+  "min_trades": 30,
+  "backtest": {
+    "generated_at": 1793499327, "period": { "start": 1761963300, "end": 1793498400 }, "fee_pct": 0.1, "params_match": true,
+    "taken": { "trades": 71, "win_rate": 0.1549, "expectancy_r": -0.2441, "profit_factor": 0.64 },
+    "out_of_sample": { "split_at": 1784038460, "trades": 20, "win_rate": 0.1, "expectancy_r": -0.3118, "profit_factor": 0.58 }
+  },
+  "live_log": { "open": 0, "trades": 0, "win_rate": null, "expectancy_r": null, "profit_factor": null }
+}
+```
+
+- **`verdict`:** `unproven` when there is no backtest (`no_backtest`), its parameters differ from the live ones (`params_differ`: threshold, min RR, SL buffer, target `tp1`, both sides, no energy skip, role-timeframe weights, window = `CANDLE_LIMIT` − 1) or it has fewer than `min_trades` taken trades (`too_few_trades`); `negative` when taken `expectancy_r` ≤ 0 (`negative_expectancy`) or the live-parameter out-of-sample `expectancy_r` ≤ 0 (`negative_out_of_sample`); otherwise `positive`. `no_fees` is added when the backtest used `fee_pct` 0.
+- **`backtest`:** `null` without a report. `taken` = report `taken.summary` subset; `out_of_sample` = the base row of `validation` (`null` without `--split`).
+- **`live_log`:** `null` when the signal log is disabled. Taken (not filtered) records only; `trades`/`win_rate`/`expectancy_r`/`profit_factor` over WIN/LOSS/EXPIRED in R (`rr`, no fees); `open` = records without an outcome.

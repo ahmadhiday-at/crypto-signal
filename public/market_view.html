@@ -141,6 +141,9 @@
                 </div>
                 <div id="signal-reasons" class="mt-1 space-y-0.5 text-[11px] mono"></div>
                 <div id="signal-plan" class="mt-2 pt-2 border-t border-white/5 space-y-0.5 text-[11px] mono hidden"></div>
+                <div id="signal-edge" class="mt-2 pt-2 border-t border-white/5 space-y-0.5 text-[11px] mono">
+                    <div class="text-gray-500 uppercase text-[10px] font-bold">Edge: loading...</div>
+                </div>
             </div>
 
             <div class="glass p-3 rounded-xl shrink-0">
@@ -291,10 +294,13 @@
             await setupChart();
             await refreshMarketState();
             await loadChartData();
+            refreshEdge();
             setupWebSocket();
             // Re-read the server's freshness verdict every minute so the banner turns stale even if
             // no update messages arrive.
             setInterval(refreshMarketState, 60000);
+            // Backtests run rarely and the log grows per signal: every 5 minutes is enough.
+            setInterval(refreshEdge, 300000);
         }
 
         async function loadMarketSelector() {
@@ -417,6 +423,81 @@
                 list.appendChild(row);
             });
             renderPlan(sig.plan, sig.filtered);
+        }
+
+        // Level 6.5 A: how proven the signal is (latest backtest + live signal log), from /api/edge.
+        const EDGE_VERDICTS = {
+            positive: ['POSITIVE (BACKTEST)', COLORS.bullish.text],
+            negative: ['NEGATIVE — do not trade on this alone', COLORS.bearish.text],
+            unproven: ['UNPROVEN', COLORS.warning.text],
+        };
+        const EDGE_REASONS = {
+            no_backtest: (m) => `No backtest yet: npm run backtest -- ${m}`,
+            params_differ: () => 'Backtest used other parameters: run it again',
+            too_few_trades: (m, e) => `Fewer than ${e.min_trades} backtest trades`,
+            negative_out_of_sample: () => 'Negative on the out-of-sample part',
+            no_fees: () => 'Backtest without fees (use --fee 0.1)',
+        };
+
+        async function refreshEdge() {
+            const box = document.getElementById('signal-edge');
+            let edge;
+            try {
+                const res = await fetch(`/api/edge/${state.market}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                edge = await res.json();
+            } catch (err) {
+                box.replaceChildren(edgeLine('Edge: unavailable', null, 'text-gray-500 uppercase text-[10px] font-bold'));
+                return;
+            }
+            const [title, color] = EDGE_VERDICTS[edge.verdict] || EDGE_VERDICTS.unproven;
+            const rows = [edgeLine(`Edge: ${title}`, color, 'uppercase text-[10px] font-bold')];
+            const pct = (v) => typeof v === 'number' ? fmtNum(v * 100, 1) + '%' : '-';
+            const r = (v) => typeof v === 'number' ? `${v > 0 ? '+' : ''}${fmtNum(v, 3)} R` : '-';
+            const b = edge.backtest;
+            if (b && b.taken) {
+                const date = b.generated_at ? new Date(b.generated_at * 1000).toISOString().slice(0, 10) : '-';
+                rows.push(edgeKv('Backtest', `${r(b.taken.expectancy_r)} · ${pct(b.taken.win_rate)} · n ${b.taken.trades}`, b.taken.expectancy_r));
+                if (b.out_of_sample) rows.push(edgeKv('Out-of-sample', `${r(b.out_of_sample.expectancy_r)} · n ${b.out_of_sample.trades}`, b.out_of_sample.expectancy_r));
+                rows.push(edgeKv('Run', `${date} · fee ${fmtNum(b.fee_pct, 2)}%`));
+            }
+            const l = edge.live_log;
+            if (l) {
+                rows.push(edgeKv('Live log', l.trades ? `${r(l.expectancy_r)} · ${pct(l.win_rate)} · n ${l.trades}, ${l.open} open` : `0 closed, ${l.open} open`, l.trades ? l.expectancy_r : null));
+            }
+            for (const code of edge.reasons) {
+                const text = EDGE_REASONS[code]?.(state.market, edge);
+                if (text) rows.push(edgeLine(text, COLORS.warning.text));
+            }
+            const link = document.createElement('a');
+            link.href = `/backtest/${encodeURIComponent(state.market)}`;
+            link.className = 'text-blue-400 hover:underline';
+            link.textContent = 'Backtest report →';
+            rows.push(link);
+            box.replaceChildren(...rows);
+        }
+
+        function edgeLine(text, color, cls = '') {
+            const el = document.createElement('div');
+            el.className = cls;
+            el.textContent = text;
+            if (color) el.style.color = color;
+            return el;
+        }
+
+        function edgeKv(key, value, toneValue = null) {
+            const row = document.createElement('div');
+            row.className = 'flex justify-between gap-2';
+            const a = document.createElement('span');
+            a.className = 'text-gray-400 whitespace-nowrap';
+            a.textContent = key;
+            const v = document.createElement('span');
+            v.className = 'text-right';
+            v.title = 'R per trade · win rate · trades';
+            v.textContent = value;
+            if (typeof toneValue === 'number') v.style.color = toneValue > 0 ? COLORS.bullish.text : toneValue < 0 ? COLORS.bearish.text : '';
+            row.append(a, v);
+            return row;
         }
 
         function renderPlan(plan, filtered) {
