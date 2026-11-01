@@ -16,7 +16,7 @@ class IndicatorService {
     calculateAll(klines, market, timeframe, meta = {}) {
         try {
             if (!klines || klines.length < 200) {
-                throw new CalculationError('insufficient_data', 'Insufficient data for indicator calculation (need at least 200 closed candles)');
+                throw new CalculationError('insufficient_data', `Insufficient data for indicator calculation (${klines ? klines.length : 0} closed candles, need at least 200)`);
             }
 
             const closes = klines.map(k => k.close);

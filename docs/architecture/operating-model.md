@@ -27,7 +27,7 @@ Boundaries are computed in UTC, so daily and 4-hourly candles align with Binance
 - **At most one update in flight per (market, timeframe).** A trigger arriving while the same update runs joins it and gets the same result.
 - **Market State builds are serialised per market**, so concurrent triggers cannot publish interleaved results.
 - **Monotonic writes:** a fetched snapshot whose latest closed candle is older than the stored one is discarded; a summary whose entry candle is older than the stored summary's is not written.
-- **Retry throttle:** after a **failed** fetch, a timeframe that is behind (but not at its own boundary) is retried at most once per min(timeframe, 5 minutes). After a successful fetch that is still behind (Binance had not finalised the candle), it is retried on the next minute tick.
+- **Retry throttle:** after a **failed** fetch, a timeframe that is behind (but not at its own boundary) is retried at most once per min(timeframe, 5 minutes). After a successful fetch that is still behind (Binance had not finalised the candle), it is retried on the next minute tick. After `insufficient_data` (Binance history shorter than 200 candles, e.g. a recently listed pair on `1w`), the timeframe is not refetched (also not on reconnect or a chart request) until its next candle closes; only a reset forces it (since 2.13.1).
 - **Summary build queue:** at most one build runs and at most one waits per market; further requests share the waiting build.
 - **Reset:** one at a time (409) and at most once per 60 seconds (429 with `Retry-After`).
 - **Assumption:** a single Node.js process owns `data/`. Running two instances against the same `data/` directory is not supported.
@@ -60,7 +60,7 @@ Boundaries are computed in UTC, so daily and 4-hourly candles align with Binance
 | HTTP 451 (restricted location) | No retry. Pause all REST calls for 15 minutes, record `binance_451`. The app never switches VPN exits or otherwise works around the restriction; see [DEPLOYMENT.md → Akses Binance](../DEPLOYMENT.md#akses-binance-dan-kebijakan-penggunaan) |
 | Other HTTP 4xx | No retry, record `binance_http` |
 | Malformed response | Nothing stored, record `invalid_response` |
-| Fewer than 200 closed candles / non-finite indicator values | Nothing stored, record `insufficient_data` / `calculation_failed` |
+| Fewer than 200 closed candles / non-finite indicator values | Nothing stored, record `insufficient_data` / `calculation_failed`. `insufficient_data` logs one warning (with the candle count) instead of an error per retry and waits for the next candle close; it affects the Market State only when it hits a role timeframe |
 | Disk / permission error | Previous file kept, record `storage_failed` |
 | Stream disconnect | Reconnect with exponential backoff (5 s → 60 s; 15 minutes after a 451), then catch up every timeframe that is behind |
 

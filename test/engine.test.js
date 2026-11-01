@@ -283,3 +283,39 @@ test('many concurrent summary requests share queued builds', async () => {
     await Promise.all(Array.from({ length: 20 }, () => engine.rebuildSummary('BTCUSDT')));
     assert.ok(writes <= 2, `expected at most 2 builds, got ${writes}`);
 });
+
+test('a timeframe with too little Binance history warns once and waits for its next candle close', async () => {
+    const config = { ...testConfig, TIMEFRAMES: [...testConfig.TIMEFRAMES, '1w'] };
+    const clock = { ms: (MIDNIGHT + 5) * 1000 };
+    const binance = fakeBinance({ now: () => clock.ms });
+    binance.options['1w'] = { count: 120 };
+    const warnings = [];
+    const errors = [];
+    const log = { log() {}, warn: (m) => warnings.push(m), error: (m) => errors.push(m) };
+    const engine = createMarketEngine({ storage: tempStorage(), binance, indicators: require('../src/services/indicator.service'), config, now: () => clock.ms, log });
+
+    await engine.initialize();
+    assert.equal((await engine.getMarketState('BTCUSDT')).httpStatus, 200, 'role timeframes unaffected');
+    const weekly = () => binance.calls.filter(c => c === 'BTCUSDT|1w').length;
+    assert.equal(weekly(), 1);
+    assert.equal(errors.length, 0);
+    assert.equal(warnings.filter(w => w.includes('1w skipped') && w.includes('120 closed candles')).length, 1);
+    assert.equal(engine.healthReport().markets.BTCUSDT['1w'].last_error.code, 'insufficient_data');
+
+    // Minute ticks, a chart request and a reconnect do not refetch before the weekly candle closes.
+    for (let i = 1; i <= 12; i++) {
+        clock.ms += 600 * 1000;
+        await engine.runBoundary(MIDNIGHT + i * 600);
+    }
+    await engine.getTimeframeSnapshot('BTCUSDT', '1w');
+    await engine.refreshStale();
+    assert.equal(weekly(), 1);
+
+    // After the next weekly close it is tried again, still without a second warning.
+    const nextWeek = expectedLastClose(MIDNIGHT, '1w') + 7 * 86400;
+    clock.ms = (nextWeek + 5) * 1000;
+    await engine.runBoundary(nextWeek);
+    assert.equal(weekly(), 2);
+    assert.equal(warnings.filter(w => w.includes('1w skipped')).length, 1);
+    assert.equal(errors.length, 0);
+});

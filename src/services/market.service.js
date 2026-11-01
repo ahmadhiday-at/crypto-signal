@@ -277,6 +277,8 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
         const h = healthOf(market, tf);
         const expected = expectedLastClose(t, tf);
         if (h.candle_close_time !== null && h.candle_close_time >= expected) return false;
+        // Too little history (e.g. a recently listed pair on 1w): it grows only when a new candle closes.
+        if (h.last_error?.code === 'insufficient_data' && expected <= h.last_error.until_close) return false;
         const failedRecently = h.last_error && h.last_attempt_at !== null && t - h.last_attempt_at < Math.min(tfSeconds(tf), 300);
         if (!ignoreThrottle && failedRecently) return false;
         return true;
@@ -308,8 +310,18 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
             return { updated: true, candle_close_time: snap.candle_close_time };
         } catch (err) {
             const code = codeOf(err);
+            const prev = h.last_error;
             h.last_error = { code, at: nowSec() };
-            log.error(`[Update] ${market}/${tf} failed (${code}): ${err.message}`);
+            if (code === 'insufficient_data') {
+                // Expected for pairs whose Binance history is shorter than 200 candles: warn once, then
+                // wait for the next candle close instead of retrying every few minutes.
+                h.last_error.until_close = expectedLastClose(nowSec(), tf);
+                if (prev?.code !== 'insufficient_data') {
+                    log.warn(`[Update] ${market}/${tf} skipped: ${err.message}; Binance history is too short, retrying after the next ${tf} close`);
+                }
+            } else {
+                log.error(`[Update] ${market}/${tf} failed (${code}): ${err.message}`);
+            }
             return { updated: false, error: code };
         }
     }
