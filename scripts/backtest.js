@@ -1,7 +1,9 @@
 // Backtest CLI (docs/roadmap/level-5.md).
-// Usage: npm run backtest -- [SYMBOL] [--days 365] [--fee 0] [--sweep key=v1,v2 ...]
+// Usage: npm run backtest -- [SYMBOL] [--days 365] [--fee 0] [--sweep key=v1,v2 ...] [--split 0.7]
 // --sweep (Level 6) replays parameter variants on the same history: keys `threshold`, `min_rr` and
 // `w_<tf>` (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
+// --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
+// reports how it does on the remaining 30%.
 // Downloads/extends the history cache in data/history/, replays the signal engine and writes
 // data/backtest/{SYMBOL}.json (shown at /backtest/{SYMBOL}). In Docker run it inside the app
 // container so requests go through the VPN: docker compose exec app npm run backtest -- BTCUSDT
@@ -52,17 +54,19 @@ function variantsOf(sweeps) {
 }
 
 function parseArgs(argv, roleTfs) {
-    const args = { market: config.MARKETS[0], days: 365, fee: 0, sweeps: [] };
+    const args = { market: config.MARKETS[0], days: 365, fee: 0, sweeps: [], split: null };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--days') args.days = Number(argv[++i]);
         else if (a === '--fee') args.fee = Number(argv[++i]);
         else if (a === '--sweep') args.sweeps.push(parseSweep(argv[++i], roleTfs));
+        else if (a === '--split') args.split = Number(argv[++i]);
         else if (!a.startsWith('--')) args.market = a.toUpperCase();
         else throw new Error(`Unknown option ${a}`);
     }
     if (!(args.days > 0 && args.days <= 1500)) throw new Error('--days must be 1–1500');
     if (!(args.fee >= 0 && args.fee < 5)) throw new Error('--fee must be a round-trip percent between 0 and 5');
+    if (args.split !== null && !(args.split >= 0.5 && args.split <= 0.9)) throw new Error('--split must be between 0.5 and 0.9');
     if (!/^[A-Z0-9]{2,20}$/.test(args.market)) throw new Error(`Invalid symbol ${args.market}`);
     if (new Set(args.sweeps.map(([k]) => k)).size !== args.sweeps.length) throw new Error('--sweep: each key once');
     args.variants = variantsOf(args.sweeps);
@@ -84,6 +88,23 @@ function printSweep(report, keys) {
         const cells = [s.trades, fmt(s.win_rate === null ? null : s.win_rate * 100, 1), fmt(s.expectancy_r, 3), fmt(s.total_r), fmt(s.profit_factor), fmt(s.max_drawdown_r)];
         console.log(`${(r.base ? '* ' : '  ') + label(r.params)}`.padEnd(width) + cells.map(c => String(c).padStart(9)).join(''));
     }
+}
+
+// In-sample vs out-of-sample taken results; `>` marks the variant chosen in-sample.
+function printValidation(report, keys) {
+    const v = report.validation;
+    const label = (p) => keys.map(k => `${k}=${k.startsWith('w_') ? p.weights[k.slice(2)] : p[k]}`).join(' ') || 'live';
+    const width = Math.max(14, ...v.rows.map(r => label(r.params).length)) + 2;
+    console.log(`\nValidation, split ${new Date(v.split_at * 1000).toISOString().slice(0, 10)} (taken; pick = best in-sample exp with ≥ ${v.min_trades} trades)`);
+    console.log(''.padEnd(width) + ['IS n', 'IS exp', 'OOS n', 'OOS win%', 'OOS exp', 'OOS PF'].map(h => h.padStart(9)).join(''));
+    for (const [idx, r] of v.rows.entries()) {
+        const a = r.in_sample;
+        const b = r.out_of_sample;
+        const cells = [a.trades, fmt(a.expectancy_r, 3), b.trades, fmt(b.win_rate === null ? null : b.win_rate * 100, 1), fmt(b.expectancy_r, 3), fmt(b.profit_factor)];
+        const mark = (idx === v.selected ? '>' : ' ') + (r.base ? '*' : ' ');
+        console.log(`${mark} ${label(r.params)}`.padEnd(width) + cells.map(c => String(c).padStart(9)).join(''));
+    }
+    if (v.selected === null) console.log(`No variant has ${v.min_trades}+ in-sample trades.`);
 }
 
 async function main() {
@@ -110,6 +131,7 @@ async function main() {
     const report = runBacktest({
         market: args.market, candlesByTf, roles, weights: config.TF_WEIGHTS, indicators,
         startSec, feePct: args.fee, window, variants: args.variants,
+        splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),
         onProgress: (n) => process.stdout.write(`\r[Backtest] ${n} candles`),
     });
     report.generated_at = Math.floor(Date.now() / 1000);
@@ -124,6 +146,7 @@ async function main() {
     }
     console.log(table(rows));
     if (report.sweep) printSweep(report, args.sweeps.map(([k]) => k));
+    if (report.validation) printValidation(report, args.sweeps.map(([k]) => k));
     console.log(`Fee ${args.fee}% round trip. Report: data/backtest/${args.market}.json → /backtest/${args.market}`);
 }
 

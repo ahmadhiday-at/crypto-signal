@@ -1,0 +1,205 @@
+{
+  "schema_version": 2,
+  "market": "XAUTUSDT",
+  "timeframe": "multitimeframe",
+  "timeframe_list": [
+    "1d",
+    "4h",
+    "1h",
+    "15m"
+  ],
+  "price": 3880.2,
+  "context": "near_support",
+  "momentum": "neutral",
+  "regime": "ranging",
+  "ohlcv": {
+    "time": 1793493900,
+    "open": 3880.02,
+    "high": 3880.2,
+    "low": 3880.02,
+    "close": 3880.2,
+    "volume": 10.3182
+  },
+  "indicators": {
+    "ma14": 3879.783571428572,
+    "ma50": 3879.8021999999996,
+    "ma200": 3914.5399500000044,
+    "rsi": 54.45,
+    "macd": {
+      "MACD": 0.0031338727299043967,
+      "signal": -0.034104941380981295,
+      "histogram": 0.03723881411088569
+    },
+    "atr": 0.4913286672990169,
+    "volume": 10.3182
+  },
+  "levels": {
+    "support": [
+      {
+        "low": 3848.07088454453,
+        "high": 3902.80911545547,
+        "mid": 3875.44,
+        "touches": 1,
+        "score": 10,
+        "tfs": [
+          "1d",
+          "4h",
+          "1h",
+          "15m"
+        ],
+        "score_raw": 265.5
+      }
+    ],
+    "resistance": [
+      {
+        "low": 3956.2268845445305,
+        "high": 4010.9651154554704,
+        "mid": 3983.5960000000005,
+        "touches": 5,
+        "score": 10,
+        "tfs": [
+          "1d",
+          "4h",
+          "1h",
+          "15m"
+        ],
+        "score_raw": 480.3
+      },
+      {
+        "low": 3991.39488454453,
+        "high": 4046.13311545547,
+        "mid": 4018.764,
+        "touches": 5,
+        "score": 7.7,
+        "tfs": [
+          "1d",
+          "4h",
+          "1h",
+          "15m"
+        ],
+        "score_raw": 370
+      },
+      {
+        "low": 3879.5570004105593,
+        "high": 3883.286157484178,
+        "mid": 3881.4215789473687,
+        "touches": 19,
+        "score": 4.79,
+        "tfs": [
+          "1h",
+          "15m"
+        ],
+        "score_raw": 230
+      }
+    ]
+  },
+  "timestamp": 1793493900,
+  "timeframes": {
+    "1d": {
+      "price": 3879.71,
+      "context": "near_support",
+      "momentum": "bearish",
+      "regime": "trending",
+      "timestamp": 1793404800
+    },
+    "4h": {
+      "price": 3879.71,
+      "context": "near_support",
+      "momentum": "bearish",
+      "regime": "trending",
+      "timestamp": 1793476800
+    },
+    "1h": {
+      "price": 3880.2,
+      "context": "mid_range",
+      "momentum": "neutral",
+      "regime": "ranging",
+      "timestamp": 1793491200
+    },
+    "15m": {
+      "price": 3880.2,
+      "context": "mid_range",
+      "momentum": "neutral",
+      "regime": "ranging",
+      "timestamp": 1793493900
+    }
+  },
+  "volatility_ratio": 0.317,
+  "divergence": "none",
+  "position": "closer_to_support",
+  "zone_state": "normal",
+  "dominant_side": "resistance",
+  "market_pressure": "bearish_lean",
+  "market_energy": "stable",
+  "breakout_score": 0.44,
+  "breakout_confirmation": "weak",
+  "volume_state": "normal",
+  "setup_state": "no_trade",
+  "fake_breakout_risk": "low",
+  "regime_global": "weak_trend",
+  "distance": {
+    "to_support": 0.0012,
+    "to_resistance": 0.0266
+  },
+  "distance_percent": {
+    "to_support": 0.12,
+    "to_resistance": 2.66
+  },
+  "generated_at": 1793495264,
+  "inputs": {
+    "1d": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "4h": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "1h": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    },
+    "15m": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    }
+  },
+  "status": "ok",
+  "errors": [],
+  "signal": {
+    "action": "WAIT",
+    "score": 5,
+    "strength": "medium",
+    "reasons": [
+      {
+        "code": "near_support",
+        "points": 2
+      },
+      {
+        "code": "strong_htf_support",
+        "points": 3
+      }
+    ],
+    "filtered": true,
+    "filters": [
+      "volatility_dead",
+      "low_rr"
+    ],
+    "plan": {
+      "side": "long",
+      "entry_zone": [
+        3848.070885,
+        3902.809115
+      ],
+      "stop_loss": 3847.82522,
+      "take_profit_1": 3881.421579,
+      "take_profit_2": 3983.596,
+      "risk_reward": 0.04,
+      "trailing_stop": 3879.463007
+    }
+  }
+}

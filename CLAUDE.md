@@ -10,7 +10,7 @@ Node.js ≥22 (Docker: Node 24). No linter/build step.
 npm run dev    # nodemon: server.js + src/, ignores data/
 npm test       # node:test, no network
 npm run backtest -- BTCUSDT --days 365   # hits Binance; in Docker: docker compose exec app npm run backtest -- …
-npm run backtest -- BTCUSDT --sweep threshold=4,5,6 --sweep min_rr=1,1.5   # parameter sweep (max 64 combos)
+npm run backtest -- BTCUSDT --sweep threshold=4,5,6 --sweep min_rr=1,1.5 --split 0.7   # sweep + out-of-sample check
 node --test --test-name-pattern="reset" "test/**/*.test.js"
 docker compose up -d            # add --build if package*.json or Dockerfile changed
 docker compose restart app      # after .env changes

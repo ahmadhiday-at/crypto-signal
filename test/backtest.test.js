@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { runBacktest, metrics, breakdown, createReports } = require('../src/services/backtest');
+const { runBacktest, metrics, breakdown, createReports, VALIDATION_MIN_TRADES } = require('../src/services/backtest');
 const { parseArgs } = require('../scripts/backtest');
 const { createHistory } = require('../src/services/history');
 const { evaluate, EXPIRY_CANDLES } = require('../src/services/signal-log');
@@ -122,6 +122,23 @@ test('breakdown: every dimension splits the trades; filtered trades count once p
     assert.equal(breakdown([{ ...t([], 'WIN', 1), filtered: false }]).filter, undefined);
 });
 
+test('validation: taken trades split at splitSec; pick = best in-sample expectancy with enough trades', () => {
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
+    assert.equal(runBacktest(args).validation, null);
+    const splitSec = NOW - 4 * 86400;
+    const report = runBacktest({ ...args, variants: [{ threshold: 6 }, { min_rr: 0 }], splitSec });
+    const v = report.validation;
+    assert.equal(v.split_at, splitSec);
+    assert.equal(v.rows.length, 3);
+    assert.equal(v.rows[0].base, true);
+    const taken = report.trades.filter(t => !t.filtered);
+    assert.deepEqual(v.rows[0].in_sample, metrics(taken.filter(t => t.time < splitSec)).summary);
+    assert.deepEqual(v.rows[0].out_of_sample, metrics(taken.filter(t => t.time >= splitSec)).summary);
+    const eligible = v.rows.map((r, i) => [r, i]).filter(([r]) => r.in_sample.trades >= VALIDATION_MIN_TRADES && r.in_sample.expectancy_r !== null);
+    const best = eligible.sort((a, b) => b[0].in_sample.expectancy_r - a[0].in_sample.expectancy_r)[0];
+    assert.equal(v.selected, best ? best[1] : null);
+});
+
 test('CLI --sweep: combinations, validation and limits', () => {
     const tfs = ['1d', '4h', '1h', '15m'];
     const a = parseArgs(['btcusdt', '--sweep', 'threshold=4,5', '--sweep', 'w_15m=1,2'], tfs);
@@ -134,6 +151,9 @@ test('CLI --sweep: combinations, validation and limits', () => {
     assert.throws(() => parseArgs(['--sweep', 'w_5m=1'], tfs), /w_<tf>/);
     assert.throws(() => parseArgs(['--sweep', 'threshold=4.5'], tfs), /integers/);
     assert.throws(() => parseArgs(['--sweep', 'threshold=4', '--sweep', 'threshold=5'], tfs), /once/);
+    assert.equal(parseArgs(['--split', '0.7'], tfs).split, 0.7);
+    assert.equal(parseArgs([], tfs).split, null);
+    assert.throws(() => parseArgs(['--split', '0.95'], tfs), /0.5 and 0.9/);
     const many = Array.from({ length: 9 }, (_, i) => i + 1).join(',');
     assert.throws(() => parseArgs(['--sweep', `threshold=${many}`, '--sweep', `min_rr=${many}`], tfs), /max 64/);
 });

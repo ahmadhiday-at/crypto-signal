@@ -74,6 +74,20 @@
             </div>
         </div>
 
+        <div id="validation-card" class="hidden glass rounded-lg p-3">
+            <div class="text-xs mb-2 k" id="validation-note"></div>
+            <div class="overflow-auto" style="max-height: 360px;">
+                <table class="w-full text-xs mono">
+                    <thead><tr class="k text-left">
+                        <th>Parameters</th><th class="text-right">In-sample trades</th><th class="text-right">In-sample exp R</th>
+                        <th class="text-right">Out-of-sample trades</th><th class="text-right">OOS win rate</th><th class="text-right">OOS exp R</th><th class="text-right">OOS total R</th><th class="text-right">OOS PF</th>
+                    </tr></thead>
+                    <tbody id="validation"></tbody>
+                </table>
+            </div>
+            <div class="text-xs mt-2" id="validation-verdict"></div>
+        </div>
+
         <div class="glass rounded-lg p-3">
             <div class="flex flex-wrap items-center gap-3 mb-2 text-xs">
                 <span class="k">Breakdown by condition at the signal candle</span>
@@ -230,6 +244,42 @@
             }).join('');
         }
 
+        // Parameters chosen on the first part of the period, judged on the unseen rest.
+        function renderValidation(report) {
+            const v = report.validation;
+            if (!v) return;
+            document.getElementById('validation-card').classList.remove('hidden');
+            document.getElementById('validation-note').textContent =
+                `Out-of-sample validation (taken trades). In-sample: signals before ${fmtTime(v.split_at)}; out-of-sample: after. ` +
+                `▶ = best in-sample expectancy with at least ${v.min_trades} in-sample trades; ★ = live parameters.`;
+            const base = v.rows.find(r => r.base)?.params || report.params;
+            document.getElementById('validation').innerHTML = v.rows.map((r, idx) => {
+                const a = r.in_sample;
+                const b = r.out_of_sample;
+                return `<tr class="border-t border-gray-800 ${idx === v.selected ? 'bg-blue-500/10' : ''}">
+                    <td>${idx === v.selected ? '▶ ' : ''}${r.base ? '★ ' : ''}${esc(paramLabel(r.params, base))}</td>
+                    <td class="text-right">${esc(a.trades)}</td>
+                    <td class="text-right ${tone(a.expectancy_r)}">${esc(fmtNum(a.expectancy_r, 3))}</td>
+                    <td class="text-right">${esc(b.trades)}</td>
+                    <td class="text-right">${esc(fmtPct(b.win_rate))}</td>
+                    <td class="text-right ${tone(b.expectancy_r)}">${esc(fmtNum(b.expectancy_r, 3))}</td>
+                    <td class="text-right ${tone(b.total_r)}">${esc(fmtNum(b.total_r))}</td>
+                    <td class="text-right">${esc(fmtNum(b.profit_factor))}</td>
+                </tr>`;
+            }).join('');
+            const pick = v.rows[v.selected];
+            const verdict = document.getElementById('validation-verdict');
+            if (!pick) {
+                verdict.textContent = `No variant has ${v.min_trades}+ in-sample trades: nothing to validate.`;
+            } else {
+                const oos = pick.out_of_sample.expectancy_r;
+                verdict.className = `text-xs mt-2 ${tone(oos)}`;
+                verdict.textContent = `Pick: ${paramLabel(pick.params, base)} → out-of-sample ${fmtNum(oos, 3)} R over ${pick.out_of_sample.trades} trades` +
+                    (pick.out_of_sample.trades < MIN_SAMPLE ? ' (too few trades to judge).'
+                        : isNum(oos) && oos > 0 ? ' (edge held on unseen data).' : ' (edge did not hold on unseen data).');
+            }
+        }
+
         function renderBreakdown(report) {
             const group = report[document.getElementById('breakdown-group').value];
             const dims = group.breakdown || {};
@@ -275,6 +325,7 @@
             renderGroup('filtered', report.filtered);
             renderEquity(report);
             renderSweep(report);
+            renderValidation(report);
             document.getElementById('min-sample').textContent = MIN_SAMPLE;
             renderBreakdown(report);
             document.getElementById('breakdown-group').addEventListener('change', () => renderBreakdown(report));

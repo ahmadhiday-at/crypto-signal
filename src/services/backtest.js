@@ -96,6 +96,29 @@ function breakdown(trades) {
     return out;
 }
 
+// Out-of-sample check (Level 6): the variant with the best in-sample taken expectancy and at least
+// this many in-sample taken trades is the one judged on the later, unseen part of the period.
+const VALIDATION_MIN_TRADES = 30;
+
+// Splits each run's taken trades at `splitSec` (signal time) and picks the in-sample best.
+function validation(runs, splitSec) {
+    const rows = runs.map((run, idx) => {
+        const taken = run.trades.filter(t => !t.filtered);
+        return {
+            base: idx === 0,
+            params: run.params,
+            in_sample: metrics(taken.filter(t => t.time < splitSec)).summary,
+            out_of_sample: metrics(taken.filter(t => t.time >= splitSec)).summary,
+        };
+    });
+    let selected = null;
+    rows.forEach((r, idx) => {
+        if (r.in_sample.trades < VALIDATION_MIN_TRADES || r.in_sample.expectancy_r === null) return;
+        if (selected === null || r.in_sample.expectancy_r > rows[selected].in_sample.expectancy_r) selected = idx;
+    });
+    return { split_at: splitSec, min_trades: VALIDATION_MIN_TRADES, selected, rows };
+}
+
 // One parameter set of the replay. `weights` changes the zone merge, `threshold` and `min_rr` the signal.
 function normalizeParams(base, over = {}) {
     return {
@@ -108,7 +131,8 @@ function normalizeParams(base, over = {}) {
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
 // candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
 // overrides replayed on the same snapshots; the base parameters always run and give the main report.
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, variants = [], onProgress }) {
+// `splitSec` adds the out-of-sample `validation` (trades signalled before it are in-sample).
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, variants = [], splitSec = null, onProgress }) {
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
@@ -218,6 +242,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             taken: metrics(run.trades.filter(t => !t.filtered)).summary,
             filtered: metrics(run.trades.filter(t => t.filtered)).summary,
         })) : null,
+        validation: splitSec === null ? null : validation(runs, splitSec),
         trades: main.trades,
     };
 }
@@ -246,4 +271,4 @@ function createReports({ dir }) {
     };
 }
 
-module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS };
+module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS, VALIDATION_MIN_TRADES };

@@ -1269,6 +1269,12 @@ Sweep parameter (sejak v2.9.0): bandingkan beberapa nilai sekaligus pada history
 docker compose exec app npm run backtest -- BTCUSDT --days 365 --sweep threshold=4,5,6,7 --sweep min_rr=1,1.5,2
 ```
 
+Validasi out-of-sample (sejak v2.10.0): `--split 0.7` memilih varian terbaik di 70% periode awal (min 30 trade), lalu menilainya di 30% sisanya. Pakai fee realistis, mis. `--fee 0.1`.
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365 --fee 0.1 --split 0.7 --sweep threshold=4,5,6,7 --sweep min_rr=1,1.5,2
+```
+
 ### Start
 
 ```bash

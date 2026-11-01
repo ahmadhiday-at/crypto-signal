@@ -128,7 +128,7 @@ A high-performance "command center" designed for rapid state assessment.
 
 ### 3. Backtest report (`public/backtest.html`)
 
-Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve, the parameter sweep table (when `--sweep` was used), win rate/expectancy per condition at the signal candle (breakdown, taken or filtered; values with fewer than 20 trades greyed) and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
+Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve, the parameter sweep table (when `--sweep` was used), the out-of-sample validation table with the in-sample pick and its verdict (when `--split` was used), win rate/expectancy per condition at the signal candle (breakdown, taken or filtered; values with fewer than 20 trades greyed) and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
 
 ## 🚀 Design Goals
 

@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "market": "SOLUSDT",
   "timeframe": "multitimeframe",
   "timeframe_list": [
@@ -7,37 +8,37 @@
     "1h",
     "15m"
   ],
-  "price": 100.38,
+  "price": 95.75,
   "context": "compression_zone",
   "momentum": "neutral",
   "regime": "ranging",
   "ohlcv": {
-    "time": 1793276100,
-    "open": 100.29,
-    "high": 100.39,
-    "low": 100.26,
-    "close": 100.38,
-    "volume": 3328.75
+    "time": 1793493900,
+    "open": 95.7,
+    "high": 95.83,
+    "low": 95.66,
+    "close": 95.75,
+    "volume": 2861.511
   },
   "indicators": {
-    "ma14": 100.35857142857147,
-    "ma50": 100.33740000000007,
-    "ma200": 101.27194999999992,
-    "rsi": 51.35,
+    "ma14": 95.68928571428583,
+    "ma50": 95.86840000000002,
+    "ma200": 95.96924999999983,
+    "rsi": 50.25,
     "macd": {
-      "MACD": 0.025677836717818536,
-      "signal": -0.006336798337515399,
-      "histogram": 0.03201463505533393
+      "MACD": -0.08238174821396171,
+      "signal": -0.08611841027801422,
+      "histogram": 0.003736662064052501
     },
-    "atr": 0.2798844815167596,
-    "volume": 3328.75
+    "atr": 0.2077724631697811,
+    "volume": 2861.511
   },
   "levels": {
     "support": [
       {
-        "low": 97.10226853826366,
-        "high": 101.21773146173634,
-        "mid": 99.16,
+        "low": 92.75144765361946,
+        "high": 97.14855234638054,
+        "mid": 94.95,
         "touches": 1,
         "score": 10,
         "tfs": [
@@ -46,15 +47,39 @@
           "1h",
           "15m"
         ],
-        "score_raw": 988
+        "score_raw": 619.0999999999999
+      },
+      {
+        "low": 90.14144765361947,
+        "high": 94.53855234638054,
+        "mid": 92.34,
+        "touches": 1,
+        "score": 3.75,
+        "tfs": [
+          "1d",
+          "4h",
+          "1h"
+        ],
+        "score_raw": 232.4
+      },
+      {
+        "low": 71.91644765361946,
+        "high": 76.31355234638053,
+        "mid": 74.115,
+        "touches": 4,
+        "score": 0.28,
+        "tfs": [
+          "1d"
+        ],
+        "score_raw": 17.4
       }
     ],
     "resistance": [
       {
-        "low": 98.395601871597,
-        "high": 102.51106479506967,
-        "mid": 100.45333333333333,
-        "touches": 3,
+        "low": 93.62144765361946,
+        "high": 98.01855234638053,
+        "mid": 95.82,
+        "touches": 1,
         "score": 10,
         "tfs": [
           "1d",
@@ -62,83 +87,127 @@
           "1h",
           "15m"
         ],
-        "score_raw": 680.9
+        "score_raw": 507.50000000000006
       },
       {
-        "low": 100.85226853826366,
-        "high": 104.96773146173634,
-        "mid": 102.91,
-        "touches": 2,
-        "score": 7.47,
+        "low": 98.2547809869528,
+        "high": 102.65188567971387,
+        "mid": 100.45333333333333,
+        "touches": 3,
+        "score": 6.39,
         "tfs": [
           "1d",
           "4h",
-          "1h",
-          "15m"
+          "1h"
         ],
-        "score_raw": 508.8
+        "score_raw": 324.3
       },
       {
-        "low": 103.74893520493032,
-        "high": 107.864398128403,
+        "low": 103.60811432028612,
+        "high": 108.0052190130472,
         "mid": 105.80666666666666,
         "touches": 3,
-        "score": 2.36,
+        "score": 3.01,
         "tfs": [
           "1d"
         ],
-        "score_raw": 160.5
+        "score_raw": 152.7
       }
     ]
   },
-  "timestamp": 1793276100,
+  "timestamp": 1793493900,
   "timeframes": {
     "1d": {
-      "price": 100.4,
+      "price": 95.54,
       "context": "near_support",
       "momentum": "bearish",
       "regime": "trending",
-      "timestamp": 1793232000
+      "timestamp": 1793404800
     },
     "4h": {
-      "price": 100.38,
+      "price": 95.54,
       "context": "near_support",
-      "momentum": "neutral",
+      "momentum": "bearish",
       "regime": "trending",
-      "timestamp": 1793275200
+      "timestamp": 1793476800
     },
     "1h": {
-      "price": 100.38,
-      "context": "mid_range",
+      "price": 95.75,
+      "context": "near_support",
       "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1793275200
+      "timestamp": 1793491200
     },
     "15m": {
-      "price": 100.38,
+      "price": 95.75,
       "context": "mid_range",
       "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1793276100
+      "timestamp": 1793493900
     }
   },
+  "volatility_ratio": 0.822,
+  "divergence": "none",
   "position": "closer_to_resistance",
   "zone_state": "compression",
-  "dominant_side": "support",
-  "market_pressure": "bullish_compression",
-  "market_energy": "stable",
-  "breakout_score": 0.66,
+  "dominant_side": "equilibrium",
+  "market_pressure": "neutral_compression",
+  "market_energy": "cooling",
+  "breakout_score": 0.48,
   "breakout_confirmation": "weak",
-  "volume_state": "normal",
+  "volume_state": "low",
   "setup_state": "waiting_breakout",
-  "fake_breakout_risk": "low",
+  "fake_breakout_risk": "medium",
   "regime_global": "weak_trend",
   "distance": {
-    "to_support": 0.0122,
+    "to_support": 0.0084,
     "to_resistance": 0.0007
   },
   "distance_percent": {
-    "to_support": 1.22,
+    "to_support": 0.84,
     "to_resistance": 0.07
+  },
+  "generated_at": 1793495264,
+  "inputs": {
+    "1d": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "4h": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "1h": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    },
+    "15m": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    }
+  },
+  "status": "ok",
+  "errors": [],
+  "signal": {
+    "action": "WAIT",
+    "score": 0,
+    "strength": "weak",
+    "reasons": [
+      {
+        "code": "strong_htf_support",
+        "points": 3
+      },
+      {
+        "code": "strong_htf_resistance",
+        "points": -3
+      }
+    ],
+    "filtered": false,
+    "filters": [],
+    "plan": null
   }
 }
