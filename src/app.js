@@ -48,6 +48,8 @@ function createApp({ engine, config, reports = null, log = console }) {
     next();
   });
 
+  // The Market Dashboard of the first configured market is the main view.
+  app.get("/", (req, res) => res.redirect(302, `/${encodeURIComponent(config.MARKETS[0])}`));
   app.use(express.static(path.join(__dirname, "../public")));
   app.use("/api", createApiRouter(createMarketController({ engine, config, reports })));
   app.use("/", viewRoutes);

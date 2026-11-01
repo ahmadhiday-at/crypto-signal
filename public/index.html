@@ -115,6 +115,8 @@
             <div id="header-sr" class="sr-header-group"></div>
         </div>
         <div class="nav-actions">
+            <a id="link-dashboard" class="btn btn-sm btn-outline-light" href="/">Dashboard</a>
+            <a id="link-backtest" class="btn btn-sm btn-outline-light" href="/">Backtest</a>
             <span id="app-version" style="color:#787b86; font-size:11px; margin-right:8px;" title="App version"></span>
             <button class="btn btn-sm btn-outline-info" onclick="copyCurrentData()">Copy Data</button>
             <button class="btn btn-sm btn-outline-light" onclick="window.location.reload()">Refresh</button>
@@ -241,6 +243,8 @@
 
             // Initial title update
             updatePageTitle();
+            document.getElementById('link-dashboard').href = `/${encodeURIComponent(globalMarket)}`;
+            document.getElementById('link-backtest').href = `/backtest/${encodeURIComponent(globalMarket)}`;
 
 
             // Initialize Select Menus

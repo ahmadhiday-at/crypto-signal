@@ -61,6 +61,13 @@
             </button>
         </div>
         <div class="flex items-center gap-2">
+            <!-- Other views of this market; hrefs set in init (chart follows the selected timeframe). -->
+            <nav class="flex items-center gap-1 glass p-1 rounded-lg text-xs font-semibold" aria-label="Views">
+                <span class="px-2 py-0.5 rounded-md bg-gray-700 text-white" title="Market State, signal and zones">Dashboard</span>
+                <a id="link-chart" href="#" class="px-2 py-0.5 rounded-md text-gray-400 hover:text-white" title="Full multi-pane chart of one timeframe">Chart</a>
+                <a id="link-backtest" href="#" class="px-2 py-0.5 rounded-md text-gray-400 hover:text-white" title="Latest backtest report">Backtest</a>
+                <a id="link-signals" href="#" class="px-2 py-0.5 rounded-md text-gray-400 hover:text-white" title="Download the live signal log (CSV)">Signal log</a>
+            </nav>
             <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
             <div id="connection-status" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold glass text-gray-400">
                 <span class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></span>
@@ -276,6 +283,7 @@
             }
 
             lucide.createIcons();
+            updateViewLinks();
             if (!/^[A-Z0-9]{5,20}$/.test(state.market)) {
                 renderStatus(MarketStatus.describeMarketState(null, 404, state.entryTf), null);
                 return;
@@ -301,6 +309,13 @@
             setInterval(refreshMarketState, 60000);
             // Backtests run rarely and the log grows per signal: every 5 minutes is enough.
             setInterval(refreshEdge, 300000);
+        }
+
+        function updateViewLinks() {
+            const m = encodeURIComponent(state.market);
+            document.getElementById('link-chart').href = `/${m}/${encodeURIComponent(state.currentTf)}`;
+            document.getElementById('link-backtest').href = `/backtest/${m}`;
+            document.getElementById('link-signals').href = `/api/signals/${m}?format=csv`;
         }
 
         async function loadMarketSelector() {
@@ -341,6 +356,7 @@
                 btn.className = `px-3 py-1 rounded-md text-xs font-medium transition-all ${state.currentTf === tf.code ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`;
                 btn.onclick = async () => {
                     state.currentTf = tf.code;
+                    updateViewLinks();
                     // Update UI
                     Array.from(container.children).forEach(b => b.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all text-gray-400 hover:text-white');
                     btn.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all bg-gray-700 text-white';

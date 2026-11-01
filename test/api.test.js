@@ -198,3 +198,13 @@ test('view routes serve the dashboard at /:market and the chart at /:market/:tim
     assert.equal((await req(s.base, '/api/config')).status, 200, 'api routes still win over view routes');
     assert.equal((await req(s.base, '/api/config')).body.version, require('../package.json').version);
 });
+
+test('/ redirects to the dashboard of the first configured market', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const r = await fetch(`${s.base}/`, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), `/${testConfig.MARKETS[0]}`);
+    const page = await fetch(`${s.base}/`).then(res => res.text());
+    assert.match(page, /id="link-backtest"/, 'lands on the dashboard with its view links');
+});

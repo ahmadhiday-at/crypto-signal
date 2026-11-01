@@ -99,14 +99,14 @@ Calculates a `breakout_score` (0.0 to 1.0) from:
 
 The system provides two distinct interfaces for interacting with the Market State:
 
-Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static files and `/api`):
+Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static files and `/api`; the `/` redirect is in `src/app.js` before the static files):
 
 | URL | Page |
 | :-- | :--- |
-| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard |
+| `/` | 302 to `/{first MARKET_LIST market}` (since 2.13.0) |
+| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; header links: Chart, Backtest, Signal log CSV) |
 | `/backtest/:market` | Backtest report (`public/backtest.html`) |
 | `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
-| `/` | Reference View via the static `public/index.html`, defaulting to `BTCUSDT` / `15m` |
 
 The page routes accept any path segment; the pages read the market and timeframe from the URL and, when the symbol or timeframe is not in `/api/config`, show a "not configured" notice listing the available markets (since 2.10.1).
 

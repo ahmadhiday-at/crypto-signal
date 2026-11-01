@@ -11,7 +11,8 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
 | Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
-| UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`). |
+| UI | `/` | `GET` | 302 to `/{first MARKET_LIST market}` (since 2.13.0). |
+| UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`), the main view. Links to Chart, Backtest and the signal log CSV. |
 | UI | `/backtest/:symbol` | `GET` | Backtest report page: metrics, equity curve, trades. |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
 | System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
@@ -19,7 +20,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 
 - Under `/api`, unknown symbols, timeframes or paths return 404.
-- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200). Since 2.10.1 the pages compare the symbol (and timeframe) with `/api/config` and, if it is not configured, show "not in the market list (MARKET_LIST)" with the available markets instead of loading data. `/` serves the reference chart (`public/index.html`), default `BTCUSDT` / `15m`.
+- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200). Since 2.10.1 the pages compare the symbol (and timeframe) with `/api/config` and, if it is not configured, show "not in the market list (MARKET_LIST)" with the available markets instead of loading data. `/` redirects (302) to the Market Dashboard of the first `MARKET_LIST` market (since 2.13.0; before: reference chart).
 - Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403 `host_not_allowed`.
 - No authentication: keep the server on localhost (`HOST`; `BIND_ADDR` for Docker).
 

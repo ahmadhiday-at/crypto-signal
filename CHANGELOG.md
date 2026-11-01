@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.13.0](docs/changelog/v2.13.0.md) — 2026-11-01 — `/` opens the dashboard of the default market; the dashboard links to Chart, Backtest and the signal log.
 - [v2.12.0](docs/changelog/v2.12.0.md) — 2026-11-01 — Dashboard shows how proven the signal is (backtest + live log verdict) via `/api/edge/:symbol`.
 - [v2.11.0](docs/changelog/v2.11.0.md) — 2026-11-01 — Backtest sweep of the setup (SL buffer, target, side, market energy); no variant holds out-of-sample on all of BTC/SOL/BNB.
 - [v2.10.1](docs/changelog/v2.10.1.md) — 2026-11-01 — Pages explain when a symbol is not in `MARKET_LIST` and list the available markets.
