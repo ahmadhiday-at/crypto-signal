@@ -18,7 +18,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 
 - Under `/api`, unknown symbols, timeframes or paths return 404.
-- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200), which shows "unavailable" if the API rejects it. `/` serves the reference chart (`public/index.html`), default `BTCUSDT` / `15m`.
+- Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200). Since 2.10.1 the pages compare the symbol (and timeframe) with `/api/config` and, if it is not configured, show "not in the market list (MARKET_LIST)" with the available markets instead of loading data. `/` serves the reference chart (`public/index.html`), default `BTCUSDT` / `15m`.
 - Requests whose `Host` is not `localhost`, `127.0.0.1`, `[::1]` or listed in `ALLOWED_HOSTS` get 403 `host_not_allowed`.
 - No authentication: keep the server on localhost (`HOST`; `BIND_ADDR` for Docker).
 

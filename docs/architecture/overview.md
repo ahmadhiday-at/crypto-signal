@@ -108,7 +108,7 @@ Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static fi
 | `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
 | `/` | Reference View via the static `public/index.html`, defaulting to `BTCUSDT` / `15m` |
 
-The page routes accept any path segment; the pages read the market and timeframe from the URL and show an unavailable state when the API returns 404.
+The page routes accept any path segment; the pages read the market and timeframe from the URL and, when the symbol or timeframe is not in `/api/config`, show a "not configured" notice listing the available markets (since 2.10.1).
 
 ### 1. Reference View (`public/index.html`)
 

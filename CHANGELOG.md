@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.10.1](docs/changelog/v2.10.1.md) — 2026-11-01 — Pages explain when a symbol is not in `MARKET_LIST` and list the available markets.
 - [v2.10.0](docs/changelog/v2.10.0.md) — 2026-11-01 — Backtest out-of-sample validation (`--split`); BTC/SOL/BNB run shows no robust edge from threshold/min RR tuning.
 - [v2.9.0](docs/changelog/v2.9.0.md) — 2026-10-31 — Level 6 tools: backtest breakdown per market condition and `--sweep` parameter comparison; Level 5 real-run result documented.
 - [v2.8.0](docs/changelog/v2.8.0.md) — 2026-10-31 — Level 5 backtest: `npm run backtest` CLI, cached history, report API and `/backtest/:symbol` page.

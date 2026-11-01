@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { describeMarketState } = require('../public/js/market-status');
+const { describeMarketState, describeUnknownMarket } = require('../public/js/market-status');
 
 const state = (status, extra = {}) => ({
     schema_version: 2, status, errors: [],
@@ -36,4 +36,11 @@ test('503 diagnostics and bad responses hide all values', () => {
     assert.equal(describeMarketState({ error: 'internal_error' }, 500, '15m').level, 'unavailable');
     assert.equal(describeMarketState({ price: 1 }, 200, '15m').level, 'unavailable', 'v1 responses are not trusted');
     assert.equal(describeMarketState(state('weird'), 200, '15m').showValues, false);
+});
+
+test('a symbol outside MARKET_LIST is reported as not configured with the available markets', () => {
+    const d = describeUnknownMarket('BTCIDR', ['BTCUSDT', 'SOLUSDT']);
+    assert.equal(d.title, 'NOT CONFIGURED');
+    assert.equal(d.showValues, false);
+    assert.match(d.detail, /BTCIDR is not in the market list \(MARKET_LIST\)\. Available: BTCUSDT, SOLUSDT\./);
 });

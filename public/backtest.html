@@ -305,6 +305,14 @@
             }).catch(() => {});
 
             const res = await fetch(`/api/backtest/${encodeURIComponent(market)}`);
+            const err = res.ok ? null : await res.json().catch(() => ({}));
+            if (err?.error === 'unknown_market_or_timeframe') {
+                const config = await fetch('/api/config').then(r => r.json()).catch(() => ({ markets: [] }));
+                const empty = document.getElementById('empty');
+                empty.classList.remove('hidden');
+                empty.textContent = `${market} is not in the market list (MARKET_LIST). Available: ${config.markets.map(m => m.code).join(', ') || 'none'}.`;
+                return;
+            }
             if (!res.ok) {
                 document.getElementById('empty').classList.remove('hidden');
                 document.getElementById('empty-cmd').textContent = `docker compose exec app npm run backtest -- ${market}`;

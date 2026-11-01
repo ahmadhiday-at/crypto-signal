@@ -278,7 +278,16 @@
                 return;
             }
             await loadTfSelector();
-            await loadMarketSelector();
+            const config = await loadMarketSelector();
+            const known = config.markets.map(m => m.code);
+            if (!known.includes(state.market)) {
+                const desc = MarketStatus.describeUnknownMarket(state.market, known);
+                renderStatus(desc, null);
+                const chartStatus = document.getElementById('chart-status');
+                chartStatus.textContent = desc.detail;
+                chartStatus.style.color = COLORS.warning.text;
+                return;
+            }
             await setupChart();
             await refreshMarketState();
             await loadChartData();
@@ -301,10 +310,17 @@
                 opt.selected = (m.code === state.market);
                 selector.appendChild(opt);
             });
+            // Keep the URL symbol visible in the selector even when it is not configured.
+            if (!config.markets.some(m => m.code === state.market)) {
+                const opt = new Option(`${state.market} (not configured)`, state.market, true, true);
+                opt.disabled = true;
+                selector.prepend(opt);
+            }
 
             selector.onchange = (e) => {
                 window.location.pathname = `/${e.target.value}`;
             };
+            return config;
         }
 
         async function loadTfSelector() {

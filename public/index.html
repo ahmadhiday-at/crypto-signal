@@ -271,6 +271,25 @@
                     window.location.pathname = `/${mSelect.value}/${e.target.value}`;
                 };
 
+                // A symbol or timeframe outside the server config: say so instead of loading charts.
+                const markets = config.markets.map(m => m.code);
+                const tfs = config.timeframes.map(t => t.code);
+                const problems = [];
+                if (!markets.includes(globalMarket)) problems.push(`${globalMarket} is not in the market list (MARKET_LIST). Available: ${markets.join(', ') || 'none'}.`);
+                if (!tfs.includes(globalTf)) problems.push(`${globalTf} is not a configured timeframe. Available: ${tfs.join(', ')}.`);
+                if (problems.length) {
+                    for (const [select, value, ok] of [[mSelect, globalMarket, markets.includes(globalMarket)], [tSelect, globalTf, tfs.includes(globalTf)]]) {
+                        if (ok) continue;
+                        const opt = new Option(`${value} (not configured)`, value, true, true);
+                        opt.disabled = true;
+                        select.prepend(opt);
+                    }
+                    const statusEl = document.getElementById('data-status');
+                    statusEl.textContent = problems.join(' ');
+                    statusEl.style.color = '#f0b90b';
+                    return;
+                }
+
             } catch (err) {
                 console.error('Config Load Error:', err);
             }
