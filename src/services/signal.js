@@ -21,25 +21,30 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const round = (v) => (num(v) ? +v.toPrecision(10) : null);
 
 // Entry zone, stop loss, targets, risk/reward and a trailing stop for a BUY (long) or SELL (short).
-// Returns null when the inputs needed for a plan are missing.
-function tradePlan(state, action, htfTf) {
+// Returns null when the inputs needed for a plan are missing. `stopAtr` and `target` are overridden
+// only by the backtest sweep (Level 6): `target` 'tp1' (default) is the nearest opposite zone, 'tp2'
+// the major HTF zone, and a number N a fixed target at N × risk.
+function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = 'tp1' } = {}) {
     const price = state.price;
     const atr = state.indicators?.atr;
     const long = action === 'BUY';
     const zone = long ? state.levels?.support?.[0] : state.levels?.resistance?.[0];
     if (!num(price) || !num(atr) || !zone || !num(zone.low) || !num(zone.high)) return null;
 
-    const stop = long ? zone.low - STOP_ATR_BUFFER * atr : zone.high + STOP_ATR_BUFFER * atr;
+    const stop = long ? zone.low - stopAtr * atr : zone.high + stopAtr * atr;
     const beyond = (l) => num(l.mid) && (long ? l.mid > price : l.mid < price);
     const targets = (long ? state.levels?.resistance : state.levels?.support || []) || [];
     const ahead = targets.filter(beyond).sort((a, b) => (long ? a.mid - b.mid : b.mid - a.mid));
-    const tp1 = ahead[0]?.mid ?? null;
+    const nearest = ahead[0]?.mid ?? null;
     const major = ahead
         .filter(l => l !== ahead[0] && Array.isArray(l.tfs) && l.tfs.includes(htfTf))
         .sort((a, b) => b.score - a.score)[0];
     const tp2 = major ? major.mid : null;
 
     const risk = long ? price - stop : stop - price;
+    let tp1 = nearest;
+    if (target === 'tp2') tp1 = tp2;
+    else if (num(target)) tp1 = risk > 0 ? (long ? price + target * risk : price - target * risk) : null;
     const reward = num(tp1) ? (long ? tp1 - price : price - tp1) : null;
     const rr = risk > 0 && num(reward) && reward > 0 ? reward / risk : null;
 
@@ -87,8 +92,8 @@ function strengthOf(score, threshold = THRESHOLD) {
 }
 
 // `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
-// `threshold` and `minRiskReward` are overridden only by the backtest sweep (Level 6).
-function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD } = {}) {
+// `threshold`, `minRiskReward`, `stopAtr` and `target` are overridden only by the backtest sweep (Level 6).
+function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1' } = {}) {
     const reasons = [];
     let score = 0;
     const add = (code, points) => { reasons.push({ code, points }); score += points; };
@@ -119,7 +124,7 @@ function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MI
     }
 
     let action = score >= threshold ? 'BUY' : score <= -threshold ? 'SELL' : 'WAIT';
-    const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf);
+    const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf, { stopAtr, target });
     const filters = action === 'WAIT' ? [] : tradeFilters(state, action);
     if (action !== 'WAIT' && !(plan?.risk_reward >= minRiskReward)) filters.push('low_rr');
     if (filters.length) action = 'WAIT';
@@ -131,4 +136,4 @@ function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MI
     return { action, score, strength: strengthOf(score, threshold), reasons, filtered: filters.length > 0, filters, plan };
 }
 
-module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD };
+module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER };

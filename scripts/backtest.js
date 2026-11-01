@@ -1,7 +1,9 @@
 // Backtest CLI (docs/roadmap/level-5.md).
 // Usage: npm run backtest -- [SYMBOL] [--days 365] [--fee 0] [--sweep key=v1,v2 ...] [--split 0.7]
-// --sweep (Level 6) replays parameter variants on the same history: keys `threshold`, `min_rr` and
-// `w_<tf>` (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
+// --sweep (Level 6) replays parameter variants on the same history. Keys: `threshold`, `min_rr`,
+// `stop_atr` (SL buffer in ATR), `target` (tp1, tp2 or a fixed R multiple), `side` (both, buy, sell),
+// `skip_energy` (none or market_energy values joined with +, e.g. explosive+building) and `w_<tf>`
+// (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
 // --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
 // reports how it does on the remaining 30%.
 // Downloads/extends the history cache in data/history/, replays the signal engine and writes
@@ -17,25 +19,41 @@ const { runBacktest, createReports } = require('../src/services/backtest');
 
 const DATA = path.join(__dirname, '../data');
 
-const MAX_VARIANTS = 64;
+const MAX_VARIANTS = 144;
+const ENERGIES = ['explosive', 'building', 'stable', 'cooling'];
+
+const number = (min, max, int = false) => (raw) => {
+    const v = Number(raw);
+    return raw !== '' && Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v)) ? v : undefined;
+};
+
+// Per key: parses one raw value, or returns undefined when it is invalid.
+const SWEEP_KEYS = {
+    threshold: [number(1, 15, true), 'integers 1–15'],
+    min_rr: [number(0, 10), '0–10'],
+    stop_atr: [number(0, 3), '0–3'],
+    target: [(raw) => (raw === 'tp1' || raw === 'tp2' ? raw : number(0.5, 10)(raw)), 'tp1, tp2 or 0.5–10'],
+    side: [(raw) => (['both', 'buy', 'sell'].includes(raw) ? raw : undefined), 'both, buy or sell'],
+    skip_energy: [(raw) => {
+        if (raw === 'none') return [];
+        const list = raw.split('+');
+        return list.every(e => ENERGIES.includes(e)) ? [...new Set(list)].sort() : undefined;
+    }, `none or ${ENERGIES.join('+')} values joined with +`],
+};
 
 // `threshold=4,5,6` → ['threshold', [4, 5, 6]].
 function parseSweep(spec, roleTfs) {
-    const m = /^([a-z0-9_]+)=([0-9.,]+)$/.exec(spec || '');
+    const m = /^([a-z0-9_]+)=([a-z0-9.,+]+)$/.exec(spec || '');
     if (!m) throw new Error(`--sweep expects key=v1,v2 (got ${String(spec).slice(0, 40)})`);
     const [, key, list] = m;
-    const values = [...new Set(list.split(',').filter(Boolean).map(Number))];
-    if (!values.length || values.some(v => !Number.isFinite(v))) throw new Error(`--sweep ${key}: invalid values`);
-    if (key === 'threshold') {
-        if (values.some(v => !Number.isInteger(v) || v < 1 || v > 15)) throw new Error('--sweep threshold: integers 1–15');
-    } else if (key === 'min_rr') {
-        if (values.some(v => v < 0 || v > 10)) throw new Error('--sweep min_rr: 0–10');
-    } else if (key.startsWith('w_') && roleTfs.includes(key.slice(2))) {
-        if (values.some(v => v < 0 || v > 20)) throw new Error(`--sweep ${key}: 0–20`);
-    } else {
-        throw new Error(`--sweep key must be threshold, min_rr or w_<tf> with tf in ${roleTfs.join(', ')}`);
-    }
-    return [key, values];
+    const tfKey = key.startsWith('w_') && roleTfs.includes(key.slice(2));
+    const [parse, hint] = tfKey ? [number(0, 20), '0–20'] : SWEEP_KEYS[key] || [];
+    if (!parse) throw new Error(`--sweep key must be ${Object.keys(SWEEP_KEYS).join(', ')} or w_<tf> with tf in ${roleTfs.join(', ')}`);
+    const raws = list.split(',').filter(Boolean);
+    const values = raws.map(parse);
+    if (!values.length || values.some(v => v === undefined)) throw new Error(`--sweep ${key}: ${hint}`);
+    const unique = [...new Map(values.map(v => [JSON.stringify(v), v])).values()];
+    return [key, unique];
 }
 
 // Every combination of the swept values, as runBacktest variants.
@@ -77,9 +95,15 @@ const fmt = (v, d = 2) => (v === null || v === undefined ? '-' : Number(v).toFix
 
 const table = (rows) => rows.map(r => r.map(String).map((c, i) => (i ? c.padStart(9) : c.padEnd(9))).join('')).join('\n');
 
+function valueOf(p, key) {
+    if (key.startsWith('w_')) return p.weights[key.slice(2)];
+    if (key === 'skip_energy') return p.skip_energy.join('+') || 'none';
+    return p[key];
+}
+
 // One line per variant, best taken expectancy first; `*` marks the live parameters.
 function printSweep(report, keys) {
-    const label = (p) => keys.map(k => `${k}=${k.startsWith('w_') ? p.weights[k.slice(2)] : p[k]}`).join(' ');
+    const label = (p) => keys.map(k => `${k}=${valueOf(p, k)}`).join(' ');
     const rows = [...report.sweep].sort((a, b) => (b.taken.expectancy_r ?? -Infinity) - (a.taken.expectancy_r ?? -Infinity));
     const width = Math.max(...rows.map(r => label(r.params).length)) + 2;
     console.log(`\nSweep (taken)${' '.repeat(Math.max(0, width - 13))}${['trades', 'win%', 'exp R', 'total R', 'PF', 'maxDD R'].map(h => h.padStart(9)).join('')}`);
@@ -93,7 +117,7 @@ function printSweep(report, keys) {
 // In-sample vs out-of-sample taken results; `>` marks the variant chosen in-sample.
 function printValidation(report, keys) {
     const v = report.validation;
-    const label = (p) => keys.map(k => `${k}=${k.startsWith('w_') ? p.weights[k.slice(2)] : p[k]}`).join(' ') || 'live';
+    const label = (p) => keys.map(k => `${k}=${valueOf(p, k)}`).join(' ') || 'live';
     const width = Math.max(14, ...v.rows.map(r => label(r.params).length)) + 2;
     console.log(`\nValidation, split ${new Date(v.split_at * 1000).toISOString().slice(0, 10)} (taken; pick = best in-sample exp with ≥ ${v.min_trades} trades)`);
     console.log(''.padEnd(width) + ['IS n', 'IS exp', 'OOS n', 'OOS win%', 'OOS exp', 'OOS PF'].map(h => h.padStart(9)).join(''));

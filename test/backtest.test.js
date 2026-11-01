@@ -122,6 +122,24 @@ test('breakdown: every dimension splits the trades; filtered trades count once p
     assert.equal(breakdown([{ ...t([], 'WIN', 1), filtered: false }]).filter, undefined);
 });
 
+test('setup variants: fixed target, SL buffer, side and energy skips', () => {
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
+    const report = runBacktest({ ...args, variants: [{ target: 2, min_rr: 0 }, { side: 'sell' }, { skip_energy: ['explosive', 'building', 'stable', 'cooling'] }, { stop_atr: 1 }] });
+    const [base, fixed, sell, noEnergy, wide] = report.sweep;
+    assert.equal(base.params.target, 'tp1');
+    assert.equal(base.params.side, 'both');
+    assert.ok(base.taken.trades + base.filtered.trades > 0);
+    assert.equal(sell.taken.trades + sell.filtered.trades, 0, 'forced setup is bullish: no SELL candidates');
+    assert.equal(noEnergy.taken.trades + noEnergy.filtered.trades, 0, 'every energy skipped');
+    assert.ok(fixed.taken.trades > 0);
+    assert.equal(wide.params.stop_atr, 1);
+
+    const alone = runBacktest({ ...args, threshold: 5 });
+    const fixedRun = runBacktest({ ...args, variants: [{ target: 2, min_rr: 0 }] });
+    assert.deepEqual(fixedRun.sweep[1].taken, fixed.taken);
+    assert.deepEqual(alone.taken.summary, base.taken);
+});
+
 test('validation: taken trades split at splitSec; pick = best in-sample expectancy with enough trades', () => {
     const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
     assert.equal(runBacktest(args).validation, null);
@@ -154,8 +172,16 @@ test('CLI --sweep: combinations, validation and limits', () => {
     assert.equal(parseArgs(['--split', '0.7'], tfs).split, 0.7);
     assert.equal(parseArgs([], tfs).split, null);
     assert.throws(() => parseArgs(['--split', '0.95'], tfs), /0.5 and 0.9/);
-    const many = Array.from({ length: 9 }, (_, i) => i + 1).join(',');
-    assert.throws(() => parseArgs(['--sweep', `threshold=${many}`, '--sweep', `min_rr=${many}`], tfs), /max 64/);
+    const many = Array.from({ length: 13 }, (_, i) => i + 1).join(',');
+    const rrs = Array.from({ length: 13 }, (_, i) => i * 0.5).join(',');
+    assert.throws(() => parseArgs(['--sweep', `threshold=${many}`, '--sweep', `min_rr=${rrs}`], tfs), /max 144/);
+    const setup = parseArgs(['--sweep', 'target=tp1,tp2,1.5', '--sweep', 'side=sell', '--sweep', 'skip_energy=none,explosive+building', '--sweep', 'stop_atr=1'], tfs);
+    assert.deepEqual(setup.variants[0], { target: 'tp1', side: 'sell', skip_energy: [], stop_atr: 1, weights: {} });
+    assert.deepEqual(setup.variants[1].skip_energy, ['building', 'explosive']);
+    assert.equal(setup.variants.length, 6);
+    assert.throws(() => parseArgs(['--sweep', 'target=tp3'], tfs), /tp1, tp2/);
+    assert.throws(() => parseArgs(['--sweep', 'side=long'], tfs), /both, buy or sell/);
+    assert.throws(() => parseArgs(['--sweep', 'skip_energy=hot'], tfs), /none or/);
 });
 
 test('history: downloads in pages, then only the missing tail', async () => {

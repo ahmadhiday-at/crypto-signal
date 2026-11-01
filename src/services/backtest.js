@@ -7,7 +7,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { composeMarketState } = require('./market.service');
-const { computeSignal, THRESHOLD, MIN_RISK_REWARD } = require('./signal');
+const { computeSignal, THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER } = require('./signal');
 const { recordFrom, evaluate, EXPIRY_CANDLES } = require('./signal-log');
 
 const MARKET_RE = /^[A-Z0-9]{2,20}$/;
@@ -119,14 +119,19 @@ function validation(runs, splitSec) {
     return { split_at: splitSec, min_trades: VALIDATION_MIN_TRADES, selected, rows };
 }
 
-// One parameter set of the replay. `weights` changes the zone merge, `threshold` and `min_rr` the signal.
+// One parameter set of the replay. `weights` changes the zone merge; `threshold`, `min_rr`,
+// `stop_atr` and `target` the signal and its plan; `side` and `skip_energy` drop candidates
+// (backtest only: such candidates are neither taken nor filtered).
+const PARAM_KEYS = ['threshold', 'min_rr', 'stop_atr', 'target', 'side', 'skip_energy'];
+
 function normalizeParams(base, over = {}) {
-    return {
-        threshold: over.threshold ?? base.threshold,
-        min_rr: over.min_rr ?? base.min_rr,
-        weights: { ...base.weights, ...(over.weights || {}) },
-    };
+    const p = { weights: { ...base.weights, ...(over.weights || {}) } };
+    for (const key of PARAM_KEYS) p[key] = over[key] ?? base[key];
+    p.skip_energy = [...p.skip_energy].sort();
+    return p;
 }
+
+const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.entries(p.weights).sort()]);
 
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
 // candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
@@ -137,11 +142,11 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
     const snaps = {};
-    const base = normalizeParams({ threshold, min_rr: minRiskReward, weights });
+    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: STOP_ATR_BUFFER, target: 'tp1', side: 'both', skip_energy: [], weights });
     // A variant equal to the base parameters is not replayed twice.
     const seen = new Set();
     const unique = [base, ...variants.map(v => normalizeParams(base, v))].filter((p) => {
-        const key = JSON.stringify([p.threshold, p.min_rr, Object.entries(p.weights).sort()]);
+        const key = paramsKey(p);
         return !seen.has(key) && seen.add(key);
     });
     const runs = unique.map(params => ({
@@ -190,10 +195,13 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             }
             const merged = states.get(run.weightsKey);
             if (!merged) { if (run === runs[0]) failed = true; continue; }
-            const state = { ...merged, signal: computeSignal(merged, roles.htf, { threshold: run.params.threshold, minRiskReward: run.params.min_rr }) };
+            const { params } = run;
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target }) };
 
-            const record = recordFrom(market, roles.entry, state, entry[i], run.params.threshold);
+            const record = recordFrom(market, roles.entry, state, entry[i], params.threshold);
             if (!record) continue;
+            if (params.side !== 'both' && record.signal !== params.side.toUpperCase()) continue;
+            if (params.skip_energy.includes(state.market_energy)) continue;
             const group = record.filtered ? 'filtered' : 'taken';
             if ((run.busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
 
@@ -231,7 +239,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { threshold: main.params.threshold, min_rr: main.params.min_rr, weights: main.params.weights, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
+        params: { ...main.params, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
         steps,
         skipped_steps: skipped,
         taken: groupReport(main.trades.filter(t => !t.filtered)),

@@ -11,7 +11,7 @@ DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET
 - Logging is mandatory before any AI work.
 - Keep signal generation and execution separate.
 
-**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Level 4 logging is live (v2.7.0) and collecting toward 1,000 labeled trades. Level 5 done (v2.8.0): the 1-year BTCUSDT run has negative expectancy with the live parameters. Level 6 tools ready (v2.9.0 breakdown + sweep, v2.10.0 out-of-sample validation); threshold/min RR tuning showed no robust edge on BTC/SOL/BNB. Next: change the setup (SL/TP, conditions) and re-validate.
+**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Level 4 logging is live (v2.7.0) and collecting toward 1,000 labeled trades. Level 5 done (v2.8.0): the 1-year BTCUSDT run has negative expectancy with the live parameters. Level 6 tools ready (v2.9.0 breakdown + sweep, v2.10.0 out-of-sample validation); neither threshold/min RR tuning nor setup changes (v2.11.0: SL, target, side, energy) gave an edge that holds on BTC/SOL/BNB. Next: trend-aware rules or more history.
 
 ## Levels
 

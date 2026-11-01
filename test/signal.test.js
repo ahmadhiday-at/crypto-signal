@@ -179,3 +179,19 @@ test('threshold and minRiskReward overrides (backtest sweep)', () => {
     assert.equal(strict.action, 'WAIT');
     assert.deepEqual(strict.filters, ['low_rr']);
 });
+
+test('plan overrides: SL buffer, tp2 target and fixed R target', () => {
+    const { tradePlan } = require('../src/services/signal');
+    const state = base({ levels: { support: [lv(98, 99.5, ['1h'])], resistance: [lv(109, 110, ['15m']), lv(119, 121, ['1d'])] } });
+    const def = tradePlan(state, 'BUY', '1d');
+    assert.equal(def.stop_loss, 97.5);
+    assert.equal(def.take_profit_1, 109.5);
+    assert.equal(tradePlan(state, 'BUY', '1d', { stopAtr: 1 }).stop_loss, 97);
+    const tp2 = tradePlan(state, 'BUY', '1d', { target: 'tp2' });
+    assert.equal(tp2.take_profit_1, 120);
+    assert.equal(tp2.risk_reward, 8);
+    const fixed = tradePlan(state, 'BUY', '1d', { target: 2 });
+    assert.equal(fixed.take_profit_1, 105);
+    assert.equal(fixed.risk_reward, 2);
+    assert.equal(tradePlan(base(), 'BUY', '1d', { target: 'tp2' }).take_profit_1, null, 'no major HTF zone → no target');
+});
