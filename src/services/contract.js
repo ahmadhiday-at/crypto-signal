@@ -102,6 +102,11 @@ function validateMarketState(s) {
         }
     }
 
+    // `channel` added in 2.20.0 (null when the entry timeframe has too few candles); older states have none.
+    if (s.channel !== undefined && s.channel !== null && (!isObj(s.channel) || !isNum(s.channel.high) || !isNum(s.channel.low))) {
+        errors.push('channel must be null or {high, low, candles}');
+    }
+
     if (!isObj(s.inputs)) errors.push('inputs must be an object');
     else {
         for (const tf of s.timeframe_list || []) {

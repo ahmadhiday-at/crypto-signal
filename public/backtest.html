@@ -215,6 +215,7 @@
 
         function paramLabel(p, base) {
             const parts = [];
+            if (p.model && p.model !== 'bounce') parts.push(p.model);
             parts.push(`threshold ${p.threshold}`);
             parts.push(`min RR ${p.min_rr}`);
             // Setup keys (since 2.11.0) are shown only when they differ from the live parameters.

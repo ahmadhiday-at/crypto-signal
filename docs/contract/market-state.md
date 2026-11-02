@@ -65,6 +65,7 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `setup_state` | enum | see §4 | derived | D, P |
 | `fake_breakout_risk` | enum | `low` \| `medium` \| `high` | derived | D, P |
 | `regime_global` | enum | see §4 | all role TFs | D, P |
+| `channel` | object \| null | `{high, low, candles}`: high / low of the `candles` closed entry candles before the latest one (config `trend.channel_candles`, default 20); `null` with fewer candles. Added in 2.20.0, absent in older states | entry TF | — |
 | `distance.to_support` | number | fraction, distance from `price` to `levels.support[0].mid` | derived | P |
 | `distance.to_resistance` | number | fraction, distance from `price` to `levels.resistance[0].mid` | derived | P |
 | `distance_percent.*` | number | same as `distance.*`, in percent | derived | D, P |
@@ -117,9 +118,25 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 
 - `action`: `BUY` if score ≥ +5, `SELL` if score ≤ −5, otherwise `WAIT`; always `WAIT` when `status` ≠ `ok`.
 - `strength`: `strong` if |score| ≥ 7, `medium` if ≥ 5, otherwise `weak`.
-- `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above.
+- `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above (and those of §4.2).
 - `divergence`: within the last 60 closed entry candles, swing lows/highs must exceed 3 bars on each side and the latest swing must be ≤ 10 bars old. Bullish = price lower low + RSI higher low; bearish = price higher high + RSI lower high. Starting values, to be reviewed.
 - Heuristic and uncalibrated (calibration is Level 5); not a trade instruction.
+
+### 4.2 Trend models (added in 2.20.0)
+
+The calculation config `signal.model` picks the model; `bounce` (default) is §4.1. `trend_pullback` and `breakout` score from the role timeframes' `trend` (`timeframes[tf].trend`), with config `trend` points:
+
+| Code | Points | When |
+| :--- | :----- | :--- |
+| `htf_trend_up` / `htf_trend_down` | ± `htf_points` (3) | TF_HTF trend |
+| `structure_trend_up` / `_down` | ± `structure_points` (2) | TF_STRUCTURE trend (skipped when it equals TF_HTF) |
+| `entry_trend_up` / `_down` | ± `entry_points` (1) | TF_ENTRY trend (skipped when it equals a higher role) |
+| `pullback_to_ma` | `pullback_points` (2) in the direction of the trend points | `trend_pullback`: \|price − `indicators.ma50`\| ≤ `pullback_atr` × ATR |
+| `channel_breakout_up` / `_down` | ± `breakout_points` (3) | `breakout`: `price` > `channel.high` (< `channel.low`), not against the trend points |
+| `bullish_momentum` / `bearish_momentum` | ± `momentum_points` (1) | MACD histogram has the sign of the score |
+| `volume_surge` / `weak_volume` | ± `volume_points` (1) | as §4.1 |
+
+BUY / SELL at \|score\| ≥ `signal.threshold`. Filters: `volatility_extreme`, `volatility_dead`, `against_htf_trend` (when `filters.htf_trend` is on) and `low_rr`; the S/R filters (`no_mans_land`, `buy_into_resistance`, `sell_into_support`, `far_from_entry`) do not apply. Plan: `entry_zone` = [price, price], `stop_loss` = price ∓ `trend.stop_atr` × ATR, `take_profit_1` = price ± `trend.target_r` × risk, `take_profit_2` = highest-scored TF_HTF zone beyond TP1 or `null`, `risk_reward` = `target_r`, `trailing_stop` as §4.1, `entry_distance_atr` 0.
 
 **Trade filter (added in 2.3.0).** Evaluated only when the score gives BUY or SELL. Any failing filter turns `action` into `WAIT`, sets `filtered: true` and lists the codes in `filters[]` (score and reasons are kept). Thresholds are starting values to be reviewed.
 

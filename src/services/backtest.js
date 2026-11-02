@@ -127,7 +127,7 @@ function validation(runs, splitSec, minTrades = VALIDATION_MIN_TRADES) {
 // `skip_energy` drop candidates (backtest only: such candidates are neither taken nor filtered).
 // `calc` holds the calculation config groups RESULT_GROUPS (score points, indicators, zones, market,
 // divergence, evaluation); a variant overrides single keys, e.g. { calc: { scoring: { near_zone: 3 } } }.
-const PARAM_KEYS = ['threshold', 'min_rr', 'stop_atr', 'target', 'htf_trend', 'entry_max_atr', 'side', 'skip_energy'];
+const PARAM_KEYS = ['model', 'threshold', 'min_rr', 'stop_atr', 'target', 'htf_trend', 'entry_max_atr', 'side', 'skip_energy'];
 
 function normalizeParams(base, over = {}) {
     const p = { weights: { ...base.weights, ...(over.weights || {}) } };
@@ -140,7 +140,7 @@ function normalizeParams(base, over = {}) {
 const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.entries(p.weights).sort(), p.calc]);
 // Variants sharing these values share the per-timeframe snapshots / the merged state.
 const snapshotKey = (p) => JSON.stringify([p.calc.indicators, p.calc.zones]);
-const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market, p.calc.divergence]);
+const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market, p.calc.divergence, p.calc.trend.channel_candles]);
 
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
 // candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
@@ -153,7 +153,7 @@ const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market
 // each distinct indicators/zones set computes its own snapshots, so such sweeps cost more time.
 const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
 
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, model = 'bounce', target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     const fixedParams = Object.fromEntries(FIXED_KEYS.map(k => [k, fixed[k] ?? defaults[k]]));
     const fixedOpts = {
@@ -168,7 +168,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
-    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], weights, calc: baseCalc });
+    const base = normalizeParams({ model, threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], weights, calc: baseCalc });
     const minTrades = base.calc.evaluation.min_trades;
     const trendTfs = [...new Set([roles.htf, roles.structure].filter(Boolean))];
     // A variant equal to the base parameters is not replayed twice.
@@ -226,7 +226,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             if (!ready(set)) continue;
             if (!states.has(run.stateKey)) {
                 try {
-                    const stateParams = { market: run.params.calc.market, divergence: run.params.calc.divergence };
+                    const stateParams = { market: run.params.calc.market, divergence: run.params.calc.divergence, trend: run.params.calc.trend };
                     states.set(run.stateKey, { ...composeMarketState(market, set.snaps, roles, run.params.weights, stateParams), generated_at: t, status: 'ok' });
                 } catch (e) {
                     states.set(run.stateKey, null);
@@ -235,7 +235,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             const merged = states.get(run.stateKey);
             if (!merged) { if (run === runs[0]) failed = true; continue; }
             const { params } = run;
-            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure, scoring: params.calc.scoring }) };
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure, entryTf: roles.entry, scoring: params.calc.scoring, model: params.model, trend: params.calc.trend }) };
 
             const record = recordFrom(market, roles.entry, state, entry[i], params.threshold);
             if (!record) continue;

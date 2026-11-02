@@ -118,3 +118,17 @@ test('engine: an indicator change recalculates stored snapshots without fetching
     assert.notDeepEqual(after.indicators.rsi, before.indicators.rsi);
     assert.equal((await engine.getMarketState('BTCUSDT')).httpStatus, 200);
 });
+
+test('trend group and model: defaults, channel field and backtest sweep key', () => {
+    const d = defaultsOf({});
+    assert.equal(d.signal.model, 'bounce');
+    assert.equal(d.trend.channel_candles, 20);
+    assert.deepEqual(validate({ signal: { model: 'scalp' } }, d).problems, ['signal.model must be one of bounce, trend_pullback, breakout']);
+    const { mergeSnapshots } = require('../src/services/market.service');
+    const candles = Array.from({ length: 30 }, (_, i) => ({ high: 100 + i, low: 90 + i }));
+    const snap = { price: 129, indicators: {}, candles, support: [], resistance: [] };
+    const roles = { htf: '1d', structure: '1d', mid: '1d', entry: '1d' };
+    assert.deepEqual(mergeSnapshots('BTCUSDT', { '1d': snap }, roles, { DEFAULT: 1 }, { trend: { channel_candles: 5 } }).raw.channel, { high: 128, low: 114, candles: 5 });
+    const { parseArgs } = require('../scripts/backtest');
+    assert.deepEqual(parseArgs(['--sweep', 'model=bounce,trend_pullback', '--sweep', 'trend.stop_atr=1.5,3'], ['1d']).variants.length, 4);
+});

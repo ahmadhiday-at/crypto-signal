@@ -30,6 +30,8 @@ function paramsMatch(params, live) {
     // Reports older than v2.14.0 carry no fixed values: they ran with the defaults.
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     for (const k of FIXED_KEYS) if ((params[k] ?? defaults[k]) !== live[k]) return false;
+    // Reports older than v2.20.0 ran the bounce model.
+    if ((params.model ?? 'bounce') !== live.model) return false;
     if ((params.side ?? 'both') !== 'both' || (params.skip_energy || []).length) return false;
     // Reports older than v2.18.0 have no `calc`: they ran with the defaults of these groups.
     for (const g of RESULT_GROUPS) {
@@ -102,6 +104,7 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
         stop_atr: cfg.signal.stop_atr,
         htf_trend: cfg.filters.htf_trend,
         target: cfg.signal.target,
+        model: cfg.signal.model,
         entry_max_atr: cfg.filters.entry_max_atr,
         ...Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         weights,

@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.20.0](docs/changelog/v2.20.0.md) — 2026-11-02 — New signal models trend_pullback and breakout (signal.model, trend config group); default stays bounce; 3-year validation recorded in the roadmap.
 - [v2.19.0](docs/changelog/v2.19.0.md) — 2026-11-02 — Backtest sweep for every calculation config key (<group>.<key>); first score-point and expiry sweeps found no edge.
 - [v2.18.0](docs/changelog/v2.18.0.md) — 2026-11-02 — Every calculation value (score points, indicators, S/R zones, market thresholds, divergence, trade expiry) moved to config/calculation.json; defaults unchanged.
 - [v2.17.0](docs/changelog/v2.17.0.md) — 2026-11-02 — Level 6.5 B2: TP1 choice (rr_zone) and an entry-distance filter (far_from_entry) as config options; defaults unchanged.

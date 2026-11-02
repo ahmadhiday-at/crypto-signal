@@ -42,6 +42,12 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
 | `scoring` | `near_zone` / `momentum` / `htf_zone` / `divergence` / `volume` | 2 / 2 / 3 / 2 / 1 | integer 0–10 (volume 0–5) | Points per signal reason (since 2.18.0) |
 | `scoring` | `strong_score` | 7 | integer 1–30 | \|score\| for strength `strong` |
+| `signal` | `model` | `bounce` | `bounce` / `trend_pullback` / `breakout` | Signal model (since 2.20.0), see [market-state.md §4.2](../contract/market-state.md#42-trend-models-added-in-2200) |
+| `trend` | `htf_points` / `structure_points` / `entry_points` | 3 / 2 / 1 | integer 0–10 | Trend models: ± points for each role timeframe's `trend` |
+| `trend` | `pullback_points`, `pullback_atr` | 2, 1 | integer 0–10, 0–10 | `trend_pullback`: price within `pullback_atr` × ATR of the entry MA50 |
+| `trend` | `breakout_points`, `channel_candles` | 3, 20 | integer 0–10, integer 2–500 | `breakout`: close beyond the high / low of the previous `channel_candles` entry candles |
+| `trend` | `momentum_points`, `volume_points` | 1, 1 | integer 0–10, 0–5 | MACD histogram in the score direction; high / low volume |
+| `trend` | `stop_atr`, `target_r` | 1.5, 2 | 0.1–20, 0.5–20 | Trend plan: stop at price ∓ `stop_atr` × ATR, TP1 at `target_r` × risk |
 | `scoring` | `breakout_confirmed` | `medium` | `weak` / `medium` / `strong` | Weakest breakout confirmation that lets BUY into resistance / SELL into support pass |
 | `indicators` | `ma_fast` / `ma_mid` / `ma_slow` | 14 / 50 / 200 | integer, fast < mid < slow | SMA periods; the fields stay `ma14` / `ma50` / `ma200` |
 | `indicators` | `rsi_period`, `atr_period` | 14, 14 | integer 2–100 | RSI and ATR periods |

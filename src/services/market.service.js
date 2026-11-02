@@ -1,7 +1,7 @@
 const { tfSeconds, isBoundary, expectedLastClose, normalizeCandles, splitClosed, countGaps } = require('./candles');
 const { computeInputs, summaryStatus, inputStatus, FUTURE_TOLERANCE_S } = require('./freshness');
 const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = require('./contract');
-const { computeSignal } = require('./signal');
+const { computeSignal, TREND_DEFAULTS } = require('./signal');
 const { detectDivergence } = require('./divergence');
 
 // Defaults of the calculation config's `market` group (config/calculation.json): volume state,
@@ -146,10 +146,18 @@ function enhanceMarketState(data, params = {}) {
 }
 
 
+// High / low of the `n` closed entry candles before the latest one (trend model `breakout`).
+function channelOf(candles, n) {
+    const prev = (candles || []).slice(-(n + 1), -1);
+    if (prev.length < n) return null;
+    return { high: Math.max(...prev.map(c => c.high)), low: Math.min(...prev.map(c => c.low)), candles: n };
+}
+
 // Merges the role-timeframe snapshots into the pre-enhancement Market State (unchanged merge rules).
-// `params` holds the calculation config's `market` and `divergence` groups.
+// `params` holds the calculation config's `market`, `divergence` and `trend` groups.
 function mergeSnapshots(market, snaps, roles, weights, params = {}) {
     const mp = { ...MARKET_DEFAULTS, ...params.market };
+    const channelCandles = { ...TREND_DEFAULTS, ...params.trend }.channel_candles;
     // Two roles may share a timeframe; each timeframe is merged once.
     const tfList = [...new Set(Object.values(roles))];
     const timeframesState = {};
@@ -205,6 +213,7 @@ function mergeSnapshots(market, snaps, roles, weights, params = {}) {
             timeframes: timeframesState,
             volatility_ratio: volatilityRatio(entryData.indicators?.atr, mp.volatility_candles),
             divergence: detectDivergence(entryData.candles, entryData.indicators?.rsi || [], params.divergence),
+            channel: channelOf(entryData.candles, channelCandles),
         },
         // enhanceMarketState compares the latest volume with the 20-candle average, so it needs the
         // recent history rather than only the latest value.
@@ -271,7 +280,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     const weightsNow = () => (calc ? calc.weights() : config.TF_WEIGHTS);
     const snapshotParams = () => (calc ? calc.snapshotParams() : {});
     const stateParams = () => (calc ? calc.stateParams() : {});
-    const signalOf = (state) => computeSignal(state, roles.htf, { ...(calc ? calc.signalOptions() : {}), structureTf: roles.structure });
+    const signalOf = (state) => computeSignal(state, roles.htf, { ...(calc ? calc.signalOptions() : {}), structureTf: roles.structure, entryTf: roles.entry });
 
     const isMarket = (m) => markets.includes(m);
     const isTimeframe = (tf) => allTfs.includes(tf);

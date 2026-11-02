@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { TF_SECONDS } = require('../services/candles');
-const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, SCORING_DEFAULTS, HTF_TREND_MODES, TARGET_MODES, CONFIRMATION_LEVELS } = require('../services/signal');
+const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, SCORING_DEFAULTS, TREND_DEFAULTS, HTF_TREND_MODES, TARGET_MODES, MODELS, CONFIRMATION_LEVELS } = require('../services/signal');
 const { INDICATOR_DEFAULTS, ZONE_DEFAULTS } = require('../services/indicator.service');
 const { MARKET_DEFAULTS } = require('../services/market.service');
 const { DIVERGENCE_DEFAULTS } = require('../services/divergence');
@@ -24,6 +24,21 @@ const LIMITS = {
         trailing_atr: [0, 10],
         htf_proximity_percent: [0, 10],
         target: { values: TARGET_MODES },
+        model: { values: MODELS },
+    },
+    // Trend models (signal.model trend_pullback / breakout). Points are integers like `scoring`.
+    trend: {
+        htf_points: [0, 10, true],
+        structure_points: [0, 10, true],
+        entry_points: [0, 10, true],
+        pullback_points: [0, 10, true],
+        breakout_points: [0, 10, true],
+        momentum_points: [0, 10, true],
+        volume_points: [0, 5, true],
+        pullback_atr: [0, 10],
+        channel_candles: [2, 500, true],
+        stop_atr: [0.1, 20],
+        target_r: [0.5, 20],
     },
     filters: {
         no_mans_land_percent: [0, 10],
@@ -103,7 +118,7 @@ const LIMITS = {
     },
 };
 const WEIGHT_LIMITS = [0.1, 20];
-const GROUPS = ['signal', 'filters', 'weights', 'scoring', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
+const GROUPS = ['signal', 'filters', 'weights', 'scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
 const SNAPSHOT_GROUPS = ['indicators', 'zones'];
 
@@ -117,7 +132,7 @@ function defaultsOf(envWeights = {}) {
     for (const [tf, w] of Object.entries(envWeights)) if (TF_SECONDS[tf]) weights[tf] = w;
     return {
         signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights,
-        scoring: { ...SCORING_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
+        scoring: { ...SCORING_DEFAULTS }, trend: { ...TREND_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
         market: { ...MARKET_DEFAULTS }, divergence: { ...DIVERGENCE_DEFAULTS },
         evaluation: { expiry_candles: EXPIRY_CANDLES, min_trades: 30 },
         backtest: { ...BACKTEST_DEFAULTS },
@@ -194,6 +209,8 @@ function signalOptions(cfg) {
         htfTrend: cfg.filters.htf_trend,
         entryMaxAtr: cfg.filters.entry_max_atr,
         scoring: cfg.scoring,
+        model: cfg.signal.model,
+        trend: cfg.trend,
     };
 }
 
@@ -203,10 +220,10 @@ const mergeWeights = (cfg) => ({ ...cfg.weights, DEFAULT: 1.0 });
 // Options for the per-timeframe snapshot (indicator.service calculateAll) and for the merged
 // Market State (market.service composeMarketState).
 const snapshotParams = (cfg) => ({ indicators: cfg.indicators, zones: cfg.zones });
-const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence });
+const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence, trend: cfg.trend });
 
 // The groups whose values change backtest results; a report made with other values is params_differ.
-const RESULT_GROUPS = ['scoring', 'indicators', 'zones', 'market', 'divergence', 'evaluation'];
+const RESULT_GROUPS = ['scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation'];
 const resultParams = (cfg) => Object.fromEntries(RESULT_GROUPS.map(g => [g, cfg[g]]));
 
 // `candleLimit` is CANDLE_LIMIT (binance.candleLimit()): `indicators.min_candles` must fit in it.

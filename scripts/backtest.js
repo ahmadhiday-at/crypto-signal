@@ -1,7 +1,8 @@
 // Backtest CLI (docs/roadmap/level-5.md).
 // Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
 // The base parameters, and the --days/--fee/--split defaults, come from config/calculation.json.
-// --sweep (Level 6) replays parameter variants on the same history. Keys: `threshold`, `min_rr`,
+// --sweep (Level 6) replays parameter variants on the same history. Keys: `model` (bounce,
+// trend_pullback, breakout), `threshold`, `min_rr`,
 // `stop_atr` (SL buffer in ATR), `target` (tp1, rr_zone, tp2 or a fixed R multiple), `htf_trend`
 // (off, htf, htf+structure: Level 6.5 B1 trend filter), `entry_max_atr` (0–10, 0 = off: Level 6.5
 // B2 entry distance filter), `side` (both, buy, sell),
@@ -23,7 +24,7 @@ const indicators = require('../src/services/indicator.service');
 const { tfSeconds } = require('../src/services/candles');
 const { createHistory } = require('../src/services/history');
 const { runBacktest, createReports, FIXED_KEYS } = require('../src/services/backtest');
-const { HTF_TREND_MODES, TARGET_MODES } = require('../src/services/signal');
+const { HTF_TREND_MODES, TARGET_MODES, MODELS } = require('../src/services/signal');
 
 const DATA = path.join(__dirname, '../data');
 
@@ -43,6 +44,7 @@ const SWEEP_KEYS = {
     target: [(raw) => (TARGET_MODES.includes(raw) ? raw : number(0.5, 10)(raw)), `${TARGET_MODES.join(', ')} or 0.5–10`],
     entry_max_atr: [number(0, 10), '0–10 (0 = off)'],
     htf_trend: [(raw) => (HTF_TREND_MODES.includes(raw) ? raw : undefined), HTF_TREND_MODES.join(', ')],
+    model: [(raw) => (MODELS.includes(raw) ? raw : undefined), MODELS.join(', ')],
     side: [(raw) => (['both', 'buy', 'sell'].includes(raw) ? raw : undefined), 'both, buy or sell'],
     skip_energy: [(raw) => {
         if (raw === 'none') return [];
@@ -194,7 +196,7 @@ async function main() {
     const started = Date.now();
     const report = runBacktest({
         market: args.market, candlesByTf, roles, weights: calc.weights(), indicators,
-        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, target: cfg.signal.target,
+        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, target: cfg.signal.target, model: cfg.signal.model,
         htfTrend: cfg.filters.htf_trend, entryMaxAtr: cfg.filters.entry_max_atr, calcParams: calc.resultParams(),
         fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         startSec, feePct: args.fee, window, variants: args.variants,
