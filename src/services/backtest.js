@@ -8,7 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { composeMarketState } = require('./market.service');
 const { computeSignal, THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
-const { recordFrom, evaluate, EXPIRY_CANDLES } = require('./signal-log');
+const { recordFrom, evaluate } = require('./signal-log');
+const { defaultsOf, resultParams, RESULT_GROUPS } = require('../config/calculation');
 
 const MARKET_RE = /^[A-Z0-9]{2,20}$/;
 const CLOSED_RESULTS = ['WIN', 'LOSS', 'EXPIRED'];
@@ -124,16 +125,22 @@ function validation(runs, splitSec, minTrades = VALIDATION_MIN_TRADES) {
 // One parameter set of the replay. `weights` changes the zone merge; `threshold`, `min_rr`,
 // `stop_atr`, `target`, `htf_trend` and `entry_max_atr` the signal, its plan and filters; `side` and
 // `skip_energy` drop candidates (backtest only: such candidates are neither taken nor filtered).
+// `calc` holds the calculation config groups RESULT_GROUPS (score points, indicators, zones, market,
+// divergence, evaluation); a variant overrides single keys, e.g. { calc: { scoring: { near_zone: 3 } } }.
 const PARAM_KEYS = ['threshold', 'min_rr', 'stop_atr', 'target', 'htf_trend', 'entry_max_atr', 'side', 'skip_energy'];
 
 function normalizeParams(base, over = {}) {
     const p = { weights: { ...base.weights, ...(over.weights || {}) } };
     for (const key of PARAM_KEYS) p[key] = over[key] ?? base[key];
     p.skip_energy = [...p.skip_energy].sort();
+    p.calc = Object.fromEntries(RESULT_GROUPS.map(g => [g, { ...base.calc[g], ...(over.calc?.[g] || {}) }]));
     return p;
 }
 
-const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.entries(p.weights).sort()]);
+const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.entries(p.weights).sort(), p.calc]);
+// Variants sharing these values share the per-timeframe snapshots / the merged state.
+const snapshotKey = (p) => JSON.stringify([p.calc.indicators, p.calc.zones]);
+const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market, p.calc.divergence]);
 
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
 // candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
@@ -142,7 +149,8 @@ const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.en
 // `fixed` holds the calculation-config values no variant changes (FIXED_KEYS); missing keys use the
 // signal defaults. They are written to the report params. `calcParams` holds the calculation config
 // groups `scoring`, `indicators`, `zones`, `market`, `divergence` and `evaluation` (missing groups use
-// the defaults); written to the report params as `calc`.
+// the defaults); written to the report params as `calc`. Variants may change any of them (`calc`);
+// each distinct indicators/zones set computes its own snapshots, so such sweeps cost more time.
 const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
 
 function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
@@ -155,15 +163,13 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         volatilityExtreme: fixedParams.volatility_extreme,
         volatilityDead: fixedParams.volatility_dead,
     };
-    const expiry = calcParams.evaluation?.expiry_candles ?? EXPIRY_CANDLES;
-    const minTrades = calcParams.evaluation?.min_trades ?? VALIDATION_MIN_TRADES;
-    const snapshotParams = { indicators: calcParams.indicators, zones: calcParams.zones };
-    const stateParams = { market: calcParams.market, divergence: calcParams.divergence };
+    const calcDefaults = resultParams(defaultsOf());
+    const baseCalc = Object.fromEntries(RESULT_GROUPS.map(g => [g, { ...calcDefaults[g], ...(calcParams[g] || {}) }]));
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
-    const snaps = {};
-    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], weights });
+    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], weights, calc: baseCalc });
+    const minTrades = base.calc.evaluation.min_trades;
     const trendTfs = [...new Set([roles.htf, roles.structure].filter(Boolean))];
     // A variant equal to the base parameters is not replayed twice.
     const seen = new Set();
@@ -171,9 +177,16 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         const key = paramsKey(p);
         return !seen.has(key) && seen.add(key);
     });
+    // Per indicators/zones set: its params and the latest snapshot per timeframe.
+    const snapshotSets = new Map();
+    for (const params of unique) {
+        const key = snapshotKey(params);
+        if (!snapshotSets.has(key)) snapshotSets.set(key, { params: { indicators: params.calc.indicators, zones: params.calc.zones }, snaps: {} });
+    }
     const runs = unique.map(params => ({
         params,
-        weightsKey: JSON.stringify(params.weights),
+        snapKey: snapshotKey(params),
+        stateKey: stateKey(params),
         trades: [],
         // Each group (taken / filtered) holds at most one open trade per direction, like the signal log.
         busyUntil: { taken: {}, filtered: {} },
@@ -187,38 +200,42 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         steps++;
         if (onProgress && steps % 500 === 0) onProgress(steps);
 
-        let ready = true;
         for (const tf of roleTfs) {
             const list = candlesByTf[tf];
             let p = pointer[tf];
             while (p + 1 < list.length && list[p + 1].close_time <= t) p++;
-            if (p !== pointer[tf] || !snaps[tf]) {
-                pointer[tf] = p;
+            const moved = p !== pointer[tf];
+            pointer[tf] = p;
+            for (const set of snapshotSets.values()) {
+                if (!moved && set.snaps[tf] !== undefined) continue;
                 try {
-                    snaps[tf] = indicators.calculateAll(list.slice(Math.max(0, p + 1 - window), p + 1), market, tf, {}, snapshotParams);
+                    set.snaps[tf] = indicators.calculateAll(list.slice(Math.max(0, p + 1 - window), p + 1), market, tf, {}, set.params);
                 } catch (e) {
-                    snaps[tf] = null;
+                    set.snaps[tf] = null;
                 }
             }
-            if (!snaps[tf]) ready = false;
         }
-        if (!ready) { skipped++; continue; }
+        const ready = (set) => roleTfs.every(tf => set.snaps[tf]);
+        if (!ready(snapshotSets.get(runs[0].snapKey))) { skipped++; continue; }
 
-        // Variants with the same weights share one merged state.
+        // Variants with the same snapshots, weights and market/divergence values share one merged state.
         const states = new Map();
         let failed = false;
         for (const run of runs) {
-            if (!states.has(run.weightsKey)) {
+            const set = snapshotSets.get(run.snapKey);
+            if (!ready(set)) continue;
+            if (!states.has(run.stateKey)) {
                 try {
-                    states.set(run.weightsKey, { ...composeMarketState(market, snaps, roles, run.params.weights, stateParams), generated_at: t, status: 'ok' });
+                    const stateParams = { market: run.params.calc.market, divergence: run.params.calc.divergence };
+                    states.set(run.stateKey, { ...composeMarketState(market, set.snaps, roles, run.params.weights, stateParams), generated_at: t, status: 'ok' });
                 } catch (e) {
-                    states.set(run.weightsKey, null);
+                    states.set(run.stateKey, null);
                 }
             }
-            const merged = states.get(run.weightsKey);
+            const merged = states.get(run.stateKey);
             if (!merged) { if (run === runs[0]) failed = true; continue; }
             const { params } = run;
-            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure, scoring: calcParams.scoring }) };
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure, scoring: params.calc.scoring }) };
 
             const record = recordFrom(market, roles.entry, state, entry[i], params.threshold);
             if (!record) continue;
@@ -227,6 +244,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             const group = record.filtered ? 'filtered' : 'taken';
             if ((run.busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
 
+            const expiry = params.calc.evaluation.expiry_candles;
             const outcome = evaluate(record, entry.slice(i, i + expiry + 2), expiry);
             const risk = Math.abs(record.price - record.sl);
             const feeR = risk > 0 ? (feePct / 100) * record.price / risk : 0;
@@ -261,7 +279,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { ...main.params, ...fixedParams, calc: calcParams, expiry_candles: expiry, window, fee_pct: feePct },
+        params: { ...main.params, ...fixedParams, expiry_candles: main.params.calc.evaluation.expiry_candles, window, fee_pct: feePct },
         steps,
         skipped_steps: skipped,
         taken: groupReport(main.trades.filter(t => !t.filtered)),

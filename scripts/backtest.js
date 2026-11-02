@@ -6,7 +6,10 @@
 // (off, htf, htf+structure: Level 6.5 B1 trend filter), `entry_max_atr` (0–10, 0 = off: Level 6.5
 // B2 entry distance filter), `side` (both, buy, sell),
 // `skip_energy` (none or market_energy values joined with +, e.g. explosive+building) and `w_<tf>`
-// (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
+// (zone weight of a role timeframe, e.g. w_15m=1,2,3) and `<group>.<key>` for any key of the
+// calculation config groups scoring, indicators, zones, market, divergence and evaluation (except
+// evaluation.min_trades), e.g. scoring.near_zone=1,2,3 or evaluation.expiry_candles=96,192. Several
+// --sweep options combine.
 // --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
 // reports how it does on the remaining 30%; --split none turns it off.
 // Downloads/extends the history cache in data/history/, replays the signal engine and writes
@@ -14,7 +17,7 @@
 // container so requests go through the VPN: docker compose exec app npm run backtest -- BTCUSDT
 const path = require('path');
 const config = require('../src/config/env');
-const { createCalcConfig } = require('../src/config/calculation');
+const { createCalcConfig, validate, LIMITS, RESULT_GROUPS } = require('../src/config/calculation');
 const binance = require('../src/services/binance.service');
 const indicators = require('../src/services/indicator.service');
 const { tfSeconds } = require('../src/services/candles');
@@ -48,14 +51,25 @@ const SWEEP_KEYS = {
     }, `none or ${ENERGIES.join('+')} values joined with +`],
 };
 
+// Parser for a calculation-config key `<group>.<key>` from its limits, or undefined.
+function calcKeyParser(key) {
+    const [group, name, extra] = key.split('.');
+    if (extra !== undefined || !RESULT_GROUPS.includes(group) || key === 'evaluation.min_trades') return undefined;
+    const limits = LIMITS[group]?.[name];
+    if (!limits) return undefined;
+    if (!Array.isArray(limits)) return [(raw) => (limits.values.includes(raw) ? raw : undefined), limits.values.join(', ')];
+    const [min, max, int] = limits;
+    return [number(min, max, int), `${int ? 'integers ' : ''}${min}–${max}`];
+}
+
 // `threshold=4,5,6` → ['threshold', [4, 5, 6]].
 function parseSweep(spec, roleTfs) {
-    const m = /^([a-z0-9_]+)=([a-z0-9_.,+]+)$/.exec(spec || '');
+    const m = /^([a-z0-9_.]+)=([a-z0-9_.,+]+)$/.exec(spec || '');
     if (!m) throw new Error(`--sweep expects key=v1,v2 (got ${String(spec).slice(0, 40)})`);
     const [, key, list] = m;
     const tfKey = key.startsWith('w_') && roleTfs.includes(key.slice(2));
-    const [parse, hint] = tfKey ? [number(0, 20), '0–20'] : SWEEP_KEYS[key] || [];
-    if (!parse) throw new Error(`--sweep key must be ${Object.keys(SWEEP_KEYS).join(', ')} or w_<tf> with tf in ${roleTfs.join(', ')}`);
+    const [parse, hint] = tfKey ? [number(0, 20), '0–20'] : SWEEP_KEYS[key] || calcKeyParser(key) || [];
+    if (!parse) throw new Error(`--sweep key must be ${Object.keys(SWEEP_KEYS).join(', ')}, w_<tf> with tf in ${roleTfs.join(', ')}, or <group>.<key> of ${RESULT_GROUPS.join(', ')}`);
     const raws = list.split(',').filter(Boolean);
     const values = raws.map(parse);
     if (!values.length || values.some(v => v === undefined)) throw new Error(`--sweep ${key}: ${hint}`);
@@ -72,7 +86,11 @@ function variantsOf(sweeps) {
         const v = { weights: {} };
         for (const [key, value] of Object.entries(c)) {
             if (key.startsWith('w_')) v.weights[key.slice(2)] = value;
-            else v[key] = value;
+            else if (key.includes('.')) {
+                const [group, name] = key.split('.');
+                v.calc = v.calc || {};
+                v.calc[group] = { ...v.calc[group], [name]: value };
+            } else v[key] = value;
         }
         return v;
     }) : [];
@@ -108,6 +126,7 @@ const table = (rows) => rows.map(r => r.map(String).map((c, i) => (i ? c.padStar
 
 function valueOf(p, key) {
     if (key.startsWith('w_')) return p.weights[key.slice(2)];
+    if (key.includes('.')) { const [group, name] = key.split('.'); return p.calc[group][name]; }
     if (key === 'skip_energy') return p.skip_energy.join('+') || 'none';
     return p[key];
 }
@@ -151,6 +170,12 @@ async function main() {
     const cfg = calc.get();
     const args = parseArgs(process.argv.slice(2), roleTfs, cfg.backtest);
     const window = binance.candleLimit() - 1;
+    // Each swept calculation value must also pass the cross-key rules (e.g. MA fast < mid < slow).
+    for (const v of args.variants) {
+        if (!v.calc) continue;
+        const { problems } = validate(v.calc, cfg, { candleLimit: window + 1 });
+        if (problems.length) throw new Error(`--sweep variant ${JSON.stringify(v.calc)}: ${problems.join('; ')}`);
+    }
     const nowSec = Math.floor(Date.now() / 1000);
     const startSec = nowSec - args.days * 86400;
 

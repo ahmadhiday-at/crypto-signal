@@ -227,6 +227,12 @@
             for (const [tf, w] of Object.entries(p.weights || {})) {
                 if (w !== base.weights?.[tf]) parts.push(`w ${tf} ${w}`);
             }
+            // Calculation config values (since 2.19.0), e.g. scoring.near_zone 3.
+            for (const [group, values] of Object.entries(p.calc || {})) {
+                for (const [key, v] of Object.entries(values)) {
+                    if (base.calc?.[group] && v !== base.calc[group][key]) parts.push(`${group}.${key} ${v}`);
+                }
+            }
             return parts.join(' · ');
         }
 

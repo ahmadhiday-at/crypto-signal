@@ -87,6 +87,24 @@ test('fees lower net R by fee% × price / risk', () => {
     assert.equal(paid.params.fee_pct, 0.2);
 });
 
+test('sweep of calculation values: a variant equals a run with that config', () => {
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
+    const variants = [
+        { calc: { scoring: { momentum: 4 } } },
+        { calc: { indicators: { rsi_period: 7 } } },
+        { calc: { evaluation: { expiry_candles: 8 } } },
+    ];
+    const swept = runBacktest({ ...args, variants });
+    assert.equal(swept.sweep.length, 4);
+    variants.forEach((v, k) => {
+        const alone = runBacktest({ ...args, calcParams: v.calc });
+        assert.deepEqual(swept.sweep[k + 1].taken, alone.taken.summary, JSON.stringify(v.calc));
+        assert.deepEqual(swept.sweep[k + 1].filtered, alone.filtered.summary);
+    });
+    assert.equal(swept.params.calc.scoring.momentum, 2, 'main report keeps the base values');
+    assert.equal(swept.sweep[3].params.calc.evaluation.expiry_candles, 8);
+});
+
 test('sweep: each variant equals a separate run with those parameters; the base is not replayed twice', () => {
     const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
     const plain = runBacktest(args);
@@ -188,6 +206,14 @@ test('CLI --sweep: combinations, validation and limits', () => {
     assert.equal(setup.variants.length, 6);
     assert.throws(() => parseArgs(['--sweep', 'target=tp3'], tfs), /tp1, rr_zone, tp2/);
     assert.deepEqual(parseArgs(['--sweep', 'target=tp1,rr_zone'], tfs).variants.map(v => v.target), ['tp1', 'rr_zone']);
+    assert.deepEqual(parseArgs(['--sweep', 'scoring.near_zone=1,3', '--sweep', 'evaluation.expiry_candles=192'], tfs).variants, [
+        { weights: {}, calc: { scoring: { near_zone: 1 }, evaluation: { expiry_candles: 192 } } },
+        { weights: {}, calc: { scoring: { near_zone: 3 }, evaluation: { expiry_candles: 192 } } },
+    ]);
+    assert.deepEqual(parseArgs(['--sweep', 'scoring.breakout_confirmed=weak'], tfs).variants[0].calc, { scoring: { breakout_confirmed: 'weak' } });
+    assert.throws(() => parseArgs(['--sweep', 'scoring.near_zone=1.5'], tfs), /integers 0–10/);
+    assert.throws(() => parseArgs(['--sweep', 'evaluation.min_trades=10'], tfs), /<group>.<key>/);
+    assert.throws(() => parseArgs(['--sweep', 'signal.threshold=4'], tfs), /<group>.<key>/);
     assert.throws(() => parseArgs(['--sweep', 'side=long'], tfs), /both, buy or sell/);
     assert.throws(() => parseArgs(['--sweep', 'skip_energy=hot'], tfs), /none or/);
 });
