@@ -186,7 +186,8 @@ test('CLI --sweep: combinations, validation and limits', () => {
     assert.deepEqual(setup.variants[0], { target: 'tp1', side: 'sell', skip_energy: [], stop_atr: 1, weights: {} });
     assert.deepEqual(setup.variants[1].skip_energy, ['building', 'explosive']);
     assert.equal(setup.variants.length, 6);
-    assert.throws(() => parseArgs(['--sweep', 'target=tp3'], tfs), /tp1, tp2/);
+    assert.throws(() => parseArgs(['--sweep', 'target=tp3'], tfs), /tp1, rr_zone, tp2/);
+    assert.deepEqual(parseArgs(['--sweep', 'target=tp1,rr_zone'], tfs).variants.map(v => v.target), ['tp1', 'rr_zone']);
     assert.throws(() => parseArgs(['--sweep', 'side=long'], tfs), /both, buy or sell/);
     assert.throws(() => parseArgs(['--sweep', 'skip_energy=hot'], tfs), /none or/);
 });

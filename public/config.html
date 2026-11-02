@@ -68,12 +68,14 @@
                 stop_atr: 'Stop loss buffer beyond the entry zone, × ATR',
                 trailing_atr: 'Trailing stop distance, × ATR',
                 htf_proximity_percent: 'Max distance (%) to an HTF zone for ±3 points',
+                target: 'TP1: tp1 nearest zone, rr_zone first zone with RR ≥ min_rr, tp2 major HTF zone',
             } },
             filters: { title: 'Trade filters', help: {
                 no_mans_land_percent: 'mid_range farther than this % from any zone → no_mans_land',
                 volatility_extreme: 'volatility_ratio above this → volatility_extreme',
                 volatility_dead: 'volatility_ratio below this → volatility_dead',
                 htf_trend: 'Reject BUY when the HTF (or structure) timeframe trends down, SELL when up → against_htf_trend',
+                entry_max_atr: 'Price farther than this × ATR from the entry zone → far_from_entry (0 = off)',
             } },
             weights: { title: 'Zone weights per timeframe', help: {} },
             backtest: { title: 'Backtest', help: {

@@ -33,10 +33,12 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `signal` | `stop_atr` | 0.5 | 0–3 | Stop loss buffer beyond the entry zone, × ATR |
 | `signal` | `trailing_atr` | 1.5 | 0–10 | Trailing stop distance, × ATR |
 | `signal` | `htf_proximity_percent` | 1 | 0–10 | Max distance (%) to an HTF zone for ±3 points |
+| `signal` | `target` | `tp1` | `tp1` / `rr_zone` / `tp2` | TP1 choice (since 2.17.0): nearest zone, first zone with RR ≥ `min_rr`, or the major HTF zone |
 | `filters` | `no_mans_land_percent` | 1 | 0–10 | `mid_range` farther than this from any zone → `no_mans_land` |
 | `filters` | `volatility_extreme` | 2.0 | 0–10 | `volatility_ratio` above → `volatility_extreme` |
 | `filters` | `volatility_dead` | 0.5 | 0–10 | `volatility_ratio` below → `volatility_dead` |
 | `filters` | `htf_trend` | `off` | `off` / `htf` / `htf+structure` | HTF trend filter (since 2.16.0): BUY rejected when a checked timeframe trends `down`, SELL when `up` → `against_htf_trend` |
+| `filters` | `entry_max_atr` | 0 | 0–10 | Entry location (since 2.17.0): price farther than this × ATR from the entry zone → `far_from_entry`; 0 = off |
 | `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
 | `backtest` | `days` | 365 | integer 1–1500 | History length (CLI `--days` default) |
 | `backtest` | `fee_pct` | 0.1 | 0–5 | Round-trip fee, % of price (CLI `--fee` default) |

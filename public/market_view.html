@@ -494,6 +494,7 @@
                 ['TP2', plan.take_profit_2 === null ? '-' : fmtPrice(plan.take_profit_2), COLORS.bullish.text],
                 ['Risk/reward', plan.risk_reward === null ? '-' : fmtNum(plan.risk_reward)],
                 ['Trailing stop', fmtPrice(plan.trailing_stop)],
+                ['From entry zone', plan.entry_distance_atr == null ? '-' : `${fmtNum(plan.entry_distance_atr)} ATR`],
             ];
             rows.forEach(([k, v, color]) => {
                 const row = document.createElement('div');

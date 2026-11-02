@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { TF_SECONDS } = require('../services/candles');
-const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, HTF_TREND_MODES } = require('../services/signal');
+const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, HTF_TREND_MODES, TARGET_MODES } = require('../services/signal');
 
 const FILE = path.join(__dirname, '../../config/calculation.json');
 const WATCH_INTERVAL_MS = 2000;
@@ -18,12 +18,14 @@ const LIMITS = {
         stop_atr: [0, 3],
         trailing_atr: [0, 10],
         htf_proximity_percent: [0, 10],
+        target: { values: TARGET_MODES },
     },
     filters: {
         no_mans_land_percent: [0, 10],
         volatility_extreme: [0, 10],
         volatility_dead: [0, 10],
         htf_trend: { values: HTF_TREND_MODES },
+        entry_max_atr: [0, 10],
     },
     backtest: {
         days: [1, 1500, true],
@@ -84,10 +86,12 @@ function signalOptions(cfg) {
         stopAtr: cfg.signal.stop_atr,
         trailingAtr: cfg.signal.trailing_atr,
         htfProximity: cfg.signal.htf_proximity_percent,
+        target: cfg.signal.target,
         noMansLand: cfg.filters.no_mans_land_percent,
         volatilityExtreme: cfg.filters.volatility_extreme,
         volatilityDead: cfg.filters.volatility_dead,
         htfTrend: cfg.filters.htf_trend,
+        entryMaxAtr: cfg.filters.entry_max_atr,
     };
 }
 

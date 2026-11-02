@@ -23,10 +23,12 @@ function paramsMatch(params, live) {
     if ((params.stop_atr ?? STOP_ATR_BUFFER) !== live.stop_atr) return false;
     // Reports older than v2.16.0 ran without the HTF trend filter.
     if ((params.htf_trend ?? 'off') !== live.htf_trend) return false;
+    // Reports older than v2.17.0 used the nearest target and no entry-distance filter.
+    if ((params.target ?? 'tp1') !== live.target || (params.entry_max_atr ?? 0) !== live.entry_max_atr) return false;
     // Reports older than v2.14.0 carry no fixed values: they ran with the defaults.
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     for (const k of FIXED_KEYS) if ((params[k] ?? defaults[k]) !== live[k]) return false;
-    if ((params.target ?? 'tp1') !== 'tp1' || (params.side ?? 'both') !== 'both' || (params.skip_energy || []).length) return false;
+    if ((params.side ?? 'both') !== 'both' || (params.skip_energy || []).length) return false;
     if (params.weights) {
         for (const tf of live.role_tfs) if (params.weights[tf] !== live.weights[tf]) return false;
     }
@@ -92,6 +94,8 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
         min_rr: cfg.signal.min_rr,
         stop_atr: cfg.signal.stop_atr,
         htf_trend: cfg.filters.htf_trend,
+        target: cfg.signal.target,
+        entry_max_atr: cfg.filters.entry_max_atr,
         ...Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         weights,
         role_tfs: [...new Set(Object.values(config.TF_ROLES))],

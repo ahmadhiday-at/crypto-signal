@@ -39,6 +39,9 @@ test('validate merges partial input and rejects unknown keys and out-of-range va
     ]);
     assert.deepEqual(validate([], base).problems, ['config must be a JSON object']);
     assert.equal(base.filters.htf_trend, 'off');
+    assert.deepEqual([base.signal.target, base.filters.entry_max_atr], ['tp1', 0]);
+    assert.deepEqual(validate({ signal: { target: 'fixed' }, filters: { entry_max_atr: 11 } }, base).problems,
+        ['signal.target must be one of tp1, rr_zone, tp2', 'filters.entry_max_atr must be a number 0–10']);
     assert.equal(validate({ filters: { htf_trend: 'htf+structure' } }, base).value.filters.htf_trend, 'htf+structure');
     assert.deepEqual(validate({ filters: { htf_trend: 'on' } }, base).problems, ['filters.htf_trend must be one of off, htf, htf+structure']);
 });

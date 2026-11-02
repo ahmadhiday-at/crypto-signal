@@ -2,8 +2,9 @@
 // Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
 // The base parameters, and the --days/--fee/--split defaults, come from config/calculation.json.
 // --sweep (Level 6) replays parameter variants on the same history. Keys: `threshold`, `min_rr`,
-// `stop_atr` (SL buffer in ATR), `target` (tp1, tp2 or a fixed R multiple), `htf_trend` (off, htf,
-// htf+structure: Level 6.5 B1 trend filter), `side` (both, buy, sell),
+// `stop_atr` (SL buffer in ATR), `target` (tp1, rr_zone, tp2 or a fixed R multiple), `htf_trend`
+// (off, htf, htf+structure: Level 6.5 B1 trend filter), `entry_max_atr` (0–10, 0 = off: Level 6.5
+// B2 entry distance filter), `side` (both, buy, sell),
 // `skip_energy` (none or market_energy values joined with +, e.g. explosive+building) and `w_<tf>`
 // (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
 // --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
@@ -19,7 +20,7 @@ const indicators = require('../src/services/indicator.service');
 const { tfSeconds } = require('../src/services/candles');
 const { createHistory } = require('../src/services/history');
 const { runBacktest, createReports, FIXED_KEYS } = require('../src/services/backtest');
-const { HTF_TREND_MODES } = require('../src/services/signal');
+const { HTF_TREND_MODES, TARGET_MODES } = require('../src/services/signal');
 
 const DATA = path.join(__dirname, '../data');
 
@@ -36,7 +37,8 @@ const SWEEP_KEYS = {
     threshold: [number(1, 15, true), 'integers 1–15'],
     min_rr: [number(0, 10), '0–10'],
     stop_atr: [number(0, 3), '0–3'],
-    target: [(raw) => (raw === 'tp1' || raw === 'tp2' ? raw : number(0.5, 10)(raw)), 'tp1, tp2 or 0.5–10'],
+    target: [(raw) => (TARGET_MODES.includes(raw) ? raw : number(0.5, 10)(raw)), `${TARGET_MODES.join(', ')} or 0.5–10`],
+    entry_max_atr: [number(0, 10), '0–10 (0 = off)'],
     htf_trend: [(raw) => (HTF_TREND_MODES.includes(raw) ? raw : undefined), HTF_TREND_MODES.join(', ')],
     side: [(raw) => (['both', 'buy', 'sell'].includes(raw) ? raw : undefined), 'both, buy or sell'],
     skip_energy: [(raw) => {
@@ -48,7 +50,7 @@ const SWEEP_KEYS = {
 
 // `threshold=4,5,6` → ['threshold', [4, 5, 6]].
 function parseSweep(spec, roleTfs) {
-    const m = /^([a-z0-9_]+)=([a-z0-9.,+]+)$/.exec(spec || '');
+    const m = /^([a-z0-9_]+)=([a-z0-9_.,+]+)$/.exec(spec || '');
     if (!m) throw new Error(`--sweep expects key=v1,v2 (got ${String(spec).slice(0, 40)})`);
     const [, key, list] = m;
     const tfKey = key.startsWith('w_') && roleTfs.includes(key.slice(2));
@@ -167,7 +169,8 @@ async function main() {
     const started = Date.now();
     const report = runBacktest({
         market: args.market, candlesByTf, roles, weights: calc.weights(), indicators,
-        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, htfTrend: cfg.filters.htf_trend,
+        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, target: cfg.signal.target,
+        htfTrend: cfg.filters.htf_trend, entryMaxAtr: cfg.filters.entry_max_atr,
         fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         startSec, feePct: args.fee, window, variants: args.variants,
         splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),

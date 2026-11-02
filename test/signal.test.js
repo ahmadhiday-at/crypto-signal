@@ -129,7 +129,7 @@ test('long plan: zone, stop below zone, nearest target, HTF target, RR, trailing
     assert.equal(sig.action, 'BUY');
     assert.deepEqual(sig.plan, {
         side: 'long', entry_zone: [98, 99.5], stop_loss: 97.5, take_profit_1: 109.5, take_profit_2: 115,
-        risk_reward: 3.8, trailing_stop: 98.5,
+        risk_reward: 3.8, trailing_stop: 98.5, entry_distance_atr: 0.5,
     });
 });
 
@@ -218,4 +218,23 @@ test('timeframe trend: ranging regime, else MA14 vs MA50', () => {
     assert.equal(trendOf(snap('ranging', 90, 100)), 'ranging');
     assert.equal(trendOf(snap('unknown', 90, 100)), 'unknown');
     assert.equal(trendOf({ regime: 'trending' }), 'unknown');
+});
+
+test('B2 target rr_zone: the first zone ahead that reaches the minimum RR', () => {
+    // Long from 100, stop 97.5 (risk 2.5): zones at 102 (RR 0.8), 104.5 (RR 1.8), 115 (RR 6).
+    const levels = { support: [lv(98, 99.5, ['1d'])], resistance: [lv(101.5, 102.5, ['15m'], 4), lv(104, 105, ['1h'], 9), lv(114, 116, ['1d'], 6)] };
+    const nearest = computeSignal(strongBuy({ levels }), '1d');
+    assert.deepEqual([nearest.plan.take_profit_1, nearest.plan.risk_reward, nearest.filters], [102, 0.8, ['low_rr']]);
+    const rrZone = computeSignal(strongBuy({ levels }), '1d', { target: 'rr_zone' });
+    assert.deepEqual([rrZone.action, rrZone.plan.take_profit_1, rrZone.plan.risk_reward, rrZone.plan.take_profit_2], ['BUY', 104.5, 1.8, 115]);
+    const strict = computeSignal(strongBuy({ levels }), '1d', { target: 'rr_zone', minRiskReward: 7 });
+    assert.deepEqual([strict.plan.take_profit_1, strict.filters], [102, ['low_rr']], 'no zone reaches RR 7: nearest, filtered');
+});
+
+test('B2 entry location: far_from_entry when price is more than entryMaxAtr × ATR from the entry zone', () => {
+    const far = (entryMaxAtr) => computeSignal(strongBuy({ price: 101.5, levels: { support: [lv(98, 99.5, ['1d'])], resistance: [lv(114, 116, ['15m'])] } }), '1d', { entryMaxAtr });
+    assert.equal(far(0).plan.entry_distance_atr, 2);
+    assert.equal(far(0).action, 'BUY', '0 = off');
+    assert.deepEqual(far(1.5).filters, ['far_from_entry']);
+    assert.equal(far(2).action, 'BUY');
 });

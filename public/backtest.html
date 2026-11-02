@@ -220,6 +220,7 @@
             // Setup keys (since 2.11.0) are shown only when they differ from the live parameters.
             if (p.stop_atr !== undefined && p.stop_atr !== base.stop_atr) parts.push(`SL ${p.stop_atr} ATR`);
             if (p.target !== undefined && p.target !== base.target) parts.push(`target ${typeof p.target === 'number' ? p.target + 'R' : p.target}`);
+            if (p.entry_max_atr !== undefined && p.entry_max_atr !== (base.entry_max_atr ?? 0)) parts.push(`entry ≤ ${p.entry_max_atr} ATR`);
             if (p.htf_trend !== undefined && p.htf_trend !== (base.htf_trend ?? 'off')) parts.push(`trend filter ${p.htf_trend}`);
             if (p.side !== undefined && p.side !== base.side) parts.push(`${p.side} only`);
             if (p.skip_energy?.length && p.skip_energy.join() !== (base.skip_energy || []).join()) parts.push(`skip ${p.skip_energy.join('+')}`);
