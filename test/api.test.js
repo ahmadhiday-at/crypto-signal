@@ -206,5 +206,5 @@ test('/ redirects to the dashboard of the first configured market', async (t) =>
     assert.equal(r.status, 302);
     assert.equal(r.headers.get('location'), `/${testConfig.MARKETS[0]}`);
     const page = await fetch(`${s.base}/`).then(res => res.text());
-    assert.match(page, /id="link-backtest"/, 'lands on the dashboard with its view links');
+    assert.match(page, /data-view="dashboard"/, 'lands on the dashboard with the shared header');
 });

@@ -104,12 +104,27 @@ Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static fi
 | URL | Page |
 | :-- | :--- |
 | `/` | 302 to `/{first MARKET_LIST market}` (since 2.13.0) |
-| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; header links: Chart, Backtest, Signal log CSV, Config) |
+| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; Signal log CSV link) |
 | `/backtest/:market` | Backtest report (`public/backtest.html`) |
 | `/config` | Calculation config and backtest re-run (`public/config.html`, since 2.14.0) |
 | `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
 
 The page routes accept any path segment; the pages read the market and timeframe from the URL and, when the symbol or timeframe is not in `/api/config`, show a "not configured" notice listing the available markets (since 2.10.1).
+
+**Shared header (since 2.15.0, `public/js/app-header.js`):** Dashboard, Chart and Backtest show the same header: market picker, tabs Dashboard / Chart / Backtest for the same market, Config link and app version; each page adds its own items (price, actions, timeframe). Changing the market keeps the current view; the Chart tab opens the last chosen timeframe (Dashboard or Chart, kept in `localStorage`, else the entry timeframe). The Config page only has "← Dashboard" (last viewed market). Dropdowns use select2 (jQuery 3.7.1, select2 4.1.0-rc.0 from cdnjs); `AppHeader.select2(el)` also fires a native `change`.
+
+**UI type scale (`public/css/app.css`):** Inter for text, JetBrains Mono for numbers and data. Sizes by kind of information:
+
+| Class | Size | Used for |
+| :-- | :-- | :-- |
+| `t-title` | 18px | page identity: market symbol, page title |
+| `t-headline` | 16px | the number to read first: live price, signal action |
+| `t-value` | 14px | card and metric values, card titles |
+| `t-body` | 13px | prose: notes, explanations, empty states |
+| `t-control` | 12px | buttons, tabs, dropdowns |
+| `t-data` | 12px | tables, lists, indicator bars, inputs |
+| `t-meta` | 11px | timestamps, hints, version, chart legends and axes |
+| `t-label` | 10px | uppercase captions above a value or section |
 
 ### 1. Reference View (`public/index.html`)
 

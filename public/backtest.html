@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Backtest Report</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
+    <link rel="stylesheet" href="/css/app.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
+    <script src="/js/app-header.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
         .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
         .k { color: #848e9c; }
         th, td { padding: 4px 8px; white-space: nowrap; }
@@ -17,57 +19,53 @@
     </style>
 </head>
 <body class="min-h-screen p-3 flex flex-col gap-3">
-    <div class="flex flex-wrap justify-between items-center gap-3">
-        <div class="flex items-baseline gap-3">
-            <a id="back-link" href="/" class="text-2xl font-bold mono tracking-tighter text-white hover:text-blue-400">-</a>
-            <span class="text-sm font-semibold text-gray-400">Backtest</span>
-            <span id="period" class="text-xs mono text-gray-500"></span>
+    <!-- Shared header (js/app-header.js) with this report's period -->
+    <header id="app-header" data-view="backtest">
+        <div data-header-slot="left" class="flex flex-col">
+            <span class="t-label text-gray-500">Report</span>
+            <span id="period" class="t-meta mono text-gray-400">-</span>
         </div>
-        <div class="flex items-center gap-3">
-            <a href="/config" class="text-xs text-gray-400 hover:text-white" title="Change the calculation config and re-run this backtest">Config / re-run</a>
-            <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
-        </div>
-    </div>
+    </header>
 
-    <div class="glass rounded-lg px-3 py-2 text-xs text-yellow-200/80 border-l-4 border-l-yellow-500">
+    <div class="glass rounded-lg px-3 py-2 t-body text-yellow-200/80 border-l-4 border-l-yellow-500">
         Hypothetical results, not executed trades: entry at the close of the signal candle, exit at TP1 or SL
         (both in one candle counts as SL), expiry after <span id="expiry">96</span> entry candles. Results are in R (multiples of the planned risk).
         <span id="fee-note"></span>
     </div>
 
-    <div id="empty" class="hidden glass rounded-lg p-6 text-sm text-gray-300">
+    <div id="empty" class="hidden glass rounded-lg p-6 t-body text-gray-300">
         No backtest report for this symbol yet. Run it from <a href="/config" class="text-blue-300 hover:underline">Config</a>, or:
-        <pre class="mono text-xs mt-2 text-blue-300" id="empty-cmd"></pre>
+        <pre class="mono t-data mt-2 text-blue-300" id="empty-cmd"></pre>
     </div>
 
     <div id="report" class="hidden flex flex-col gap-3">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div class="glass rounded-lg p-3">
                 <div class="flex justify-between items-baseline mb-2">
-                    <span class="font-bold text-sm text-green-400">Taken <span class="k font-normal">(passed every filter)</span></span>
+                    <span class="t-value text-green-400">Taken <span class="k font-normal">(passed every filter)</span></span>
                 </div>
-                <div id="m-taken" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono text-sm"></div>
-                <div id="s-taken" class="mt-2 text-[11px] mono k"></div>
+                <div id="m-taken" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono t-value"></div>
+                <div id="s-taken" class="mt-2 t-meta mono k"></div>
             </div>
             <div class="glass rounded-lg p-3">
                 <div class="flex justify-between items-baseline mb-2">
-                    <span class="font-bold text-sm text-orange-400">Filtered <span class="k font-normal">(rejected by a filter, for comparison)</span></span>
+                    <span class="t-value text-orange-400">Filtered <span class="k font-normal">(rejected by a filter, for comparison)</span></span>
                 </div>
-                <div id="m-filtered" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono text-sm"></div>
-                <div id="s-filtered" class="mt-2 text-[11px] mono k"></div>
+                <div id="m-filtered" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono t-value"></div>
+                <div id="s-filtered" class="mt-2 t-meta mono k"></div>
             </div>
         </div>
 
         <div class="glass rounded-lg p-3">
-            <div class="text-xs mb-1"><span class="k">Equity curve (cumulative R)</span>
-                <span class="ml-3 text-green-400">● Taken</span><span class="ml-3 text-orange-400">● Filtered</span></div>
+            <div class="mb-2"><span class="t-label k">Equity curve</span> <span class="t-meta k">cumulative R</span>
+                <span class="ml-3 t-meta text-green-400">● Taken</span><span class="ml-3 t-meta text-orange-400">● Filtered</span></div>
             <div id="equity" style="height: 320px;"></div>
         </div>
 
         <div id="sweep-card" class="hidden glass rounded-lg p-3">
-            <div class="text-xs mb-2"><span class="k">Parameter sweep (taken trades, best expectancy first; ★ = live parameters)</span></div>
+            <div class="mb-2"><span class="t-label k">Parameter sweep</span> <span class="t-meta k">taken trades, best expectancy first; ★ = live parameters</span></div>
             <div class="overflow-auto" style="max-height: 360px;">
-                <table class="w-full text-xs mono">
+                <table class="w-full t-data mono">
                     <thead><tr class="k text-left">
                         <th>Parameters</th><th class="text-right">Trades</th><th class="text-right">Win rate</th><th class="text-right">Expectancy R</th>
                         <th class="text-right">Total R</th><th class="text-right">PF</th><th class="text-right">Max DD R</th><th class="text-right">Filtered exp R</th>
@@ -78,9 +76,9 @@
         </div>
 
         <div id="validation-card" class="hidden glass rounded-lg p-3">
-            <div class="text-xs mb-2 k" id="validation-note"></div>
+            <div class="mb-2"><span class="t-label k">Out-of-sample validation</span> <span class="t-meta k" id="validation-note"></span></div>
             <div class="overflow-auto" style="max-height: 360px;">
-                <table class="w-full text-xs mono">
+                <table class="w-full t-data mono">
                     <thead><tr class="k text-left">
                         <th>Parameters</th><th class="text-right">In-sample trades</th><th class="text-right">In-sample exp R</th>
                         <th class="text-right">Out-of-sample trades</th><th class="text-right">OOS win rate</th><th class="text-right">OOS exp R</th><th class="text-right">OOS total R</th><th class="text-right">OOS PF</th>
@@ -88,32 +86,32 @@
                     <tbody id="validation"></tbody>
                 </table>
             </div>
-            <div class="text-xs mt-2" id="validation-verdict"></div>
+            <div class="t-body mt-2" id="validation-verdict"></div>
         </div>
 
         <div class="glass rounded-lg p-3">
-            <div class="flex flex-wrap items-center gap-3 mb-2 text-xs">
-                <span class="k">Breakdown by condition at the signal candle</span>
-                <select id="breakdown-group" class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+            <div class="flex flex-wrap items-center gap-3 mb-2">
+                <span class="t-label k">Breakdown</span> <span class="t-meta k">condition at the signal candle</span>
+                <select id="breakdown-group" style="width: 7rem">
                     <option value="taken">Taken</option>
                     <option value="filtered">Filtered</option>
                 </select>
-                <span class="k">Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
+                <span class="t-meta k">Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
             </div>
             <div id="breakdown" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
         </div>
 
         <div class="glass rounded-lg p-3">
-            <div class="flex items-center gap-3 mb-2 text-xs">
-                <span class="k">Trades (newest first, up to 200)</span>
-                <select id="trade-filter" class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="t-label k">Trades</span> <span class="t-meta k">newest first, up to 200</span>
+                <select id="trade-filter" style="width: 7rem">
                     <option value="taken">Taken</option>
                     <option value="filtered">Filtered</option>
                     <option value="all">All</option>
                 </select>
             </div>
             <div class="overflow-auto" style="max-height: 420px;">
-                <table class="w-full text-xs mono">
+                <table class="w-full t-data mono">
                     <thead><tr class="k text-left">
                         <th>Signal time</th><th>Side</th><th>Score</th><th class="text-right">Price</th><th class="text-right">SL</th>
                         <th class="text-right">TP1</th><th class="text-right">Plan RR</th><th>Result</th><th class="text-right">Net R</th><th class="text-right">Bars</th><th>Filters</th>
@@ -136,12 +134,10 @@
 
         const market = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || 'BTCUSDT').toUpperCase();
         document.title = `${market} Backtest`;
-        const back = document.getElementById('back-link');
-        back.textContent = market;
-        back.href = `/${encodeURIComponent(market)}`;
+        const header = AppHeader.init({ market });
 
         function cell(label, value, cls = '') {
-            return `<div><div class="text-[10px] uppercase k">${esc(label)}</div><div class="${cls}">${esc(value)}</div></div>`;
+            return `<div><div class="t-label k">${esc(label)}</div><div class="${cls}">${esc(value)}</div></div>`;
         }
 
         function renderGroup(name, g) {
@@ -258,7 +254,7 @@
             if (!v) return;
             document.getElementById('validation-card').classList.remove('hidden');
             document.getElementById('validation-note').textContent =
-                `Out-of-sample validation (taken trades). In-sample: signals before ${fmtTime(v.split_at)}; out-of-sample: after. ` +
+                `Taken trades. In-sample: signals before ${fmtTime(v.split_at)}; out-of-sample: after. ` +
                 `▶ = best in-sample expectancy with at least ${v.min_trades} in-sample trades; ★ = live parameters.`;
             const base = v.rows.find(r => r.base)?.params || report.params;
             document.getElementById('validation').innerHTML = v.rows.map((r, idx) => {
@@ -281,7 +277,7 @@
                 verdict.textContent = `No variant has ${v.min_trades}+ in-sample trades: nothing to validate.`;
             } else {
                 const oos = pick.out_of_sample.expectancy_r;
-                verdict.className = `text-xs mt-2 ${tone(oos)}`;
+                verdict.className = `t-body mt-2 ${tone(oos)}`;
                 verdict.textContent = `Pick: ${paramLabel(pick.params, base)} → out-of-sample ${fmtNum(oos, 3)} R over ${pick.out_of_sample.trades} trades` +
                     (pick.out_of_sample.trades < MIN_SAMPLE ? ' (too few trades to judge).'
                         : isNum(oos) && oos > 0 ? ' (edge held on unseen data).' : ' (edge did not hold on unseen data).');
@@ -293,8 +289,8 @@
             const dims = group.breakdown || {};
             document.getElementById('breakdown').innerHTML = Object.entries(dims).map(([dim, rows]) => `
                 <div class="min-w-0 overflow-x-auto">
-                    <div class="text-xs font-semibold mb-1">${esc(DIM_LABELS[dim] || dim)}</div>
-                    <table class="w-full text-xs mono">
+                    <div class="t-label text-gray-300 mb-1">${esc(DIM_LABELS[dim] || dim)}</div>
+                    <table class="w-full t-data mono">
                         <thead><tr class="k text-left"><th>Value</th><th class="text-right">Trades</th><th class="text-right">Win</th><th class="text-right">Exp R</th><th class="text-right">Total R</th></tr></thead>
                         <tbody>${rows.map(r => `<tr class="border-t border-gray-800 ${r.trades < MIN_SAMPLE ? 'opacity-50' : ''}">
                             <td>${esc(r.value)}</td>
@@ -304,18 +300,16 @@
                             <td class="text-right ${tone(r.total_r)}">${esc(fmtNum(r.total_r))}</td>
                         </tr>`).join('')}</tbody>
                     </table>
-                </div>`).join('') || '<div class="text-xs k">No breakdown in this report (generated before v2.9.0).</div>';
+                </div>`).join('') || '<div class="t-body k">No breakdown in this report (generated before v2.9.0).</div>';
         }
 
         async function load() {
-            fetch('/api/config').then(r => r.json()).then(c => {
-                if (c.version) document.getElementById('app-version').textContent = `v${c.version}`;
-            }).catch(() => {});
+            for (const id of ['breakdown-group', 'trade-filter']) AppHeader.select2(document.getElementById(id), { width: 'style' });
 
             const res = await fetch(`/api/backtest/${encodeURIComponent(market)}`);
             const err = res.ok ? null : await res.json().catch(() => ({}));
             if (err?.error === 'unknown_market_or_timeframe') {
-                const config = await fetch('/api/config').then(r => r.json()).catch(() => ({ markets: [] }));
+                const config = (await header) || { markets: [] };
                 const empty = document.getElementById('empty');
                 empty.classList.remove('hidden');
                 empty.textContent = `${market} is not in the market list (MARKET_LIST). Available: ${config.markets.map(m => m.code).join(', ') || 'none'}.`;

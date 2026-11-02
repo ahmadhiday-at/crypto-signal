@@ -4,11 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calculation Config</title>
+    <link rel="stylesheet" href="/css/app.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/js/app-header.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
         .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
         .k { color: #848e9c; }
         th, td { padding: 4px 8px; white-space: nowrap; }
@@ -19,39 +18,34 @@
     </style>
 </head>
 <body class="min-h-screen p-3 flex flex-col gap-3">
-    <div class="flex flex-wrap justify-between items-center gap-3">
-        <div class="flex items-baseline gap-3">
-            <a id="back-link" href="/" class="text-2xl font-bold mono tracking-tighter text-white hover:text-blue-400">Dashboard</a>
-            <span class="text-sm font-semibold text-gray-400">Calculation config</span>
-        </div>
-        <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
-    </div>
+    <!-- Shared header (js/app-header.js), short variant: back to the Dashboard only -->
+    <header id="app-header" data-view="config"></header>
 
-    <div class="glass rounded-lg px-3 py-2 text-xs text-gray-300 border-l-4 border-l-blue-500">
+    <div class="glass rounded-lg px-3 py-2 t-body text-gray-300 border-l-4 border-l-blue-500">
         Values used by the signal, its trade filters, the zone merge and the backtest. Saved to
         <span id="file" class="mono text-blue-300">config/calculation.json</span> (editable by hand too) and applied to the live
         signal at once, no restart. A backtest report made with other values is marked <span class="mono">params_differ</span>
         until it is re-run below. Deployment settings (markets, timeframes, port, Binance URLs, <span class="mono">CANDLE_LIMIT</span>) stay in <span class="mono">.env</span>.
     </div>
 
-    <div id="load-error" class="hidden glass rounded-lg p-4 text-sm text-red-300"></div>
+    <div id="load-error" class="hidden glass rounded-lg p-4 t-body text-red-300"></div>
 
     <form id="form" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-3" autocomplete="off"></form>
 
     <div id="actions" class="hidden flex flex-wrap items-center gap-2">
-        <button id="save" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500">Save</button>
-        <button id="revert" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-700 text-white hover:bg-gray-600">Discard changes</button>
-        <button id="defaults" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-700 text-white hover:bg-gray-600" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
-        <span id="save-status" class="text-xs"></span>
+        <button id="save" type="button" class="px-3 py-1 rounded-md t-control bg-blue-600 text-white hover:bg-blue-500">Save</button>
+        <button id="revert" type="button" class="px-3 py-1 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600">Discard changes</button>
+        <button id="defaults" type="button" class="px-3 py-1 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
+        <span id="save-status" class="t-data"></span>
     </div>
 
     <div id="runs-card" class="hidden glass rounded-lg p-3">
         <div class="flex flex-wrap justify-between items-baseline gap-2 mb-2">
-            <span class="text-sm font-bold text-white">Recalculate backtest <span class="k font-normal text-xs">(uses the saved config; downloads missing history from Binance)</span></span>
-            <button id="run-all" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-green-700 text-white hover:bg-green-600">Run all markets</button>
+            <span class="t-value text-white">Recalculate backtest <span class="k t-meta font-normal">(uses the saved config; downloads missing history from Binance)</span></span>
+            <button id="run-all" type="button" class="px-3 py-1 rounded-md t-control bg-green-700 text-white hover:bg-green-600">Run all markets</button>
         </div>
         <div class="min-w-0 overflow-x-auto">
-            <table class="w-full text-xs mono">
+            <table class="w-full t-data mono">
                 <thead><tr class="k text-left">
                     <th>Market</th><th>Report</th><th>Config</th><th class="text-right">Trades</th><th class="text-right">Exp R</th>
                     <th class="text-right">OOS exp R</th><th>Verdict</th><th>Run</th><th></th>
@@ -59,7 +53,7 @@
                 <tbody id="runs"></tbody>
             </table>
         </div>
-        <div id="run-note" class="mt-2 text-[11px] k"></div>
+        <div id="run-note" class="mt-2 t-meta k"></div>
     </div>
 
     <script>
@@ -103,13 +97,13 @@
                     const help = group === 'weights' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
                     return `<div class="flex items-center justify-between gap-3 py-1 border-b border-white/5">
                         <label for="f-${group}-${key}" class="min-w-0">
-                            <div class="mono text-xs text-white">${esc(key)}</div>
-                            <div class="text-[11px] k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${min}–${max}</div>
+                            <div class="mono t-data text-white">${esc(key)}</div>
+                            <div class="t-meta k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${min}–${max}</div>
                         </label>
-                        <input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono text-xs text-right text-white shrink-0">
+                        <input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono t-data text-right text-white shrink-0">
                     </div>`;
                 }).join('');
-                return `<div class="glass rounded-lg p-3"><div class="text-sm font-bold text-white mb-1">${esc(g.title)}</div>${rows}</div>`;
+                return `<div class="glass rounded-lg p-3"><div class="t-value text-white mb-1">${esc(g.title)}</div>${rows}</div>`;
             }).join('');
             fillForm(state.saved);
             $('form').addEventListener('input', markDirty);
@@ -150,7 +144,7 @@
             const dirty = isDirty();
             $('save').disabled = !dirty || bad.length > 0;
             $('revert').disabled = !dirty;
-            $('save-status').className = 'text-xs ' + (bad.length ? 'text-red-400' : 'text-yellow-400');
+            $('save-status').className = 't-data ' + (bad.length ? 'text-red-400' : 'text-yellow-400');
             $('save-status').textContent = bad.length ? `Out of range: ${bad.join(', ')}` : dirty ? 'Unsaved changes' : '';
             renderRuns();
         }
@@ -169,11 +163,11 @@
                 if (!res.ok) throw new Error(data.problems ? data.problems.join('; ') : data.error || `HTTP ${res.status}`);
                 state.saved = data.config;
                 fillForm(state.saved);
-                $('save-status').className = 'text-xs text-green-400';
+                $('save-status').className = 't-data text-green-400';
                 $('save-status').textContent = 'Saved and applied. Re-run the backtest to measure it.';
                 await loadEdges();
             } catch (err) {
-                $('save-status').className = 'text-xs text-red-400';
+                $('save-status').className = 't-data text-red-400';
                 $('save-status').textContent = `Save failed: ${err.message}`;
                 markDirty();
             }
@@ -216,7 +210,7 @@
                     <td class="text-right">${b?.out_of_sample ? `${fmt(b.out_of_sample.expectancy_r)} <span class="k">(${esc(b.out_of_sample.trades)})</span>` : '-'}</td>
                     <td class="${VERDICT_COLORS[e?.verdict] || ''}">${esc(e?.verdict || '-')}</td>
                     <td class="max-w-[22rem] truncate">${jobCell}</td>
-                    <td><button type="button" data-run="${esc(m)}" class="px-2 py-0.5 rounded-md bg-gray-700 text-white hover:bg-gray-600" ${busy || dirty ? 'disabled' : ''}>Run</button></td>
+                    <td><button type="button" data-run="${esc(m)}" class="px-2 py-0.5 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600" ${busy || dirty ? 'disabled' : ''}>Run</button></td>
                 </tr>`;
             }).join('');
             $('run-note').textContent = busy ? 'Running… markets run one after another; this page refreshes by itself.' : '';
@@ -255,6 +249,7 @@
         }
 
         async function init() {
+            AppHeader.init();
             try {
                 const [cfgRes, appRes] = await Promise.all([fetch('/api/calc-config'), fetch('/api/config')]);
                 if (!cfgRes.ok) throw new Error(`GET /api/calc-config: HTTP ${cfgRes.status}`);
@@ -266,8 +261,6 @@
                 state.roles = data.role_timeframes || {};
                 state.markets = (app.markets || []).map(m => m.code);
                 $('file').textContent = data.file;
-                $('app-version').textContent = app.version ? `v${app.version}` : '';
-                if (state.markets[0]) $('back-link').href = `/${encodeURIComponent(state.markets[0])}`;
             } catch (err) {
                 $('load-error').textContent = `Config unavailable: ${err.message}`;
                 $('load-error').classList.remove('hidden');
