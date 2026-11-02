@@ -4,15 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calculation Config</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
     <link rel="stylesheet" href="/css/app.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
     <script src="/js/app-header.js"></script>
     <style>
         .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
         .k { color: #848e9c; }
         th, td { padding: 4px 8px; white-space: nowrap; }
         input[type=number] { background: #131722; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 2px 6px; width: 6.5rem; }
-        input[type=number].dirty { border-color: #eab308; }
+        input[type=number].dirty, select.dirty + .select2-container .select2-selection { border-color: #eab308; }
         input[type=number].bad { border-color: #ef4444; }
         button:disabled { opacity: 0.4; cursor: not-allowed; }
     </style>
@@ -70,6 +73,7 @@
                 no_mans_land_percent: 'mid_range farther than this % from any zone → no_mans_land',
                 volatility_extreme: 'volatility_ratio above this → volatility_extreme',
                 volatility_dead: 'volatility_ratio below this → volatility_dead',
+                htf_trend: 'Reject BUY when the HTF (or structure) timeframe trends down, SELL when up → against_htf_trend',
             } },
             weights: { title: 'Zone weights per timeframe', help: {} },
             backtest: { title: 'Backtest', help: {
@@ -89,32 +93,45 @@
             return group === 'weights' ? state.limits.weights : state.limits[group][key];
         }
 
+        // A key is a choice when its limits list the allowed values instead of [min, max, integer].
+        const choicesOf = (group, key) => (Array.isArray(limitsOf(group, key)) ? null : limitsOf(group, key).values);
+        const fieldValue = (el) => (el.tagName === 'SELECT' ? el.value : el.value === '' ? NaN : Number(el.value));
+
         function renderForm() {
             const roleOf = Object.fromEntries(Object.entries(state.roles).map(([role, tf]) => [tf, role]));
             $('form').innerHTML = Object.entries(GROUPS).map(([group, g]) => {
                 const rows = Object.keys(state.saved[group]).map((key) => {
-                    const [min, max, int] = limitsOf(group, key);
                     const help = group === 'weights' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
+                    const choices = choicesOf(group, key);
+                    const [min, max, int] = choices ? [] : limitsOf(group, key);
+                    const field = choices
+                        ? `<select id="f-${group}-${key}" data-group="${group}" data-key="${key}" style="width: 8.5rem">${choices.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>`
+                        : `<input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono t-data text-right text-white shrink-0">`;
                     return `<div class="flex items-center justify-between gap-3 py-1 border-b border-white/5">
                         <label for="f-${group}-${key}" class="min-w-0">
                             <div class="mono t-data text-white">${esc(key)}</div>
-                            <div class="t-meta k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${min}–${max}</div>
+                            <div class="t-meta k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${choices ? esc(choices.join(' / ')) : `${min}–${max}`}</div>
                         </label>
-                        <input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono t-data text-right text-white shrink-0">
+                        <div class="shrink-0">${field}</div>
                     </div>`;
                 }).join('');
                 return `<div class="glass rounded-lg p-3"><div class="t-value text-white mb-1">${esc(g.title)}</div>${rows}</div>`;
             }).join('');
+            for (const el of $('form').querySelectorAll('select[data-group]')) AppHeader.select2(el, { width: 'style' });
             fillForm(state.saved);
             $('form').addEventListener('input', markDirty);
+            $('form').addEventListener('change', markDirty);
         }
 
         function inputs() {
-            return [...$('form').querySelectorAll('input[data-group]')];
+            return [...$('form').querySelectorAll('[data-group]')];
         }
 
         function fillForm(cfg) {
-            for (const el of inputs()) el.value = cfg[el.dataset.group][el.dataset.key] ?? state.saved[el.dataset.group][el.dataset.key];
+            for (const el of inputs()) {
+                el.value = cfg[el.dataset.group][el.dataset.key] ?? state.saved[el.dataset.group][el.dataset.key];
+                if (el.tagName === 'SELECT') jQuery(el).trigger('change.select2');
+            }
             markDirty();
         }
 
@@ -124,9 +141,10 @@
             const bad = [];
             for (const el of inputs()) {
                 const { group, key } = el.dataset;
-                const [min, max, int] = limitsOf(group, key);
-                const v = el.value === '' ? NaN : Number(el.value);
-                const ok = Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
+                const v = fieldValue(el);
+                const choices = choicesOf(group, key);
+                const [min, max, int] = choices ? [] : limitsOf(group, key);
+                const ok = choices ? choices.includes(v) : Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
                 el.classList.toggle('bad', !ok);
                 if (!ok) bad.push(`${group}.${key}`);
                 value[group][key] = v;
@@ -135,11 +153,11 @@
         }
 
         function isDirty() {
-            return inputs().some(el => Number(el.value) !== state.saved[el.dataset.group][el.dataset.key]);
+            return inputs().some(el => fieldValue(el) !== state.saved[el.dataset.group][el.dataset.key]);
         }
 
         function markDirty() {
-            for (const el of inputs()) el.classList.toggle('dirty', Number(el.value) !== state.saved[el.dataset.group][el.dataset.key]);
+            for (const el of inputs()) el.classList.toggle('dirty', fieldValue(el) !== state.saved[el.dataset.group][el.dataset.key]);
             const { bad } = readForm();
             const dirty = isDirty();
             $('save').disabled = !dirty || bad.length > 0;

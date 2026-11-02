@@ -166,6 +166,8 @@ test('CLI --sweep: combinations, validation and limits', () => {
         { threshold: 5, weights: { '15m': 1 } }, { threshold: 5, weights: { '15m': 2 } },
     ]);
     assert.deepEqual(parseArgs([], tfs).variants, []);
+    assert.deepEqual(parseArgs(['--sweep', 'htf_trend=off,htf+structure'], tfs).variants, [{ weights: {}, htf_trend: 'off' }, { weights: {}, htf_trend: 'htf+structure' }]);
+    assert.throws(() => parseArgs(['--sweep', 'htf_trend=on'], tfs), /htf\+structure/);
     assert.throws(() => parseArgs(['--sweep', 'w_5m=1'], tfs), /w_<tf>/);
     assert.throws(() => parseArgs(['--sweep', 'threshold=4.5'], tfs), /integers/);
     assert.throws(() => parseArgs(['--sweep', 'threshold=4', '--sweep', 'threshold=5'], tfs), /once/);

@@ -2,7 +2,8 @@
 // Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
 // The base parameters, and the --days/--fee/--split defaults, come from config/calculation.json.
 // --sweep (Level 6) replays parameter variants on the same history. Keys: `threshold`, `min_rr`,
-// `stop_atr` (SL buffer in ATR), `target` (tp1, tp2 or a fixed R multiple), `side` (both, buy, sell),
+// `stop_atr` (SL buffer in ATR), `target` (tp1, tp2 or a fixed R multiple), `htf_trend` (off, htf,
+// htf+structure: Level 6.5 B1 trend filter), `side` (both, buy, sell),
 // `skip_energy` (none or market_energy values joined with +, e.g. explosive+building) and `w_<tf>`
 // (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
 // --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
@@ -18,6 +19,7 @@ const indicators = require('../src/services/indicator.service');
 const { tfSeconds } = require('../src/services/candles');
 const { createHistory } = require('../src/services/history');
 const { runBacktest, createReports, FIXED_KEYS } = require('../src/services/backtest');
+const { HTF_TREND_MODES } = require('../src/services/signal');
 
 const DATA = path.join(__dirname, '../data');
 
@@ -35,6 +37,7 @@ const SWEEP_KEYS = {
     min_rr: [number(0, 10), '0–10'],
     stop_atr: [number(0, 3), '0–3'],
     target: [(raw) => (raw === 'tp1' || raw === 'tp2' ? raw : number(0.5, 10)(raw)), 'tp1, tp2 or 0.5–10'],
+    htf_trend: [(raw) => (HTF_TREND_MODES.includes(raw) ? raw : undefined), HTF_TREND_MODES.join(', ')],
     side: [(raw) => (['both', 'buy', 'sell'].includes(raw) ? raw : undefined), 'both, buy or sell'],
     skip_energy: [(raw) => {
         if (raw === 'none') return [];
@@ -164,7 +167,7 @@ async function main() {
     const started = Date.now();
     const report = runBacktest({
         market: args.market, candlesByTf, roles, weights: calc.weights(), indicators,
-        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr,
+        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, htfTrend: cfg.filters.htf_trend,
         fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         startSec, feePct: args.fee, window, variants: args.variants,
         splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),

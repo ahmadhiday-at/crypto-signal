@@ -4,13 +4,13 @@
 const fs = require('fs');
 const path = require('path');
 const { TF_SECONDS } = require('../services/candles');
-const { SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('../services/signal');
+const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, HTF_TREND_MODES } = require('../services/signal');
 
 const FILE = path.join(__dirname, '../../config/calculation.json');
 const WATCH_INTERVAL_MS = 2000;
 
-// [min, max, integer] per key. Weights are checked separately: any supported timeframe, 0.1–20
-// (a weight of 0 would fall back to the default weight in the zone merge).
+// [min, max, integer] per numeric key, { values } for a choice. Weights are checked separately: any
+// supported timeframe, 0.1–20 (a weight of 0 would fall back to the default weight in the zone merge).
 const LIMITS = {
     signal: {
         threshold: [1, 15, true],
@@ -23,6 +23,7 @@ const LIMITS = {
         no_mans_land_percent: [0, 10],
         volatility_extreme: [0, 10],
         volatility_dead: [0, 10],
+        htf_trend: { values: HTF_TREND_MODES },
     },
     backtest: {
         days: [1, 1500, true],
@@ -44,8 +45,16 @@ function defaultsOf(envWeights = {}) {
     return { signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights, backtest: { ...BACKTEST_DEFAULTS } };
 }
 
-const inRange = (v, [min, max, int]) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
-const hint = ([min, max, int]) => `${int ? 'an integer' : 'a number'} ${min}–${max}`;
+function inRange(v, limits) {
+    if (!Array.isArray(limits)) return limits.values.includes(v);
+    const [min, max, int] = limits;
+    return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
+}
+function hint(limits) {
+    if (!Array.isArray(limits)) return `one of ${limits.values.join(', ')}`;
+    const [min, max, int] = limits;
+    return `${int ? 'an integer' : 'a number'} ${min}–${max}`;
+}
 
 // Merges `input` over `base` group by group. Returns { value, problems }; `value` is only usable
 // when `problems` is empty.
@@ -78,6 +87,7 @@ function signalOptions(cfg) {
         noMansLand: cfg.filters.no_mans_land_percent,
         volatilityExtreme: cfg.filters.volatility_extreme,
         volatilityDead: cfg.filters.volatility_dead,
+        htfTrend: cfg.filters.htf_trend,
     };
 }
 

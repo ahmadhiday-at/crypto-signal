@@ -7,6 +7,7 @@ const ENUMS = {
     tf_context: ['near_support', 'near_resistance', 'mid_range', 'unknown'],
     momentum: ['bullish', 'bearish', 'neutral'],
     regime: ['trending', 'ranging', 'unknown'],
+    trend: ['up', 'down', 'ranging', 'unknown'],
     position: ['closer_to_support', 'closer_to_resistance', 'mid_range'],
     zone_state: ['normal', 'compression'],
     dominant_side: ['support', 'resistance', 'equilibrium'],
@@ -94,7 +95,9 @@ function validateMarketState(s) {
     if (!isObj(s.timeframes)) errors.push('timeframes must be an object');
     else for (const [tf, t] of Object.entries(s.timeframes)) {
         if (!isObj(t) || !isNum(t.price) || !isNum(t.timestamp) || !ENUMS.tf_context.includes(t.context)
-            || !ENUMS.momentum.includes(t.momentum) || !ENUMS.regime.includes(t.regime)) {
+            || !ENUMS.momentum.includes(t.momentum) || !ENUMS.regime.includes(t.regime)
+            // `trend` added in 2.16.0; states written before that have none.
+            || (t.trend !== undefined && !ENUMS.trend.includes(t.trend))) {
             errors.push(`timeframes.${tf} is invalid`);
         }
     }

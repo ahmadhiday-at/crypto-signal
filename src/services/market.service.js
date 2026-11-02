@@ -159,7 +159,7 @@ function mergeSnapshots(market, snaps, roles, weights) {
 
     for (const tf of tfList) {
         const data = snaps[tf];
-        timeframesState[tf] = { price: data.price, context: data.context, momentum: data.momentum, regime: data.regime, timestamp: data.timestamp };
+        timeframesState[tf] = { price: data.price, context: data.context, momentum: data.momentum, regime: data.regime, trend: trendOf(data), timestamp: data.timestamp };
         const weight = weights[tf] || weights['DEFAULT'];
         if (data.support) mergeSide(mergedSupport, data.support, tf, weight);
         if (data.resistance) mergeSide(mergedResistance, data.resistance, tf, weight);
@@ -200,6 +200,18 @@ function mergeSnapshots(market, snaps, roles, weights) {
 }
 
 const RESET_COOLDOWN_S = 60;
+
+// Direction of a timeframe (Level 6.5 B1): `ranging` when its regime is ranging (MA14 within 1% of
+// MA50), otherwise `up` / `down` by MA14 vs MA50. Derived from the snapshot, so stored snapshots
+// from older versions get it too.
+function trendOf(snap) {
+    if (snap.regime === 'ranging') return 'ranging';
+    const last = (arr) => (Array.isArray(arr) && arr.length ? arr[arr.length - 1] : null);
+    const ma14 = last(snap.indicators?.ma14);
+    const ma50 = last(snap.indicators?.ma50);
+    if (snap.regime !== 'trending' || !Number.isFinite(ma14) || !Number.isFinite(ma50) || ma14 === ma50) return 'unknown';
+    return ma14 > ma50 ? 'up' : 'down';
+}
 
 // Latest closed ATR divided by the mean ATR of the last 100 closed candles (1.0 = typical).
 function volatilityRatio(atr) {
@@ -243,7 +255,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     let lastResetAt = null;
 
     const weightsNow = () => (calc ? calc.weights() : config.TF_WEIGHTS);
-    const signalOf = (state) => computeSignal(state, roles.htf, calc ? calc.signalOptions() : {});
+    const signalOf = (state) => computeSignal(state, roles.htf, { ...(calc ? calc.signalOptions() : {}), structureTf: roles.structure });
 
     const isMarket = (m) => markets.includes(m);
     const isTimeframe = (tf) => allTfs.includes(tf);
@@ -610,4 +622,4 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     };
 }
 
-module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots, composeMarketState };
+module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots, composeMarketState, trendOf };

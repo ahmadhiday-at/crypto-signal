@@ -195,3 +195,27 @@ test('plan overrides: SL buffer, tp2 target and fixed R target', () => {
     assert.equal(fixed.risk_reward, 2);
     assert.equal(tradePlan(base(), 'BUY', '1d', { target: 'tp2' }).take_profit_1, null, 'no major HTF zone → no target');
 });
+
+test('HTF trend filter (Level 6.5 B1): off by default; vetoes a BUY in a down trend, a SELL in an up trend', () => {
+    const { tradeFilters } = require('../src/services/signal');
+    const trends = (d, h4) => ({ timeframes: { '1d': { trend: d }, '4h': { trend: h4 } } });
+    const buy = (t, htfTrend) => computeSignal(strongBuy(trends(...t)), '1d', { htfTrend, structureTf: '4h' });
+    assert.equal(buy(['down', 'down']).action, 'BUY', 'off by default');
+    assert.deepEqual(buy(['down', 'up'], 'htf').filters, ['against_htf_trend']);
+    assert.equal(buy(['ranging', 'down'], 'htf').action, 'BUY', 'htf mode ignores the structure timeframe');
+    assert.deepEqual(buy(['ranging', 'down'], 'htf+structure').filters, ['against_htf_trend']);
+    assert.equal(buy(['up', 'unknown'], 'htf+structure').action, 'BUY');
+    assert.deepEqual(tradeFilters({ context: 'near_resistance', breakout_confirmation: 'strong', ...trends('up', 'ranging') }, 'SELL', { trendTfs: ['1d'] }), ['against_htf_trend']);
+    assert.deepEqual(tradeFilters({ context: 'near_resistance', breakout_confirmation: 'strong', ...trends('down', 'ranging') }, 'SELL', { trendTfs: ['1d', '4h'] }), []);
+    assert.deepEqual(tradeFilters({ context: 'near_support', breakout_confirmation: 'strong' }, 'BUY', { trendTfs: ['1d'] }), [], 'states without trend never reject');
+});
+
+test('timeframe trend: ranging regime, else MA14 vs MA50', () => {
+    const { trendOf } = require('../src/services/market.service');
+    const snap = (regime, ma14, ma50) => ({ regime, indicators: { ma14: [null, ma14], ma50: [null, ma50] } });
+    assert.equal(trendOf(snap('trending', 110, 100)), 'up');
+    assert.equal(trendOf(snap('trending', 90, 100)), 'down');
+    assert.equal(trendOf(snap('ranging', 90, 100)), 'ranging');
+    assert.equal(trendOf(snap('unknown', 90, 100)), 'unknown');
+    assert.equal(trendOf({ regime: 'trending' }), 'unknown');
+});

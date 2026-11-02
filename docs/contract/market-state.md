@@ -53,7 +53,7 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `indicators` | object | latest closed-candle values: `ma14`, `ma50`, `ma200`, `rsi`, `atr`, `volume`, `macd{MACD, signal, histogram}` | entry TF | D, P |
 | `levels.support` | Level[] | 1–3 levels, sorted by `score` descending (see §3.1) | merged MTF | D, P |
 | `levels.resistance` | Level[] | 1–3 levels, sorted by `score` descending | merged MTF | D, P |
-| `timeframes` | object | `{ [tf]: {price, context, momentum, regime, timestamp} }` per role TF; `timestamp` = open time of that TF's latest closed candle. Per-TF `context` is `near_support` \| `near_resistance` \| `mid_range` \| `unknown` (no `compression_zone`). | each role TF | D |
+| `timeframes` | object | `{ [tf]: {price, context, momentum, regime, trend, timestamp} }` per role TF; `timestamp` = open time of that TF's latest closed candle. `trend` (added in 2.16.0, absent in older states): `ranging` when `regime` is `ranging`, otherwise `up` / `down` by MA14 vs MA50 of that TF, `unknown` without data. Per-TF `context` is `near_support` \| `near_resistance` \| `mid_range` \| `unknown` (no `compression_zone`). | each role TF | D |
 | `position` | enum | `closer_to_support` \| `closer_to_resistance` \| `mid_range` | derived | P |
 | `zone_state` | enum | `normal` \| `compression` | derived | — |
 | `dominant_side` | enum | `support` \| `resistance` \| `equilibrium` — the side whose top level has the higher raw score, or `equilibrium` when the gap is at most 20% of the larger score | derived | P |
@@ -130,6 +130,7 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 | `buy_into_resistance` | BUY while `context` is `near_resistance` and `breakout_confirmation` is not `medium`/`strong` |
 | `sell_into_support` | SELL while `context` is `near_support` and `breakout_confirmation` is not `medium`/`strong` |
 | `low_rr` | `plan.risk_reward` is `null` or < 1.5 (added in 2.5.0) |
+| `against_htf_trend` | BUY while a checked timeframe's `trend` is `down`, SELL while `up` (added in 2.16.0). Checked timeframes by calculation config `filters.htf_trend`: `off` (default, none), `htf` (TF_HTF), `htf+structure` (TF_HTF and TF_STRUCTURE) |
 
 **Trade plan (added in 2.5.0).** `plan` is `null` when the score gives `WAIT`, or when price, ATR or the zone is missing. Otherwise it is built for the raw BUY (long) / SELL (short) and kept even when the setup is filtered. `atr` = `indicators.atr` (entry TF); starting values, to be reviewed.
 

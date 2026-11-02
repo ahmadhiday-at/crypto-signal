@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.16.0](docs/changelog/v2.16.0.md) — 2026-11-02 — Level 6.5 B1: per-timeframe trend and an optional HTF trend filter (against_htf_trend), off by default after backtests showed no edge.
 - [v2.15.0](docs/changelog/v2.15.0.md) — 2026-11-02 — Dashboard, Chart and Backtest share one header (market picker, view tabs), select2 dropdowns and one font scale by kind of information.
 - [v2.14.0](docs/changelog/v2.14.0.md) — 2026-11-01 — Calculation config moved from .env to config/calculation.json, editable by hand or from /config, with a backtest re-run button.
 - [v2.13.1](docs/changelog/v2.13.1.md) — 2026-11-01 — A timeframe with too little Binance history (e.g. XAUTUSDT 1w) warns once and waits for its next candle instead of failing every 5 minutes.

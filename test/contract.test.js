@@ -38,6 +38,8 @@ test('rejects missing fields, wrong versions, invalid enums and non-finite numbe
     assert.ok(mutate(s => { delete s.inputs['1h']; }).some(e => e.includes('inputs.1h')));
     assert.ok(mutate(s => { s.errors = [1]; }).some(e => e.includes('errors')));
     assert.ok(mutate(s => { delete s.signal; }).some(e => e.includes('signal')));
+    assert.ok(mutate(s => { s.timeframes['15m'].trend = 'sideways'; }).some(e => e.includes('timeframes.15m')));
+    assert.deepEqual(mutate(s => { s.timeframes['15m'].trend = 'down'; }), [], 'trend is optional (states before 2.16.0)');
     assert.ok(mutate(s => { s.signal.action = 'HOLD'; }).some(e => e.includes('signal.action')));
     assert.ok(mutate(s => { s.signal.reasons = [{ code: 'gut_feeling', points: 1 }]; }).some(e => e.includes('signal.reasons')));
     assert.ok(mutate(s => { s.signal.filters = ['vibes']; s.signal.filtered = true; }).some(e => e.includes('signal.filters')));

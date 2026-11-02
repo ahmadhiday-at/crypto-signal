@@ -36,6 +36,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `filters` | `no_mans_land_percent` | 1 | 0–10 | `mid_range` farther than this from any zone → `no_mans_land` |
 | `filters` | `volatility_extreme` | 2.0 | 0–10 | `volatility_ratio` above → `volatility_extreme` |
 | `filters` | `volatility_dead` | 0.5 | 0–10 | `volatility_ratio` below → `volatility_dead` |
+| `filters` | `htf_trend` | `off` | `off` / `htf` / `htf+structure` | HTF trend filter (since 2.16.0): BUY rejected when a checked timeframe trends `down`, SELL when `up` → `against_htf_trend` |
 | `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
 | `backtest` | `days` | 365 | integer 1–1500 | History length (CLI `--days` default) |
 | `backtest` | `fee_pct` | 0.1 | 0–5 | Round-trip fee, % of price (CLI `--fee` default) |

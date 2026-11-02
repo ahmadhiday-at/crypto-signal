@@ -38,6 +38,9 @@ test('validate merges partial input and rejects unknown keys and out-of-range va
         'backtest.split must be a number 0.5–0.9',
     ]);
     assert.deepEqual(validate([], base).problems, ['config must be a JSON object']);
+    assert.equal(base.filters.htf_trend, 'off');
+    assert.equal(validate({ filters: { htf_trend: 'htf+structure' } }, base).value.filters.htf_trend, 'htf+structure');
+    assert.deepEqual(validate({ filters: { htf_trend: 'on' } }, base).problems, ['filters.htf_trend must be one of off, htf, htf+structure']);
 });
 
 test('update saves and notifies; invalid hand edits keep the values in use', () => {

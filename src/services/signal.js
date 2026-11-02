@@ -11,7 +11,12 @@ const VOLATILITY_EXTREME = 2.0;
 const VOLATILITY_DEAD = 0.5;
 const CONFIRMED_BREAKOUT = ['medium', 'strong'];
 
-const FILTER_CODES = ['no_mans_land', 'volatility_extreme', 'volatility_dead', 'buy_into_resistance', 'sell_into_support', 'low_rr'];
+// Level 6.5 B1 HTF trend filter (docs/roadmap/level-6.5.md): which role timeframes' `trend` may veto
+// a signal against it. 'off' until the B4 validation adopts it.
+const HTF_TREND_MODES = ['off', 'htf', 'htf+structure'];
+const HTF_TREND = 'off';
+
+const FILTER_CODES = ['no_mans_land', 'volatility_extreme', 'volatility_dead', 'buy_into_resistance', 'sell_into_support', 'low_rr', 'against_htf_trend'];
 
 // Level 3 trade plan (docs/roadmap/level-3.md). Starting values, to be reviewed.
 const STOP_ATR_BUFFER = 0.5;
@@ -61,7 +66,9 @@ function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = '
 }
 
 // Returns the filter codes that reject a BUY/SELL; an empty list means the setup passes.
-function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volatilityExtreme = VOLATILITY_EXTREME, volatilityDead = VOLATILITY_DEAD } = {}) {
+// `trendTfs` are the timeframes checked by the HTF trend filter (empty = off): a BUY is rejected
+// when one of them trends down, a SELL when one trends up; `ranging` and `unknown` never reject.
+function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volatilityExtreme = VOLATILITY_EXTREME, volatilityDead = VOLATILITY_DEAD, trendTfs = [] } = {}) {
     const failed = [];
     const dist = state.distance_percent || {};
     const nearest = Math.min(dist.to_support ?? Infinity, dist.to_resistance ?? Infinity);
@@ -76,6 +83,9 @@ function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volati
     const confirmed = CONFIRMED_BREAKOUT.includes(state.breakout_confirmation);
     if (action === 'BUY' && state.context === 'near_resistance' && !confirmed) failed.push('buy_into_resistance');
     if (action === 'SELL' && state.context === 'near_support' && !confirmed) failed.push('sell_into_support');
+
+    const against = action === 'BUY' ? 'down' : 'up';
+    if (trendTfs.some(tf => state.timeframes?.[tf]?.trend === against)) failed.push('against_htf_trend');
     return failed;
 }
 
@@ -92,11 +102,19 @@ function strengthOf(score, threshold = THRESHOLD) {
     return 'weak';
 }
 
+// The timeframes the HTF trend filter checks for a mode; `structureTf` is the TF_STRUCTURE role.
+function trendTfsOf(mode, htfTf, structureTf) {
+    if (mode === 'htf') return [htfTf];
+    if (mode === 'htf+structure') return [...new Set([htfTf, structureTf].filter(Boolean))];
+    return [];
+}
+
 // `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
-// `opts` holds the calculation config (signalOptions in src/config/calculation.js); missing keys use
-// the defaults above. `target` is overridden only by the backtest sweep (Level 6).
+// `opts` holds the calculation config (signalOptions in src/config/calculation.js) plus
+// `structureTf` (the TF_STRUCTURE role); missing keys use the defaults above. `target` is
+// overridden only by the backtest sweep (Level 6).
 function computeSignal(state, htfTf, opts = {}) {
-    const { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, htfProximity = HTF_PROXIMITY_PERCENT } = opts;
+    const { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, htfProximity = HTF_PROXIMITY_PERCENT, htfTrend = HTF_TREND, structureTf } = opts;
     const reasons = [];
     let score = 0;
     const add = (code, points) => { reasons.push({ code, points }); score += points; };
@@ -128,7 +146,7 @@ function computeSignal(state, htfTf, opts = {}) {
 
     let action = score >= threshold ? 'BUY' : score <= -threshold ? 'SELL' : 'WAIT';
     const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf, opts);
-    const filters = action === 'WAIT' ? [] : tradeFilters(state, action, opts);
+    const filters = action === 'WAIT' ? [] : tradeFilters(state, action, { ...opts, trendTfs: trendTfsOf(htfTrend, htfTf, structureTf) });
     if (action !== 'WAIT' && !(plan?.risk_reward >= minRiskReward)) filters.push('low_rr');
     if (filters.length) action = 'WAIT';
     if (state.status !== 'ok') {
@@ -146,6 +164,7 @@ const SIGNAL_DEFAULTS = {
 };
 const FILTER_DEFAULTS = {
     no_mans_land_percent: NO_MANS_LAND_PERCENT, volatility_extreme: VOLATILITY_EXTREME, volatility_dead: VOLATILITY_DEAD,
+    htf_trend: HTF_TREND,
 };
 
-module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS };
+module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, HTF_TREND_MODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS };

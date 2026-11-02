@@ -21,6 +21,8 @@ function paramsMatch(params, live) {
     if (params.window !== undefined && params.window !== live.window) return false;
     if ((params.min_rr ?? MIN_RISK_REWARD) !== live.min_rr) return false;
     if ((params.stop_atr ?? STOP_ATR_BUFFER) !== live.stop_atr) return false;
+    // Reports older than v2.16.0 ran without the HTF trend filter.
+    if ((params.htf_trend ?? 'off') !== live.htf_trend) return false;
     // Reports older than v2.14.0 carry no fixed values: they ran with the defaults.
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     for (const k of FIXED_KEYS) if ((params[k] ?? defaults[k]) !== live[k]) return false;
@@ -89,6 +91,7 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
         threshold: cfg.signal.threshold,
         min_rr: cfg.signal.min_rr,
         stop_atr: cfg.signal.stop_atr,
+        htf_trend: cfg.filters.htf_trend,
         ...Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         weights,
         role_tfs: [...new Set(Object.values(config.TF_ROLES))],
