@@ -1,10 +1,15 @@
 // Calculation config (config/calculation.json): signal score threshold, trade plan, trade filters,
-// zone weights and backtest defaults. Kept apart from .env (deployment settings). Edited by hand or
-// from the /config view; the running app reloads it without a restart.
+// zone weights, score points, indicator periods, S/R zones, market-state thresholds, divergence,
+// trade evaluation and backtest defaults. Kept apart from .env (deployment settings). Edited by hand
+// or from the /config view; the running app reloads it without a restart.
 const fs = require('fs');
 const path = require('path');
 const { TF_SECONDS } = require('../services/candles');
-const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, HTF_TREND_MODES, TARGET_MODES } = require('../services/signal');
+const { SIGNAL_DEFAULTS, FILTER_DEFAULTS, SCORING_DEFAULTS, HTF_TREND_MODES, TARGET_MODES, CONFIRMATION_LEVELS } = require('../services/signal');
+const { INDICATOR_DEFAULTS, ZONE_DEFAULTS } = require('../services/indicator.service');
+const { MARKET_DEFAULTS } = require('../services/market.service');
+const { DIVERGENCE_DEFAULTS } = require('../services/divergence');
+const { EXPIRY_CANDLES } = require('../services/signal-log');
 
 const FILE = path.join(__dirname, '../../config/calculation.json');
 const WATCH_INTERVAL_MS = 2000;
@@ -27,6 +32,70 @@ const LIMITS = {
         htf_trend: { values: HTF_TREND_MODES },
         entry_max_atr: [0, 10],
     },
+    // Points are integers: the signal score is an integer (docs/contract/market-state.md §4.1).
+    scoring: {
+        near_zone: [0, 10, true],
+        momentum: [0, 10, true],
+        htf_zone: [0, 10, true],
+        divergence: [0, 10, true],
+        volume: [0, 5, true],
+        strong_score: [1, 30, true],
+        breakout_confirmed: { values: CONFIRMATION_LEVELS },
+    },
+    indicators: {
+        ma_fast: [2, 500, true],
+        ma_mid: [2, 500, true],
+        ma_slow: [2, 1000, true],
+        rsi_period: [2, 100, true],
+        macd_fast: [2, 100, true],
+        macd_slow: [2, 200, true],
+        macd_signal: [2, 100, true],
+        atr_period: [2, 100, true],
+        min_candles: [50, 1500, true],
+        rsi_bullish: [50, 100],
+        rsi_bearish: [0, 50],
+        regime_ma_percent: [0, 10],
+    },
+    zones: {
+        cluster_percent: [0, 5],
+        width_atr: [0, 5],
+        touch_points: [0, 20],
+        recency_candles: [0, 500, true],
+        distance_penalty: [0, 100],
+        ma_bonus: [0, 20],
+        ma_proximity_percent: [0, 10],
+        fallback_candles: [10, 1000, true],
+        lookback_volatility_band: [0, 1],
+        lookback_scale: [0, 0.9],
+    },
+    market: {
+        volume_candles: [2, 200, true],
+        volume_high: [0, 10],
+        volume_increasing: [0, 10],
+        volume_low: [0, 10],
+        energy_explosive: [0, 1e6],
+        energy_building: [0, 1e6],
+        energy_cooling: [0, 1e6],
+        breakout_distance_percent: [0.01, 10],
+        breakout_volume_high: [0, 1],
+        breakout_volume_increasing: [0, 1],
+        breakout_volume_normal: [0, 1],
+        breakout_volume_low: [0, 1],
+        compression_bonus: [0, 1],
+        breakout_strong: [0, 1],
+        breakout_weak: [0, 1],
+        dominant_percent: [0, 100],
+        volatility_candles: [2, 1000, true],
+    },
+    divergence: {
+        lookback: [10, 500, true],
+        pivot_width: [1, 20, true],
+        max_age: [1, 100, true],
+    },
+    evaluation: {
+        expiry_candles: [1, 2000, true],
+        min_trades: [1, 1000, true],
+    },
     backtest: {
         days: [1, 1500, true],
         fee_pct: [0, 5],
@@ -34,7 +103,9 @@ const LIMITS = {
     },
 };
 const WEIGHT_LIMITS = [0.1, 20];
-const GROUPS = ['signal', 'filters', 'weights', 'backtest'];
+const GROUPS = ['signal', 'filters', 'weights', 'scoring', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
+// Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
+const SNAPSHOT_GROUPS = ['indicators', 'zones'];
 
 const BACKTEST_DEFAULTS = { days: 365, fee_pct: 0.1, split: 0.7 };
 
@@ -44,7 +115,13 @@ const copy = (v) => JSON.parse(JSON.stringify(v));
 function defaultsOf(envWeights = {}) {
     const weights = {};
     for (const [tf, w] of Object.entries(envWeights)) if (TF_SECONDS[tf]) weights[tf] = w;
-    return { signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights, backtest: { ...BACKTEST_DEFAULTS } };
+    return {
+        signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights,
+        scoring: { ...SCORING_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
+        market: { ...MARKET_DEFAULTS }, divergence: { ...DIVERGENCE_DEFAULTS },
+        evaluation: { expiry_candles: EXPIRY_CANDLES, min_trades: 30 },
+        backtest: { ...BACKTEST_DEFAULTS },
+    };
 }
 
 function inRange(v, limits) {
@@ -58,9 +135,32 @@ function hint(limits) {
     return `${int ? 'an integer' : 'a number'} ${min}–${max}`;
 }
 
+// Rules between keys of the merged config (each key is already in range).
+function crossProblems(c, candleLimit) {
+    const out = [];
+    const order = (group, keys) => {
+        for (let i = 1; i < keys.length; i++) {
+            if (!(c[group][keys[i - 1]] < c[group][keys[i]])) out.push(`${group}: ${keys.join(' < ')} is required`);
+        }
+    };
+    order('indicators', ['ma_fast', 'ma_mid', 'ma_slow']);
+    order('indicators', ['macd_fast', 'macd_slow']);
+    order('indicators', ['rsi_bearish', 'rsi_bullish']);
+    const ind = c.indicators;
+    const needed = Math.max(ind.ma_slow, ind.macd_slow + ind.macd_signal, ind.rsi_period + 1, ind.atr_period + 1);
+    if (ind.min_candles < needed) out.push(`indicators.min_candles must be at least ${needed} (the longest indicator period)`);
+    // Each snapshot sees CANDLE_LIMIT − 1 closed candles.
+    if (candleLimit && ind.min_candles > candleLimit - 1) out.push(`indicators.min_candles must be at most ${candleLimit - 1} (CANDLE_LIMIT − 1)`);
+    order('market', ['volume_low', 'volume_increasing', 'volume_high']);
+    order('market', ['energy_cooling', 'energy_building', 'energy_explosive']);
+    order('market', ['breakout_weak', 'breakout_strong']);
+    if (c.divergence.pivot_width * 2 >= c.divergence.lookback) out.push('divergence: pivot_width × 2 < lookback is required');
+    return [...new Set(out)];
+}
+
 // Merges `input` over `base` group by group. Returns { value, problems }; `value` is only usable
-// when `problems` is empty.
-function validate(input, base) {
+// when `problems` is empty. `candleLimit` (CANDLE_LIMIT) bounds `indicators.min_candles`.
+function validate(input, base, { candleLimit = null } = {}) {
     const problems = [];
     const value = copy(base);
     if (!input || typeof input !== 'object' || Array.isArray(input)) return { value, problems: ['config must be a JSON object'] };
@@ -75,6 +175,7 @@ function validate(input, base) {
             else value[group][key] = v;
         }
     }
+    if (!problems.length) problems.push(...crossProblems(value, candleLimit));
     return { value, problems };
 }
 
@@ -92,13 +193,24 @@ function signalOptions(cfg) {
         volatilityDead: cfg.filters.volatility_dead,
         htfTrend: cfg.filters.htf_trend,
         entryMaxAtr: cfg.filters.entry_max_atr,
+        scoring: cfg.scoring,
     };
 }
 
 // Zone weights for the merge: the configured timeframes plus DEFAULT for the others.
 const mergeWeights = (cfg) => ({ ...cfg.weights, DEFAULT: 1.0 });
 
-function createCalcConfig({ file = FILE, envWeights = {}, log = console } = {}) {
+// Options for the per-timeframe snapshot (indicator.service calculateAll) and for the merged
+// Market State (market.service composeMarketState).
+const snapshotParams = (cfg) => ({ indicators: cfg.indicators, zones: cfg.zones });
+const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence });
+
+// The groups whose values change backtest results; a report made with other values is params_differ.
+const RESULT_GROUPS = ['scoring', 'indicators', 'zones', 'market', 'divergence', 'evaluation'];
+const resultParams = (cfg) => Object.fromEntries(RESULT_GROUPS.map(g => [g, cfg[g]]));
+
+// `candleLimit` is CANDLE_LIMIT (binance.candleLimit()): `indicators.min_candles` must fit in it.
+function createCalcConfig({ file = FILE, envWeights = {}, candleLimit = null, log = console } = {}) {
     const defaults = defaultsOf(envWeights);
     let current = copy(defaults);
     const listeners = [];
@@ -110,10 +222,12 @@ function createCalcConfig({ file = FILE, envWeights = {}, log = console } = {}) 
         fs.renameSync(tmp, file);
     }
 
+    // Listeners get (next, previous) config copies.
     function apply(value) {
         const changed = JSON.stringify(value) !== JSON.stringify(current);
+        const prev = current;
         current = value;
-        if (changed) for (const fn of listeners) fn(get());
+        if (changed) for (const fn of listeners) fn(get(), copy(prev));
         return changed;
     }
 
@@ -143,7 +257,7 @@ function createCalcConfig({ file = FILE, envWeights = {}, log = console } = {}) 
             log.error(`[CalcConfig] ${file} is not valid JSON (${err.message}); keeping the values in use`);
             return { loaded: false, error: 'invalid_json' };
         }
-        const { value, problems } = validate(parsed, defaults);
+        const { value, problems } = validate(parsed, defaults, { candleLimit });
         if (problems.length) {
             log.error(`[CalcConfig] ${file} rejected: ${problems.join('; ')}; keeping the values in use`);
             return { loaded: false, error: 'invalid_config', problems };
@@ -153,7 +267,7 @@ function createCalcConfig({ file = FILE, envWeights = {}, log = console } = {}) 
 
     // Validates `input` (a full or partial config) over the values in use, saves and applies it.
     function update(input) {
-        const { value, problems } = validate(input, current);
+        const { value, problems } = validate(input, current, { candleLimit });
         if (problems.length) return { problems };
         write(value);
         const changed = apply(value);
@@ -185,7 +299,16 @@ function createCalcConfig({ file = FILE, envWeights = {}, log = console } = {}) 
         onChange,
         signalOptions: () => signalOptions(current),
         weights: () => mergeWeights(current),
+        snapshotParams: () => copy(snapshotParams(current)),
+        stateParams: () => copy(stateParams(current)),
+        resultParams: () => copy(resultParams(current)),
     };
 }
 
-module.exports = { createCalcConfig, validate, defaultsOf, signalOptions, mergeWeights, LIMITS, WEIGHT_LIMITS, FILE };
+// True when a config change touches the snapshot groups (indicators, zones).
+const snapshotChanged = (next, prev) => SNAPSHOT_GROUPS.some(g => JSON.stringify(next[g]) !== JSON.stringify(prev[g]));
+
+module.exports = {
+    createCalcConfig, validate, defaultsOf, signalOptions, mergeWeights, snapshotParams, stateParams, resultParams, snapshotChanged,
+    LIMITS, WEIGHT_LIMITS, GROUPS, RESULT_GROUPS, FILE,
+};

@@ -78,6 +78,69 @@
                 entry_max_atr: 'Price farther than this × ATR from the entry zone → far_from_entry (0 = off)',
             } },
             weights: { title: 'Zone weights per timeframe', help: {} },
+            scoring: { title: 'Score points', help: {
+                near_zone: 'Price inside the top support / resistance zone, ± points',
+                momentum: 'Bullish / bearish momentum, ± points',
+                htf_zone: 'Top zone is an HTF zone within htf_proximity_percent, ± points',
+                divergence: 'RSI divergence, ± points',
+                volume: 'High volume adds, low volume removes conviction (points)',
+                strong_score: 'Minimum |score| for strength strong',
+                breakout_confirmed: 'Weakest breakout confirmation that lets BUY into resistance / SELL into support pass',
+            } },
+            indicators: { title: 'Indicators (per timeframe; changes recalculate every snapshot)', help: {
+                ma_fast: 'Fast SMA period (field name stays ma14)',
+                ma_mid: 'Mid SMA period (field ma50)',
+                ma_slow: 'Slow SMA period (field ma200)',
+                rsi_period: 'RSI period',
+                macd_fast: 'MACD fast EMA period',
+                macd_slow: 'MACD slow EMA period',
+                macd_signal: 'MACD signal period',
+                atr_period: 'ATR period',
+                min_candles: 'Closed candles needed before a timeframe is calculated',
+                rsi_bullish: 'Momentum bullish: RSI above this and MACD histogram > 0',
+                rsi_bearish: 'Momentum bearish: RSI below this and MACD histogram < 0',
+                regime_ma_percent: 'Regime ranging when fast and mid SMA are within this % of price',
+            } },
+            zones: { title: 'Support / resistance zones (changes recalculate every snapshot)', help: {
+                cluster_percent: 'Swings within this % of each other form one zone',
+                width_atr: 'Zone half-width, × ATR',
+                touch_points: 'Score per swing in the zone',
+                recency_candles: 'Recency bonus: this many points minus candles since the last touch',
+                distance_penalty: 'Score minus distance from price (fraction) × this',
+                ma_bonus: 'Score bonus when the zone is near the mid or slow SMA',
+                ma_proximity_percent: 'Distance (%) to the SMA for that bonus',
+                fallback_candles: 'Candles for the high/low fallback level when a side has no zone',
+                lookback_volatility_band: 'Lookback widens / narrows when volatility is beyond ± this share of its mean',
+                lookback_scale: 'By this share (MAPPING_CANDLE × (1 ± scale))',
+            } },
+            market: { title: 'Market state thresholds', help: {
+                volume_candles: 'Candles in the volume average',
+                volume_high: 'Volume above average × this → high',
+                volume_increasing: 'Above average × this → increasing',
+                volume_low: 'Below average × this → low',
+                energy_explosive: '|MACD histogram| above this with high volume → explosive (price units)',
+                energy_building: 'Above this with increasing volume → building',
+                energy_cooling: 'Below this (or low volume) → cooling',
+                breakout_distance_percent: 'Breakout score distance factor reaches 0 at this % from the nearest zone',
+                breakout_volume_high: 'Breakout score volume factor, high volume',
+                breakout_volume_increasing: 'Volume factor, increasing',
+                breakout_volume_normal: 'Volume factor, normal',
+                breakout_volume_low: 'Volume factor, low',
+                compression_bonus: 'Breakout score bonus in a compression zone',
+                breakout_strong: 'Breakout score above this → confirmation strong / medium / weak by volume',
+                breakout_weak: 'Above this → weak (noise with high volume)',
+                dominant_percent: 'Dominant side when the top zone scores differ by more than this %',
+                volatility_candles: 'Candles in the ATR mean of volatility_ratio',
+            } },
+            divergence: { title: 'RSI divergence', help: {
+                lookback: 'Closed entry candles searched for swings',
+                pivot_width: 'Bars on each side a swing must exceed',
+                max_age: 'The latest swing must be at most this many bars old',
+            } },
+            evaluation: { title: 'Trade evaluation (signal log, backtest, edge)', help: {
+                expiry_candles: 'Entry candles before an open trade is closed as EXPIRED',
+                min_trades: 'Minimum taken trades for the edge verdict and the out-of-sample pick',
+            } },
             backtest: { title: 'Backtest', help: {
                 days: 'History length in days',
                 fee_pct: 'Round-trip fee, % of price',
@@ -139,7 +202,7 @@
 
         // Reads the form; returns { value, bad } where bad lists invalid fields.
         function readForm() {
-            const value = { signal: {}, filters: {}, weights: {}, backtest: {} };
+            const value = Object.fromEntries(Object.keys(GROUPS).map(g => [g, {}]));
             const bad = [];
             for (const el of inputs()) {
                 const { group, key } = el.dataset;

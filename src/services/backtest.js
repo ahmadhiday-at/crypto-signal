@@ -103,7 +103,7 @@ function breakdown(trades) {
 const VALIDATION_MIN_TRADES = 30;
 
 // Splits each run's taken trades at `splitSec` (signal time) and picks the in-sample best.
-function validation(runs, splitSec) {
+function validation(runs, splitSec, minTrades = VALIDATION_MIN_TRADES) {
     const rows = runs.map((run, idx) => {
         const taken = run.trades.filter(t => !t.filtered);
         return {
@@ -115,10 +115,10 @@ function validation(runs, splitSec) {
     });
     let selected = null;
     rows.forEach((r, idx) => {
-        if (r.in_sample.trades < VALIDATION_MIN_TRADES || r.in_sample.expectancy_r === null) return;
+        if (r.in_sample.trades < minTrades || r.in_sample.expectancy_r === null) return;
         if (selected === null || r.in_sample.expectancy_r > rows[selected].in_sample.expectancy_r) selected = idx;
     });
-    return { split_at: splitSec, min_trades: VALIDATION_MIN_TRADES, selected, rows };
+    return { split_at: splitSec, min_trades: minTrades, selected, rows };
 }
 
 // One parameter set of the replay. `weights` changes the zone merge; `threshold`, `min_rr`,
@@ -140,10 +140,12 @@ const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.en
 // overrides replayed on the same snapshots; the base parameters always run and give the main report.
 // `splitSec` adds the out-of-sample `validation` (trades signalled before it are in-sample).
 // `fixed` holds the calculation-config values no variant changes (FIXED_KEYS); missing keys use the
-// signal defaults. They are written to the report params.
+// signal defaults. They are written to the report params. `calcParams` holds the calculation config
+// groups `scoring`, `indicators`, `zones`, `market`, `divergence` and `evaluation` (missing groups use
+// the defaults); written to the report params as `calc`.
 const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
 
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, variants = [], splitSec = null, onProgress }) {
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     const fixedParams = Object.fromEntries(FIXED_KEYS.map(k => [k, fixed[k] ?? defaults[k]]));
     const fixedOpts = {
@@ -153,6 +155,10 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         volatilityExtreme: fixedParams.volatility_extreme,
         volatilityDead: fixedParams.volatility_dead,
     };
+    const expiry = calcParams.evaluation?.expiry_candles ?? EXPIRY_CANDLES;
+    const minTrades = calcParams.evaluation?.min_trades ?? VALIDATION_MIN_TRADES;
+    const snapshotParams = { indicators: calcParams.indicators, zones: calcParams.zones };
+    const stateParams = { market: calcParams.market, divergence: calcParams.divergence };
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
@@ -189,7 +195,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             if (p !== pointer[tf] || !snaps[tf]) {
                 pointer[tf] = p;
                 try {
-                    snaps[tf] = indicators.calculateAll(list.slice(Math.max(0, p + 1 - window), p + 1), market, tf);
+                    snaps[tf] = indicators.calculateAll(list.slice(Math.max(0, p + 1 - window), p + 1), market, tf, {}, snapshotParams);
                 } catch (e) {
                     snaps[tf] = null;
                 }
@@ -204,7 +210,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         for (const run of runs) {
             if (!states.has(run.weightsKey)) {
                 try {
-                    states.set(run.weightsKey, { ...composeMarketState(market, snaps, roles, run.params.weights), generated_at: t, status: 'ok' });
+                    states.set(run.weightsKey, { ...composeMarketState(market, snaps, roles, run.params.weights, stateParams), generated_at: t, status: 'ok' });
                 } catch (e) {
                     states.set(run.weightsKey, null);
                 }
@@ -212,7 +218,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             const merged = states.get(run.weightsKey);
             if (!merged) { if (run === runs[0]) failed = true; continue; }
             const { params } = run;
-            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure }) };
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target, htfTrend: params.htf_trend, entryMaxAtr: params.entry_max_atr, structureTf: roles.structure, scoring: calcParams.scoring }) };
 
             const record = recordFrom(market, roles.entry, state, entry[i], params.threshold);
             if (!record) continue;
@@ -221,7 +227,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             const group = record.filtered ? 'filtered' : 'taken';
             if ((run.busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
 
-            const outcome = evaluate(record, entry.slice(i, i + EXPIRY_CANDLES + 2));
+            const outcome = evaluate(record, entry.slice(i, i + expiry + 2), expiry);
             const risk = Math.abs(record.price - record.sl);
             const feeR = risk > 0 ? (feePct / 100) * record.price / risk : 0;
             run.trades.push({
@@ -255,7 +261,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { ...main.params, ...fixedParams, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
+        params: { ...main.params, ...fixedParams, calc: calcParams, expiry_candles: expiry, window, fee_pct: feePct },
         steps,
         skipped_steps: skipped,
         taken: groupReport(main.trades.filter(t => !t.filtered)),
@@ -266,7 +272,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             taken: metrics(run.trades.filter(t => !t.filtered)).summary,
             filtered: metrics(run.trades.filter(t => t.filtered)).summary,
         })) : null,
-        validation: splitSec === null ? null : validation(runs, splitSec),
+        validation: splitSec === null ? null : validation(runs, splitSec, minTrades),
         trades: main.trades,
     };
 }

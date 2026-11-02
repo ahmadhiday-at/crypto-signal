@@ -9,7 +9,15 @@ const HTF_PROXIMITY_PERCENT = 1;
 const NO_MANS_LAND_PERCENT = 1;
 const VOLATILITY_EXTREME = 2.0;
 const VOLATILITY_DEAD = 0.5;
-const CONFIRMED_BREAKOUT = ['medium', 'strong'];
+// Breakout confirmations from weakest to strongest; config `scoring.breakout_confirmed` is the
+// weakest one that lets a BUY into resistance (SELL into support) pass.
+const CONFIRMATION_LEVELS = ['weak', 'medium', 'strong'];
+
+// Defaults of the calculation config's `scoring` group: points per reason and the score for
+// strength `strong` (Level 6.5 B3 calibrates these).
+const SCORING_DEFAULTS = {
+    near_zone: 2, momentum: 2, htf_zone: 3, divergence: 2, volume: 1, strong_score: 7, breakout_confirmed: 'medium',
+};
 
 // Level 6.5 B1 HTF trend filter (docs/roadmap/level-6.5.md): which role timeframes' `trend` may veto
 // a signal against it. 'off' until the B4 validation adopts it.
@@ -81,7 +89,7 @@ function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = T
 // Returns the filter codes that reject a BUY/SELL; an empty list means the setup passes.
 // `trendTfs` are the timeframes checked by the HTF trend filter (empty = off): a BUY is rejected
 // when one of them trends down, a SELL when one trends up; `ranging` and `unknown` never reject.
-function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volatilityExtreme = VOLATILITY_EXTREME, volatilityDead = VOLATILITY_DEAD, trendTfs = [] } = {}) {
+function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volatilityExtreme = VOLATILITY_EXTREME, volatilityDead = VOLATILITY_DEAD, trendTfs = [], scoring = {} } = {}) {
     const failed = [];
     const dist = state.distance_percent || {};
     const nearest = Math.min(dist.to_support ?? Infinity, dist.to_resistance ?? Infinity);
@@ -93,7 +101,8 @@ function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volati
         if (vr < volatilityDead) failed.push('volatility_dead');
     }
 
-    const confirmed = CONFIRMED_BREAKOUT.includes(state.breakout_confirmation);
+    const minConfirmed = CONFIRMATION_LEVELS.indexOf({ ...SCORING_DEFAULTS, ...scoring }.breakout_confirmed);
+    const confirmed = CONFIRMATION_LEVELS.indexOf(state.breakout_confirmation) >= minConfirmed;
     if (action === 'BUY' && state.context === 'near_resistance' && !confirmed) failed.push('buy_into_resistance');
     if (action === 'SELL' && state.context === 'near_support' && !confirmed) failed.push('sell_into_support');
 
@@ -108,9 +117,9 @@ const REASON_CODES = [
     'volume_surge', 'weak_volume', 'data_not_current',
 ];
 
-function strengthOf(score, threshold = THRESHOLD) {
+function strengthOf(score, threshold = THRESHOLD, strongScore = SCORING_DEFAULTS.strong_score) {
     const a = Math.abs(score);
-    if (a >= 7) return 'strong';
+    if (a >= strongScore) return 'strong';
     if (a >= threshold) return 'medium';
     return 'weak';
 }
@@ -128,33 +137,34 @@ function trendTfsOf(mode, htfTf, structureTf) {
 // overridden only by the backtest sweep (Level 6).
 function computeSignal(state, htfTf, opts = {}) {
     const { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, htfProximity = HTF_PROXIMITY_PERCENT, htfTrend = HTF_TREND, entryMaxAtr = ENTRY_MAX_ATR, structureTf } = opts;
+    const pts = { ...SCORING_DEFAULTS, ...opts.scoring };
     const reasons = [];
     let score = 0;
     const add = (code, points) => { reasons.push({ code, points }); score += points; };
 
-    if (state.context === 'near_support') add('near_support', 2);
-    if (state.context === 'near_resistance') add('near_resistance', -2);
+    if (state.context === 'near_support') add('near_support', pts.near_zone);
+    if (state.context === 'near_resistance') add('near_resistance', -pts.near_zone);
 
-    if (state.momentum === 'bullish') add('bullish_momentum', 2);
-    if (state.momentum === 'bearish') add('bearish_momentum', -2);
+    if (state.momentum === 'bullish') add('bullish_momentum', pts.momentum);
+    if (state.momentum === 'bearish') add('bearish_momentum', -pts.momentum);
 
     const topSupport = state.levels?.support?.[0];
     const topResistance = state.levels?.resistance?.[0];
     if (topSupport?.tfs?.includes(htfTf) && state.distance_percent?.to_support <= htfProximity) {
-        add('strong_htf_support', 3);
+        add('strong_htf_support', pts.htf_zone);
     }
     if (topResistance?.tfs?.includes(htfTf) && state.distance_percent?.to_resistance <= htfProximity) {
-        add('strong_htf_resistance', -3);
+        add('strong_htf_resistance', -pts.htf_zone);
     }
 
-    if (state.divergence === 'bullish') add('bullish_divergence', 2);
-    if (state.divergence === 'bearish') add('bearish_divergence', -2);
+    if (state.divergence === 'bullish') add('bullish_divergence', pts.divergence);
+    if (state.divergence === 'bearish') add('bearish_divergence', -pts.divergence);
 
     // Volume changes conviction, not direction: one point toward or away from zero.
     if (score !== 0) {
         const dir = Math.sign(score);
-        if (state.volume_state === 'high') add('volume_surge', dir);
-        if (state.volume_state === 'low') add('weak_volume', -dir);
+        if (state.volume_state === 'high') add('volume_surge', dir * pts.volume);
+        if (state.volume_state === 'low') add('weak_volume', -dir * pts.volume);
     }
 
     let action = score >= threshold ? 'BUY' : score <= -threshold ? 'SELL' : 'WAIT';
@@ -168,7 +178,7 @@ function computeSignal(state, htfTf, opts = {}) {
         action = 'WAIT';
     }
 
-    return { action, score, strength: strengthOf(score, threshold), reasons, filtered: filters.length > 0, filters, plan };
+    return { action, score, strength: strengthOf(score, threshold, pts.strong_score), reasons, filtered: filters.length > 0, filters, plan };
 }
 
 // Defaults of the calculation config's `signal` and `filters` groups (config/calculation.json).
@@ -181,4 +191,4 @@ const FILTER_DEFAULTS = {
     htf_trend: HTF_TREND, entry_max_atr: ENTRY_MAX_ATR,
 };
 
-module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, HTF_TREND_MODES, TARGET_MODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS };
+module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, HTF_TREND_MODES, TARGET_MODES, SCORING_DEFAULTS, CONFIRMATION_LEVELS, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS };

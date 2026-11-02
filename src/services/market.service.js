@@ -4,7 +4,18 @@ const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = r
 const { computeSignal } = require('./signal');
 const { detectDivergence } = require('./divergence');
 
-function enhanceMarketState(data) {
+// Defaults of the calculation config's `market` group (config/calculation.json): volume state,
+// market energy, breakout score and its confirmation, dominant side and the volatility ratio.
+const MARKET_DEFAULTS = {
+    volume_candles: 20, volume_high: 1.5, volume_increasing: 1.2, volume_low: 0.8,
+    energy_explosive: 0.1, energy_building: 0.05, energy_cooling: 0.02,
+    breakout_distance_percent: 1, breakout_volume_high: 1, breakout_volume_increasing: 0.8, breakout_volume_normal: 0.5, breakout_volume_low: 0.3,
+    compression_bonus: 0.2, breakout_strong: 0.7, breakout_weak: 0.4, dominant_percent: 20, volatility_candles: 100,
+};
+
+// `params` is the calculation config's `market` group (defaults above).
+function enhanceMarketState(data, params = {}) {
+    const p = { ...MARKET_DEFAULTS, ...params };
     const price = data.price;
     const support = data.levels.support;
     const resistance = data.levels.resistance;
@@ -47,7 +58,7 @@ function enhanceMarketState(data) {
     const sScore = nearestSupport.score_raw;
     const rScore = nearestResistance.score_raw;
     const diff = Math.abs(sScore - rScore);
-    const threshold = Math.max(sScore, rScore) * 0.2;
+    const threshold = Math.max(sScore, rScore) * p.dominant_percent / 100;
     if (diff > threshold) dominant_side = sScore > rScore ? "support" : "resistance";
     else dominant_side = "equilibrium";
 
@@ -65,43 +76,43 @@ function enhanceMarketState(data) {
     if (data.indicators && Array.isArray(data.indicators.volume)) {
         const volumes = data.indicators.volume;
         const currentVol = volumes[volumes.length - 1];
-        const avgVol = volumes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+        const avgVol = volumes.slice(-p.volume_candles).reduce((a, b) => a + b, 0) / p.volume_candles;
         volMultiplier = currentVol / (avgVol || 1);
-        if (currentVol > avgVol * 1.5) volume_state = "high";
-        else if (currentVol > avgVol * 1.2) volume_state = "increasing";
-        else if (currentVol < avgVol * 0.8) volume_state = "low";
+        if (currentVol > avgVol * p.volume_high) volume_state = "high";
+        else if (currentVol > avgVol * p.volume_increasing) volume_state = "increasing";
+        else if (currentVol < avgVol * p.volume_low) volume_state = "low";
     }
 
     let market_energy = "stable";
     const macdHist = data.indicators?.macd?.histogram || 0;
     const absMacd = Math.abs(macdHist);
-    if (volume_state === "high" && absMacd > 0.1) market_energy = "explosive";
-    else if (volume_state === "increasing" && absMacd > 0.05) market_energy = "building";
-    else if (volume_state === "low" || absMacd < 0.02) market_energy = "cooling";
+    if (volume_state === "high" && absMacd > p.energy_explosive) market_energy = "explosive";
+    else if (volume_state === "increasing" && absMacd > p.energy_building) market_energy = "building";
+    else if (volume_state === "low" || absMacd < p.energy_cooling) market_energy = "cooling";
 
     const minDistance = Math.min(distSupportPct, distResistancePct);
-    const distanceFactor = Math.max(0, 1 - (minDistance / 1.0));
-    let volumeFactor = 0.5; 
-    if (volume_state === "high") volumeFactor = 1.0;
-    else if (volume_state === "increasing") volumeFactor = 0.8;
-    else if (volume_state === "low") volumeFactor = 0.3;
+    const distanceFactor = Math.max(0, 1 - (minDistance / p.breakout_distance_percent));
+    let volumeFactor = p.breakout_volume_normal;
+    if (volume_state === "high") volumeFactor = p.breakout_volume_high;
+    else if (volume_state === "increasing") volumeFactor = p.breakout_volume_increasing;
+    else if (volume_state === "low") volumeFactor = p.breakout_volume_low;
 
     let breakout_score = distanceFactor * volumeFactor;
-    if (zone_state === "compression") breakout_score += 0.2;
+    if (zone_state === "compression") breakout_score += p.compression_bonus;
     breakout_score = Math.min(1, +breakout_score.toFixed(2));
 
     let breakout_confirmation = "none";
-    if (breakout_score > 0.7) {
+    if (breakout_score > p.breakout_strong) {
         if (volume_state === "high") breakout_confirmation = "strong";
         else if (volume_state === "increasing") breakout_confirmation = "medium";
         else breakout_confirmation = "weak";
-    } else if (breakout_score > 0.4) {
+    } else if (breakout_score > p.breakout_weak) {
         breakout_confirmation = volume_state === "high" ? "noise" : "weak";
     }
 
     let setup_state = "no_trade";
     if (zone_state === "compression") {
-        setup_state = breakout_score > 0.7 ? "breakout_entry_ready" : "waiting_breakout";
+        setup_state = breakout_score > p.breakout_strong ? "breakout_entry_ready" : "waiting_breakout";
     } else if (context === "near_support" && dominant_side === "support") {
         setup_state = volume_state === "high" ? "potential_bounce_entry" : "watching_support";
     } else if (context === "near_resistance" && dominant_side === "resistance") {
@@ -136,7 +147,9 @@ function enhanceMarketState(data) {
 
 
 // Merges the role-timeframe snapshots into the pre-enhancement Market State (unchanged merge rules).
-function mergeSnapshots(market, snaps, roles, weights) {
+// `params` holds the calculation config's `market` and `divergence` groups.
+function mergeSnapshots(market, snaps, roles, weights, params = {}) {
+    const mp = { ...MARKET_DEFAULTS, ...params.market };
     // Two roles may share a timeframe; each timeframe is merged once.
     const tfList = [...new Set(Object.values(roles))];
     const timeframesState = {};
@@ -190,12 +203,12 @@ function mergeSnapshots(market, snaps, roles, weights) {
             },
             timestamp: entryData.timestamp,
             timeframes: timeframesState,
-            volatility_ratio: volatilityRatio(entryData.indicators?.atr),
-            divergence: detectDivergence(entryData.candles, entryData.indicators?.rsi || []),
+            volatility_ratio: volatilityRatio(entryData.indicators?.atr, mp.volatility_candles),
+            divergence: detectDivergence(entryData.candles, entryData.indicators?.rsi || [], params.divergence),
         },
         // enhanceMarketState compares the latest volume with the 20-candle average, so it needs the
         // recent history rather than only the latest value.
-        volumeHistory: (entryData.indicators?.volume || []).slice(-20),
+        volumeHistory: (entryData.indicators?.volume || []).slice(-mp.volume_candles),
     };
 }
 
@@ -213,11 +226,11 @@ function trendOf(snap) {
     return ma14 > ma50 ? 'up' : 'down';
 }
 
-// Latest closed ATR divided by the mean ATR of the last 100 closed candles (1.0 = typical).
-function volatilityRatio(atr) {
+// Latest closed ATR divided by the mean ATR of the last `candles` closed candles (1.0 = typical).
+function volatilityRatio(atr, candles = MARKET_DEFAULTS.volatility_candles) {
     const values = (atr || []).filter(v => typeof v === 'number' && Number.isFinite(v));
     if (values.length === 0) return null;
-    const window = values.slice(-100);
+    const window = values.slice(-candles);
     const mean = window.reduce((a, b) => a + b, 0) / window.length;
     return mean > 0 ? +(values[values.length - 1] / mean).toFixed(3) : null;
 }
@@ -228,10 +241,11 @@ function codeOf(err) {
 
 // Builds the Market State fields (without freshness or signal) from the role snapshots.
 // Shared by the live engine and the backtest. Throws when a side has no merged level.
-function composeMarketState(market, snaps, roles, weights) {
-    const { raw, volumeHistory } = mergeSnapshots(market, snaps, roles, weights);
+// `params` holds the calculation config's `market` and `divergence` groups.
+function composeMarketState(market, snaps, roles, weights, params = {}) {
+    const { raw, volumeHistory } = mergeSnapshots(market, snaps, roles, weights, params);
     if (raw.levels.support.length === 0 || raw.levels.resistance.length === 0) throw new Error('no merged levels');
-    const enhanced = enhanceMarketState({ ...raw, indicators: { ...raw.indicators, volume: volumeHistory } });
+    const enhanced = enhanceMarketState({ ...raw, indicators: { ...raw.indicators, volume: volumeHistory } }, params.market);
     enhanced.indicators = raw.indicators;
     return enhanced;
 }
@@ -255,6 +269,8 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     let lastResetAt = null;
 
     const weightsNow = () => (calc ? calc.weights() : config.TF_WEIGHTS);
+    const snapshotParams = () => (calc ? calc.snapshotParams() : {});
+    const stateParams = () => (calc ? calc.stateParams() : {});
     const signalOf = (state) => computeSignal(state, roles.htf, { ...(calc ? calc.signalOptions() : {}), structureTf: roles.structure });
 
     const isMarket = (m) => markets.includes(m);
@@ -308,7 +324,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
             const raw = await binance.getKlines(market, tf);
             const t = nowSec();
             const { closed, forming } = splitClosed(normalizeCandles(raw), t, { lastIsCurrent: true });
-            const snap = indicators.calculateAll(closed, market, tf, { forming, fetchedAt: t, gaps: countGaps(closed, tf) });
+            const snap = indicators.calculateAll(closed, market, tf, { forming, fetchedAt: t, gaps: countGaps(closed, tf) }, snapshotParams());
             const problems = validateSnapshot(snap, market, tf);
             if (problems.length) {
                 const err = new Error(`Snapshot failed validation: ${problems.slice(0, 3).join('; ')}`);
@@ -352,6 +368,46 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         return p;
     }
 
+    // Recomputes a stored snapshot from its own candles with the current indicator and zone settings
+    // (no Binance request). On failure the stored snapshot stays.
+    async function doRecalculate(market, tf) {
+        const { snap } = await readValidSnapshot(market, tf);
+        if (!snap) return { recalculated: false, reason: 'no_snapshot' };
+        try {
+            const next = indicators.calculateAll(snap.candles, market, tf, { forming: snap.forming_candle, fetchedAt: snap.fetched_at, gaps: snap.gaps }, snapshotParams());
+            const problems = validateSnapshot(next, market, tf);
+            if (problems.length) throw new Error(`failed validation: ${problems.slice(0, 3).join('; ')}`);
+            await storage.writeSnapshot(market, tf, next);
+        } catch (err) {
+            log.warn(`[CalcConfig] ${market}/${tf}: recalculation failed (${err.message}); keeping the stored snapshot`);
+            return { recalculated: false, reason: codeOf(err) };
+        }
+        if (notify.timeframeUpdated) notify.timeframeUpdated(market, tf);
+        return { recalculated: true };
+    }
+
+    // Runs after any update or recalculation of the same (market, timeframe) already in flight.
+    function recalculateTimeframe(market, tf) {
+        const key = `${market}|${tf}`;
+        const prev = inflight.get(key) || Promise.resolve();
+        const p = prev.catch(() => {}).then(() => doRecalculate(market, tf)).finally(() => {
+            if (inflight.get(key) === p) inflight.delete(key);
+        });
+        inflight.set(key, p);
+        return p;
+    }
+
+    // After an `indicators` / `zones` config change: every stored snapshot, then every summary.
+    async function recalculateAll() {
+        const results = {};
+        for (const m of markets) {
+            const outcomes = await Promise.all(allTfs.map(tf => recalculateTimeframe(m, tf)));
+            results[m] = { recalculated: allTfs.filter((tf, i) => outcomes[i].recalculated) };
+            await rebuildSummary(m);
+        }
+        return results;
+    }
+
     // Unresolved error codes relevant to a market's summary.
     function currentErrors(market) {
         const codes = new Set();
@@ -388,7 +444,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
 
         let enhanced;
         try {
-            enhanced = composeMarketState(market, snaps, roles, weightsNow());
+            enhanced = composeMarketState(market, snaps, roles, weightsNow(), stateParams());
         } catch (err) {
             summaryErrors.set(market, { code: 'calculation_failed', at: t });
             log.error(`[MTF] ${market}: summary calculation failed: ${err.message}`);
@@ -610,6 +666,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         initialize,
         updateTimeframe,
         rebuildSummary,
+        recalculateAll,
         runBoundary,
         refreshStale,
         reset,
@@ -622,4 +679,4 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     };
 }
 
-module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots, composeMarketState, trendOf };
+module.exports = { createMarketEngine, enhanceMarketState, mergeSnapshots, composeMarketState, trendOf, MARKET_DEFAULTS };

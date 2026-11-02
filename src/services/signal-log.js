@@ -6,7 +6,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const { THRESHOLD } = require('./signal');
 
-// A record still open after this many entry-timeframe candles is closed as EXPIRED.
+// A record still open after this many entry-timeframe candles is closed as EXPIRED. Default of the
+// calculation config's `evaluation.expiry_candles`.
 const EXPIRY_CANDLES = 96;
 const RESULTS = ['WIN', 'LOSS', 'EXPIRED', 'UNKNOWN'];
 const MARKET_RE = /^[A-Z0-9]{2,20}$/;
@@ -46,7 +47,7 @@ function featuresOf(state) {
 
 // Walks the closed candles after the signal candle. A candle that touches both SL and TP1 counts as
 // LOSS (the order inside the candle is unknown). Returns null while the record stays open.
-function evaluate(record, candles) {
+function evaluate(record, candles, expiry = EXPIRY_CANDLES) {
     const long = record.signal === 'BUY';
     const risk = long ? record.price - record.sl : record.sl - record.price;
     const after = candles.filter(c => c.time > record.candle_time);
@@ -60,7 +61,7 @@ function evaluate(record, candles) {
         const hitTp = long ? c.high >= record.tp1 : c.low <= record.tp1;
         if (hitSl) return { result: 'LOSS', rr: -1, closed_at: c.close_time, bars: i + 1 };
         if (hitTp) return { result: 'WIN', rr: record.risk_reward, closed_at: c.close_time, bars: i + 1 };
-        if (i + 1 >= EXPIRY_CANDLES) {
+        if (i + 1 >= expiry) {
             const move = long ? c.close - record.price : record.price - c.close;
             return { result: 'EXPIRED', rr: risk > 0 ? round(move / risk, 2) : null, closed_at: c.close_time, bars: i + 1 };
         }
@@ -97,7 +98,8 @@ function recordFrom(market, entryTf, state, last, threshold = THRESHOLD) {
 }
 
 // `threshold` returns the live score threshold (calculation config), read on every summary.
-function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, log = console }) {
+// `threshold` and `expiry` return the live calculation config values.
+function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = () => EXPIRY_CANDLES, log = console }) {
     // market -> Map(id -> record) of records without an outcome yet.
     const open = new Map();
     const fileOf = (market) => {
@@ -159,7 +161,7 @@ function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, log = cons
         const pending = open.get(market);
 
         for (const r of [...pending.values()]) {
-            const outcome = evaluate(r, candles);
+            const outcome = evaluate(r, candles, expiry());
             if (!outcome) continue;
             await append(market, { type: 'outcome', id: r.id, ...outcome });
             pending.delete(r.id);

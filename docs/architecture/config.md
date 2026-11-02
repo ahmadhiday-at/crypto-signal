@@ -40,14 +40,42 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `filters` | `htf_trend` | `off` | `off` / `htf` / `htf+structure` | HTF trend filter (since 2.16.0): BUY rejected when a checked timeframe trends `down`, SELL when `up` → `against_htf_trend` |
 | `filters` | `entry_max_atr` | 0 | 0–10 | Entry location (since 2.17.0): price farther than this × ATR from the entry zone → `far_from_entry`; 0 = off |
 | `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
+| `scoring` | `near_zone` / `momentum` / `htf_zone` / `divergence` / `volume` | 2 / 2 / 3 / 2 / 1 | integer 0–10 (volume 0–5) | Points per signal reason (since 2.18.0) |
+| `scoring` | `strong_score` | 7 | integer 1–30 | \|score\| for strength `strong` |
+| `scoring` | `breakout_confirmed` | `medium` | `weak` / `medium` / `strong` | Weakest breakout confirmation that lets BUY into resistance / SELL into support pass |
+| `indicators` | `ma_fast` / `ma_mid` / `ma_slow` | 14 / 50 / 200 | integer, fast < mid < slow | SMA periods; the fields stay `ma14` / `ma50` / `ma200` |
+| `indicators` | `rsi_period`, `atr_period` | 14, 14 | integer 2–100 | RSI and ATR periods |
+| `indicators` | `macd_fast` / `macd_slow` / `macd_signal` | 12 / 26 / 9 | integer, fast < slow | MACD periods |
+| `indicators` | `min_candles` | 200 | integer ≥ longest period, ≤ `CANDLE_LIMIT` − 1 | Closed candles needed per timeframe (else `insufficient_data`) |
+| `indicators` | `rsi_bullish` / `rsi_bearish` | 60 / 40 | 50–100 / 0–50 | Momentum: RSI above / below with MACD histogram > 0 / < 0 |
+| `indicators` | `regime_ma_percent` | 1 | 0–10 | Regime `ranging` when fast and mid SMA are within this % of price |
+| `zones` | `cluster_percent` | 0.5 | 0–5 | Swings within this % form one zone |
+| `zones` | `width_atr` | 0.5 | 0–5 | Zone half-width, × ATR |
+| `zones` | `touch_points`, `recency_candles`, `distance_penalty` | 2, 50, 10 | 0–20, 0–500, 0–100 | Zone score: touches × points + max(0, recency − candles since last touch) − distance × penalty |
+| `zones` | `ma_bonus`, `ma_proximity_percent` | 1, 1 | 0–20, 0–10 | Score bonus when the zone is within this % of the mid / slow SMA |
+| `zones` | `fallback_candles` | 100 | integer 10–1000 | High/low window for the fallback level |
+| `zones` | `lookback_volatility_band`, `lookback_scale` | 0.2, 0.2 | 0–1, 0–0.9 | `MAPPING_CANDLE` × (1 ± scale) when volatility is beyond its mean × (1 ± band) |
+| `market` | `volume_candles` | 20 | integer 2–200 | Volume average window |
+| `market` | `volume_low` / `volume_increasing` / `volume_high` | 0.8 / 1.2 / 1.5 | 0–10, increasing | Volume state vs the average |
+| `market` | `energy_cooling` / `energy_building` / `energy_explosive` | 0.02 / 0.05 / 0.1 | ≥ 0, increasing | \|MACD histogram\| thresholds for `market_energy` (price units) |
+| `market` | `breakout_distance_percent` | 1 | 0.01–10 | Breakout score distance factor = max(0, 1 − nearest zone % ÷ this) |
+| `market` | `breakout_volume_high` / `_increasing` / `_normal` / `_low` | 1 / 0.8 / 0.5 / 0.3 | 0–1 | Breakout score volume factor |
+| `market` | `compression_bonus` | 0.2 | 0–1 | Breakout score bonus in compression |
+| `market` | `breakout_weak` / `breakout_strong` | 0.4 / 0.7 | 0–1, weak < strong | `breakout_confirmation` and `setup_state` thresholds |
+| `market` | `dominant_percent` | 20 | 0–100 | `dominant_side` when the top zone scores differ by more than this % |
+| `market` | `volatility_candles` | 100 | integer 2–1000 | ATR mean window of `volatility_ratio` |
+| `divergence` | `lookback` / `pivot_width` / `max_age` | 60 / 3 / 10 | integers, pivot_width × 2 < lookback | RSI divergence search (entry TF) |
+| `evaluation` | `expiry_candles` | 96 | integer 1–2000 | Entry candles before an open trade is `EXPIRED` (signal log and backtest) |
+| `evaluation` | `min_trades` | 30 | integer 1–1000 | Minimum taken trades for the Edge verdict and the out-of-sample pick |
 | `backtest` | `days` | 365 | integer 1–1500 | History length (CLI `--days` default) |
 | `backtest` | `fee_pct` | 0.1 | 0–5 | Round-trip fee, % of price (CLI `--fee` default) |
 | `backtest` | `split` | 0.7 | 0.5–0.9 | Out-of-sample split (CLI `--split` default) |
 
 - **Loading:** at startup; a missing file is created with the defaults. Missing keys take the defaults. An unreadable, invalid-JSON or out-of-range file is rejected with a log line and the values in use stay.
-- **Reload:** the server polls the file every 2 s (works on Docker bind mounts; nodemon does not watch `config/`, so no restart). A change rebuilds every Market State (new weights); the signal values apply on the next read. The signal log uses the live `threshold`.
+- **Reload:** the server polls the file every 2 s (works on Docker bind mounts; nodemon does not watch `config/`, so no restart). A change to `indicators` or `zones` recalculates every stored timeframe snapshot from its own candles (no Binance request), then rebuilds the Market States; other changes rebuild the Market States; the signal values apply on the next read. Snapshots are also recalculated once at startup (the file may have changed while the app was down). The signal log uses the live `threshold` and `evaluation.expiry_candles`.
+- **Cross-key rules:** SMA fast < mid < slow, MACD fast < slow, `rsi_bearish` < `rsi_bullish`, `min_candles` ≥ the longest indicator period and ≤ `CANDLE_LIMIT` − 1, volume / energy / breakout thresholds increasing, divergence `pivot_width` × 2 < `lookback`. A file or PUT breaking one is rejected.
 - **Backtest:** `npm run backtest` and `/config` re-runs use the saved file. The [Edge](../contract/rest.md#edge) verdict reports `params_differ` until the report is re-run with the current values.
-- Still in code: score points per reason, `CONFIRMED_BREAKOUT`, the signal-log expiry (96 candles) and the freshness constants.
+- Still in code (operational, not calculation): the freshness constants (stale after 2 × timeframe), request timeouts, scheduler delay, reset cooldown, the 3-levels-per-side limit (Market State contract) and the zero-ATR zone width fallback (0.2% of price).
 
 ## Notes
 

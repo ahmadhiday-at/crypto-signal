@@ -25,7 +25,7 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
   - **Why it looks better:** with rr_zone 60–64% of trades EXPIRE (96 entry candles) before TP1 or SL; TP1 win rate is only 5–7%. Losses shrink because trades time out near entry, not because the target is reached → no edge yet, defaults unchanged.
   - **`entry_max_atr` 1–2 changes almost nothing:** taken trades are already in or next to the entry zone (`no_mans_land` and the score's `near_support`/`near_resistance` points).
   - **Open:** the 96-candle expiry is fixed in code; a target farther away needs a longer holding time (or a trailing exit) to be judged. Recheck on 2–3 years (B4).
-- [ ] **B3. Score calibration:** reason weights from the breakdown (which reasons raise win rate / expectancy), review the threshold.
+- [ ] **B3. Score calibration:** reason weights from the breakdown (which reasons raise win rate / expectancy), review the threshold. Since v2.18.0 the points are config `scoring` and every other calculation value (indicators, zones, market thresholds, divergence, expiry) is in `config/calculation.json` too.
 - [ ] **B4. Robust validation:** 2–3 years of history (up and down phases), BTC/SOL/BNB, fee 0.1%, `--split 0.7`; adopt a change only when it holds on every pair.
 
 **C. Deferred reviews** (decided with the B4 data)

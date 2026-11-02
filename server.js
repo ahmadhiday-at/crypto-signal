@@ -10,11 +10,11 @@ const { createSignalLog } = require('./src/services/signal-log');
 const { createReports } = require('./src/services/backtest');
 const path = require('path');
 
-const { createCalcConfig } = require('./src/config/calculation');
+const { createCalcConfig, snapshotChanged } = require('./src/config/calculation');
 const { createBacktestRunner } = require('./src/services/backtest-runner');
 
 // Calculation config (config/calculation.json): loaded before the engine, reloaded on hand edits.
-const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS });
+const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, candleLimit: binanceService.candleLimit() });
 calc.load();
 calc.watch();
 
@@ -24,15 +24,24 @@ const engine = createMarketEngine({
     indicators: require('./src/services/indicator.service'),
     config,
     calc,
-    signalLog: createSignalLog({ dir: path.join(__dirname, 'data/signals'), entryTf: config.TF_ROLES.entry, threshold: () => calc.get().signal.threshold }),
+    signalLog: createSignalLog({
+        dir: path.join(__dirname, 'data/signals'), entryTf: config.TF_ROLES.entry,
+        threshold: () => calc.get().signal.threshold, expiry: () => calc.get().evaluation.expiry_candles,
+    }),
     notify: {
         timeframeUpdated: (market, timeframe) => wsManager.broadcastUpdate(market, timeframe),
         summaryUpdated: (market) => wsManager.broadcastSummary(market),
     },
 });
 
-// New weights change the zone merge: rebuild every summary. The other values apply on the next read.
-calc.onChange(() => {
+// Indicator or zone settings change the per-timeframe snapshots: recalculate them from the stored
+// candles, then rebuild. Other groups only change the merge and enhancement: rebuild every summary.
+// Signal values apply on the next read either way.
+calc.onChange((next, prev) => {
+    if (snapshotChanged(next, prev)) {
+        engine.recalculateAll().catch(err => console.error(`[CalcConfig] recalculation failed: ${err.message}`));
+        return;
+    }
     for (const market of config.MARKETS) engine.rebuildSummary(market).catch(err => console.error(`[CalcConfig] ${market}: rebuild failed: ${err.message}`));
 });
 
@@ -61,6 +70,8 @@ server.listen(config.PORT, config.HOST, async () => {
 
     try {
         await engine.initialize();
+        // Stored snapshots may predate a config edit made while the app was down.
+        await engine.recalculateAll();
         console.log('System snapshots initialization complete.');
     } catch (err) {
         console.error('[Init] Initialization failed:', err.message);

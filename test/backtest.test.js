@@ -29,8 +29,8 @@ function history(days) {
 // The synthetic history never scores ±5 on its own; forcing a bullish setup on the entry
 // timeframe makes the replay produce candidates through the real merge/signal code.
 const bullish = {
-    calculateAll(klines, market, tf) {
-        const snap = indicatorService.calculateAll(klines, market, tf);
+    calculateAll(klines, market, tf, meta, params) {
+        const snap = indicatorService.calculateAll(klines, market, tf, meta, params);
         return tf === '15m' ? { ...snap, context: 'near_support', momentum: 'bullish' } : snap;
     },
 };

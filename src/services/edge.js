@@ -4,11 +4,13 @@
 const { metrics } = require('./backtest');
 const { MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
 const { FIXED_KEYS } = require('./backtest');
-const { defaultsOf } = require('../config/calculation');
+const { defaultsOf, resultParams, RESULT_GROUPS } = require('../config/calculation');
 const binance = require('./binance.service');
 
-// Below this many taken trades a result is too small to call.
+// Below this many taken trades a result is too small to call. Default of the calculation config's
+// `evaluation.min_trades`.
 const MIN_TRADES = 30;
+const CALC_DEFAULTS = resultParams(defaultsOf());
 const CLOSED = ['WIN', 'LOSS', 'EXPIRED'];
 
 const pick = (s) => (s ? { trades: s.trades, win_rate: s.win_rate, expectancy_r: s.expectancy_r, profit_factor: s.profit_factor } : null);
@@ -29,6 +31,11 @@ function paramsMatch(params, live) {
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     for (const k of FIXED_KEYS) if ((params[k] ?? defaults[k]) !== live[k]) return false;
     if ((params.side ?? 'both') !== 'both' || (params.skip_energy || []).length) return false;
+    // Reports older than v2.18.0 have no `calc`: they ran with the defaults of these groups.
+    for (const g of RESULT_GROUPS) {
+        const ran = { ...CALC_DEFAULTS[g], ...params.calc?.[g] };
+        if (Object.keys(CALC_DEFAULTS[g]).some(k => ran[k] !== live.calc[g][k])) return false;
+    }
     if (params.weights) {
         for (const tf of live.role_tfs) if (params.weights[tf] !== live.weights[tf]) return false;
     }
@@ -69,7 +76,7 @@ function edgeSummary(market, report, log, live) {
     } else if (!backtest.params_match) {
         verdict = 'unproven';
         reasons.push('params_differ');
-    } else if (taken.trades < MIN_TRADES || taken.expectancy_r === null) {
+    } else if (taken.trades < live.min_trades || taken.expectancy_r === null) {
         verdict = 'unproven';
         reasons.push('too_few_trades');
     } else if (taken.expectancy_r <= 0 || (oos && oos.trades > 0 && oos.expectancy_r !== null && oos.expectancy_r <= 0)) {
@@ -80,7 +87,7 @@ function edgeSummary(market, report, log, live) {
     }
     if (backtest && !backtest.fee_pct) reasons.push('no_fees');
 
-    return { market, verdict, reasons, min_trades: MIN_TRADES, backtest, live_log: liveLog };
+    return { market, verdict, reasons, min_trades: live.min_trades, backtest, live_log: liveLog };
 }
 
 // Live parameters, for paramsMatch. `calc` is the calculation config (src/config/calculation.js);
@@ -98,6 +105,8 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
         entry_max_atr: cfg.filters.entry_max_atr,
         ...Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         weights,
+        calc: resultParams(cfg),
+        min_trades: cfg.evaluation.min_trades,
         role_tfs: [...new Set(Object.values(config.TF_ROLES))],
     };
 }

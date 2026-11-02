@@ -145,7 +145,7 @@ function printValidation(report, keys) {
 async function main() {
     const roles = config.TF_ROLES;
     const roleTfs = [...new Set(Object.values(roles))];
-    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS });
+    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, candleLimit: binance.candleLimit() });
     const loaded = calc.load();
     if (!loaded.loaded) throw new Error(`config/calculation.json is not usable (${loaded.error})`);
     const cfg = calc.get();
@@ -170,7 +170,7 @@ async function main() {
     const report = runBacktest({
         market: args.market, candlesByTf, roles, weights: calc.weights(), indicators,
         threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, target: cfg.signal.target,
-        htfTrend: cfg.filters.htf_trend, entryMaxAtr: cfg.filters.entry_max_atr,
+        htfTrend: cfg.filters.htf_trend, entryMaxAtr: cfg.filters.entry_max_atr, calcParams: calc.resultParams(),
         fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         startSec, feePct: args.fee, window, variants: args.variants,
         splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),

@@ -104,7 +104,7 @@ Any value not listed here is a contract violation and is rejected before publish
 
 ### 4.1 Signal (added in 2.2.0)
 
-Weighted points over fields of the same object; `score` is the sum of `reasons[].points`.
+Weighted points over fields of the same object; `score` is the sum of `reasons[].points`. The points below are the defaults; since 2.18.0 they come from the calculation config `scoring` group (integers), like every threshold in this document ([config.md](../architecture/config.md#calculation-config)).
 
 | Code | Points | When |
 | :--- | :----- | :--- |
