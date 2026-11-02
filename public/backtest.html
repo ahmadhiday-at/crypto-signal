@@ -23,7 +23,10 @@
             <span class="text-sm font-semibold text-gray-400">Backtest</span>
             <span id="period" class="text-xs mono text-gray-500"></span>
         </div>
-        <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
+        <div class="flex items-center gap-3">
+            <a href="/config" class="text-xs text-gray-400 hover:text-white" title="Change the calculation config and re-run this backtest">Config / re-run</a>
+            <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
+        </div>
     </div>
 
     <div class="glass rounded-lg px-3 py-2 text-xs text-yellow-200/80 border-l-4 border-l-yellow-500">
@@ -33,7 +36,7 @@
     </div>
 
     <div id="empty" class="hidden glass rounded-lg p-6 text-sm text-gray-300">
-        No backtest report for this symbol yet. Run:
+        No backtest report for this symbol yet. Run it from <a href="/config" class="text-blue-300 hover:underline">Config</a>, or:
         <pre class="mono text-xs mt-2 text-blue-300" id="empty-cmd"></pre>
     </div>
 

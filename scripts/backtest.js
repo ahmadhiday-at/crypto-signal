@@ -1,21 +1,23 @@
 // Backtest CLI (docs/roadmap/level-5.md).
-// Usage: npm run backtest -- [SYMBOL] [--days 365] [--fee 0] [--sweep key=v1,v2 ...] [--split 0.7]
+// Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
+// The base parameters, and the --days/--fee/--split defaults, come from config/calculation.json.
 // --sweep (Level 6) replays parameter variants on the same history. Keys: `threshold`, `min_rr`,
 // `stop_atr` (SL buffer in ATR), `target` (tp1, tp2 or a fixed R multiple), `side` (both, buy, sell),
 // `skip_energy` (none or market_energy values joined with +, e.g. explosive+building) and `w_<tf>`
 // (zone weight of a role timeframe, e.g. w_15m=1,2,3). Several --sweep options combine.
 // --split 0.7 (Level 6 validation) picks the best variant on the first 70% of the period and
-// reports how it does on the remaining 30%.
+// reports how it does on the remaining 30%; --split none turns it off.
 // Downloads/extends the history cache in data/history/, replays the signal engine and writes
 // data/backtest/{SYMBOL}.json (shown at /backtest/{SYMBOL}). In Docker run it inside the app
 // container so requests go through the VPN: docker compose exec app npm run backtest -- BTCUSDT
 const path = require('path');
 const config = require('../src/config/env');
+const { createCalcConfig } = require('../src/config/calculation');
 const binance = require('../src/services/binance.service');
 const indicators = require('../src/services/indicator.service');
 const { tfSeconds } = require('../src/services/candles');
 const { createHistory } = require('../src/services/history');
-const { runBacktest, createReports } = require('../src/services/backtest');
+const { runBacktest, createReports, FIXED_KEYS } = require('../src/services/backtest');
 
 const DATA = path.join(__dirname, '../data');
 
@@ -71,14 +73,18 @@ function variantsOf(sweeps) {
     }) : [];
 }
 
-function parseArgs(argv, roleTfs) {
-    const args = { market: config.MARKETS[0], days: 365, fee: 0, sweeps: [], split: null };
+// `defaults` is the calculation config's `backtest` group.
+function parseArgs(argv, roleTfs, defaults = { days: 365, fee_pct: 0, split: null }) {
+    const args = { market: config.MARKETS[0], days: defaults.days, fee: defaults.fee_pct, sweeps: [], split: defaults.split ?? null };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--days') args.days = Number(argv[++i]);
         else if (a === '--fee') args.fee = Number(argv[++i]);
         else if (a === '--sweep') args.sweeps.push(parseSweep(argv[++i], roleTfs));
-        else if (a === '--split') args.split = Number(argv[++i]);
+        else if (a === '--split') {
+            const v = argv[++i];
+            args.split = v === 'none' ? null : Number(v);
+        }
         else if (!a.startsWith('--')) args.market = a.toUpperCase();
         else throw new Error(`Unknown option ${a}`);
     }
@@ -134,7 +140,11 @@ function printValidation(report, keys) {
 async function main() {
     const roles = config.TF_ROLES;
     const roleTfs = [...new Set(Object.values(roles))];
-    const args = parseArgs(process.argv.slice(2), roleTfs);
+    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS });
+    const loaded = calc.load();
+    if (!loaded.loaded) throw new Error(`config/calculation.json is not usable (${loaded.error})`);
+    const cfg = calc.get();
+    const args = parseArgs(process.argv.slice(2), roleTfs, cfg.backtest);
     const window = binance.candleLimit() - 1;
     const nowSec = Math.floor(Date.now() / 1000);
     const startSec = nowSec - args.days * 86400;
@@ -153,7 +163,9 @@ async function main() {
 
     const started = Date.now();
     const report = runBacktest({
-        market: args.market, candlesByTf, roles, weights: config.TF_WEIGHTS, indicators,
+        market: args.market, candlesByTf, roles, weights: calc.weights(), indicators,
+        threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr,
+        fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
         startSec, feePct: args.fee, window, variants: args.variants,
         splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),
         onProgress: (n) => process.stdout.write(`\r[Backtest] ${n} candles`),

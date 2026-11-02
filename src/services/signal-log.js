@@ -96,7 +96,8 @@ function recordFrom(market, entryTf, state, last, threshold = THRESHOLD) {
     };
 }
 
-function createSignalLog({ dir, entryTf, log = console }) {
+// `threshold` returns the live score threshold (calculation config), read on every summary.
+function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, log = console }) {
     // market -> Map(id -> record) of records without an outcome yet.
     const open = new Map();
     const fileOf = (market) => {
@@ -164,7 +165,7 @@ function createSignalLog({ dir, entryTf, log = console }) {
             pending.delete(r.id);
         }
 
-        const record = recordFrom(market, entryTf, state, candles[candles.length - 1]);
+        const record = recordFrom(market, entryTf, state, candles[candles.length - 1], threshold());
         if (!record) return;
         // One open record per direction: a setup that persists over several candles is logged once.
         if ([...pending.values()].some(r => r.signal === record.signal)) return;

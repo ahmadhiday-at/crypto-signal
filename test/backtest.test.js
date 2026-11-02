@@ -172,6 +172,11 @@ test('CLI --sweep: combinations, validation and limits', () => {
     assert.equal(parseArgs(['--split', '0.7'], tfs).split, 0.7);
     assert.equal(parseArgs([], tfs).split, null);
     assert.throws(() => parseArgs(['--split', '0.95'], tfs), /0.5 and 0.9/);
+    // Defaults come from the calculation config's backtest group; --split none turns validation off.
+    const fromCfg = parseArgs([], tfs, { days: 200, fee_pct: 0.1, split: 0.7 });
+    assert.deepEqual([fromCfg.days, fromCfg.fee, fromCfg.split], [200, 0.1, 0.7]);
+    assert.equal(parseArgs(['--split', 'none'], tfs, { days: 200, fee_pct: 0.1, split: 0.7 }).split, null);
+    assert.equal(parseArgs(['--fee', '0'], tfs, { days: 200, fee_pct: 0.1, split: 0.7 }).fee, 0);
     const many = Array.from({ length: 13 }, (_, i) => i + 1).join(',');
     const rrs = Array.from({ length: 13 }, (_, i) => i * 0.5).join(',');
     assert.throws(() => parseArgs(['--sweep', `threshold=${many}`, '--sweep', `min_rr=${rrs}`], tfs), /max 144/);

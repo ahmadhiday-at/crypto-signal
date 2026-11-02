@@ -8,10 +8,11 @@ const { edgeSummary, liveParams, MIN_TRADES } = require('../src/services/edge');
 const { createReports } = require('../src/services/backtest');
 const { createMarketEngine } = require('../src/services/market.service');
 const { createApp } = require('../src/app');
+const { createCalcConfig } = require('../src/config/calculation');
 const indicatorService = require('../src/services/indicator.service');
 const { fakeBinance, tempStorage, testConfig, silentLog } = require('./helpers');
 
-const live = liveParams(testConfig, 499);
+const live = liveParams(testConfig, null, 499);
 const summary = (trades, expectancy_r) => ({ trades, wins: 1, win_rate: 0.3, expectancy_r, profit_factor: 1.1 });
 const report = (over = {}) => ({
     generated_at: 1_800_000_000,
@@ -80,4 +81,54 @@ test('GET /api/edge/:market', async (t) => {
     assert.equal(neg.verdict, 'negative');
     assert.equal(neg.backtest.taken.expectancy_r, -0.24);
     assert.equal((await fetch(`${base}/api/edge/ETHUSDT`)).status, 404);
+});
+
+test('calculation config API, edge params_differ and backtest re-run', async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-calc-'));
+    const reports = createReports({ dir: path.join(dir, 'backtest') });
+    const calc = createCalcConfig({ file: path.join(dir, 'calculation.json'), envWeights: testConfig.TF_WEIGHTS, log: silentLog });
+    calc.load();
+    const started = [];
+    const runner = {
+        start: (markets) => (started.length ? { error: 'backtest_running' } : (started.push(...markets), { jobs: markets.map(market => ({ market, state: 'queued' })) })),
+        status: () => ({ running: started.length > 0, jobs: {} }),
+    };
+    const engine = createMarketEngine({
+        storage: tempStorage(), binance: fakeBinance({ now: () => Date.now() }), indicators: indicatorService, config: testConfig, calc, log: silentLog,
+    });
+    const server = http.createServer(createApp({ engine, config: { ...testConfig, ALLOWED_HOSTS: ['127.0.0.1'] }, reports, calc, runner, log: silentLog }));
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    t.after(() => new Promise(r => server.close(r)));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const action = { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' };
+    const put = (body, headers = action) => fetch(`${base}/api/calc-config`, { method: 'PUT', headers, body });
+
+    const got = await fetch(`${base}/api/calc-config`).then(r => r.json());
+    assert.equal(got.config.signal.threshold, 5);
+    assert.deepEqual(got.limits.signal.threshold, [1, 15, true]);
+
+    const window = require('../src/services/binance.service').candleLimit() - 1;
+    await reports.write('BTCUSDT', report({ params: { ...report().params, window } }));
+    assert.equal((await fetch(`${base}/api/edge/BTCUSDT`).then(r => r.json())).backtest.params_match, true);
+
+    assert.equal((await put(JSON.stringify({ signal: { threshold: 6 } }), { 'Content-Type': 'application/json' })).status, 403);
+    const bad = await put(JSON.stringify({ signal: { threshold: 0 } }));
+    assert.equal(bad.status, 400);
+    assert.deepEqual((await bad.json()).problems, ['signal.threshold must be an integer 1–15']);
+    assert.equal((await put('{ nope')).status, 400);
+    const ok = await put(JSON.stringify({ signal: { threshold: 6 }, filters: { volatility_dead: 0.4 } }));
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).config.signal.threshold, 6);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'calculation.json'), 'utf8')).filters.volatility_dead, 0.4);
+    // The report ran with threshold 5: it no longer describes the live signal.
+    const edge = await fetch(`${base}/api/edge/BTCUSDT`).then(r => r.json());
+    assert.deepEqual([edge.verdict, edge.reasons[0]], ['unproven', 'params_differ']);
+
+    const run = (body) => fetch(`${base}/api/backtest-runs`, { method: 'POST', headers: action, body: JSON.stringify(body) });
+    assert.equal((await run({ market: 'ETHUSDT' })).status, 404);
+    assert.equal((await run({ market: 'all' })).status, 202);
+    assert.deepEqual(started, testConfig.MARKETS);
+    assert.equal((await run({ market: 'BTCUSDT' })).status, 409);
+    assert.equal((await fetch(`${base}/api/backtest-runs`).then(r => r.json())).running, true);
+    assert.equal((await fetch(`${base}/config`)).status, 200);
 });

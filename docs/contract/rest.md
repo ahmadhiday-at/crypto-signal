@@ -11,9 +11,12 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
 | Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
+| Data | `/api/calc-config` | `GET` / `PUT` | Calculation config (since 2.14.0). See [Calculation config](#calculation-config). |
+| Data | `/api/backtest-runs` | `GET` / `POST` | Re-run the backtest from the server (since 2.14.0). See [Backtest runs](#backtest-runs). |
 | UI | `/` | `GET` | 302 to `/{first MARKET_LIST market}` (since 2.13.0). |
 | UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`), the main view. Links to Chart, Backtest and the signal log CSV. |
 | UI | `/backtest/:symbol` | `GET` | Backtest report page: metrics, equity curve, trades. |
+| UI | `/config` | `GET` | Calculation config editor and backtest re-run (since 2.14.0). |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
 | System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
 | System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
@@ -54,10 +57,10 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 ## Backtest report
 
-`GET /api/backtest/:symbol` returns `data/backtest/{MARKET}.json` (gitignored), written by `npm run backtest -- SYMBOL [--days 365] [--fee 0] [--sweep key=v1,v2 ...] [--split 0.7]`.
+`GET /api/backtest/:symbol` returns `data/backtest/{MARKET}.json` (gitignored), written by `npm run backtest -- SYMBOL [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split R|none]` or by [Backtest runs](#backtest-runs). Since 2.14.0 the base parameters and the `--days`/`--fee`/`--split` defaults come from `config/calculation.json` (default 365 days, fee 0.1, split 0.7; before: fee 0, no split).
 
 - **Replay:** on every closed entry candle in the period, each role timeframe gets a snapshot from its last `CANDLE_LIMIT − 1` closed candles, then the live merge, `enhanceMarketState` and `computeSignal` run with `status: "ok"`. Candidates and outcomes follow the [Signal log](#signal-log) rules. Taken and filtered trades are tracked separately, each with at most one open trade per direction.
-- **Fields:** `market`, `entry_tf`, `roles`, `period` `{start, end}`, `params` `{threshold, min_rr, stop_atr, target, side, skip_energy, weights, expiry_candles, window, fee_pct}` (`min_rr`, `weights` since 2.9.0; `stop_atr`, `target`, `side`, `skip_energy` since 2.11.0), `steps`, `skipped_steps`, `generated_at`, `taken` and `filtered` (`summary`, `equity` `[{time, equity}]`, `by_side` `{BUY, SELL}`, `breakdown`), `sweep`, `validation`, and `trades` (`id`, `time`, `signal`, `filtered`, `filters`, `strength`, `score`, `features`, `price`, `sl`, `tp1`, `risk_reward`, `result`, `rr`, `net_r`, `closed_at`, `bars`).
+- **Fields:** `market`, `entry_tf`, `roles`, `period` `{start, end}`, `params` `{threshold, min_rr, stop_atr, target, side, skip_energy, weights, expiry_candles, window, fee_pct}` (`min_rr`, `weights` since 2.9.0; `stop_atr`, `target`, `side`, `skip_energy` since 2.11.0; `trailing_atr`, `htf_proximity_percent`, `no_mans_land_percent`, `volatility_extreme`, `volatility_dead` since 2.14.0, fixed for every sweep variant), `steps`, `skipped_steps`, `generated_at`, `taken` and `filtered` (`summary`, `equity` `[{time, equity}]`, `by_side` `{BUY, SELL}`, `breakdown`), `sweep`, `validation`, and `trades` (`id`, `time`, `signal`, `filtered`, `filters`, `strength`, `score`, `features`, `price`, `sl`, `tp1`, `risk_reward`, `result`, `rr`, `net_r`, `closed_at`, `bars`).
 - **`features`** (since 2.9.0): state at the signal candle: `regime` (entry TF), `context`, `momentum`, `volume_state`, `market_energy`, `breakout_confirmation`, `fake_breakout_risk`, `divergence`, `session_utc` (4-hour UTC block, e.g. `08-12`).
 - **`breakdown`** (since 2.9.0): per dimension (`side`, `score` = \|score\|, each `features` key, and `filter` for filtered trades, counted once per filter code), a list of `{value, ...summary}`, most trades first.
 - **`sweep`** (since 2.9.0): `null` without `--sweep`. Otherwise one entry per parameter set: `{base, params, taken: summary, filtered: summary}` (`params` as above without the run-wide fields); `base: true` is the live configuration, which is also the main report. Keys: `threshold` (integer 1–15), `min_rr` (0–10), `stop_atr` (SL buffer beyond the zone in ATR, 0–3; live 0.5), `target` (`tp1` nearest opposite zone = live, `tp2` major HTF zone, or a fixed multiple of risk 0.5–10; sets `tp1`/`risk_reward` of the trade), `side` (`both`/`buy`/`sell`), `skip_energy` (`none` or `market_energy` values joined with `+`; with `side`, dropped candidates are neither taken nor filtered), `w_<tf>` (zone weight of a role timeframe, 0–20). Several `--sweep` options combine into every combination (max 144); a variant equal to the base is not repeated.
@@ -87,3 +90,19 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 - **`verdict`:** `unproven` when there is no backtest (`no_backtest`), its parameters differ from the live ones (`params_differ`: threshold, min RR, SL buffer, target `tp1`, both sides, no energy skip, role-timeframe weights, window = `CANDLE_LIMIT` − 1) or it has fewer than `min_trades` taken trades (`too_few_trades`); `negative` when taken `expectancy_r` ≤ 0 (`negative_expectancy`) or the live-parameter out-of-sample `expectancy_r` ≤ 0 (`negative_out_of_sample`); otherwise `positive`. `no_fees` is added when the backtest used `fee_pct` 0.
 - **`backtest`:** `null` without a report. `taken` = report `taken.summary` subset; `out_of_sample` = the base row of `validation` (`null` without `--split`).
 - **`live_log`:** `null` when the signal log is disabled. Taken (not filtered) records only; `trades`/`win_rate`/`expectancy_r`/`profit_factor` over WIN/LOSS/EXPIRED in R (`rr`, no fees); `open` = records without an outcome.
+
+## Calculation config
+
+Since 2.14.0. Values in `config/calculation.json` ([config.md](../architecture/config.md#calculation-config)).
+
+- `GET /api/calc-config` → `{file, config, defaults, limits, role_timeframes}`. `config` and `defaults` have the groups `signal`, `filters`, `weights`, `backtest`; `limits` gives `[min, max, integer]` per key (`weights`: one pair for every timeframe).
+- `PUT /api/calc-config` with a JSON body (full or partial config; missing keys keep the values in use). Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise). 400 `invalid_config` with `problems` (list of messages) or 400 `invalid_json`; 200 `{config, changed}`. The file is written atomically and the values apply at once: weights rebuild every Market State, the signal values apply on the next read.
+- A report made with other values gets `params_differ` in [Edge](#edge).
+
+## Backtest runs
+
+Since 2.14.0. Runs `scripts/backtest.js SYMBOL` (the saved calculation config, no sweep) in a child process, one batch at a time, markets one after another. Stopped after 60 minutes.
+
+- `POST /api/backtest-runs` with `{"market": "BTCUSDT"}` or `{"market": "all"}` (every `MARKET_LIST` market). Same header and same-origin rules as `PUT /api/calc-config`. 202 `{jobs}`, 404 for an unknown market, 409 `backtest_running`.
+- `GET /api/backtest-runs` → `{running, jobs}`; `jobs` holds the latest job per market: `{market, state (queued/running/done/failed), queued_at, started_at, finished_at, progress (last output line), error, output (last 15 lines)}`. In memory only: lost on restart.
+- Binance HTTP 451 fails the run (`error` holds the CLI message); no workaround.

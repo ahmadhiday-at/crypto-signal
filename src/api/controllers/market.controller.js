@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, liveParams } = require('../../services/edge');
+const { LIMITS, WEIGHT_LIMITS } = require('../../config/calculation');
 
 // Read on each call so a version bump shows up without restarting the server.
 function appVersion() {
@@ -14,7 +15,9 @@ function appVersion() {
     }
 }
 
-function createMarketController({ engine, config, reports = null }) {
+// `calc` (calculation config) and `runner` (backtest runner) are optional; their endpoints answer
+// 404 without them.
+function createMarketController({ engine, config, reports = null, calc = null, runner = null }) {
     const unknown = (res) => res.status(404).json({ error: 'unknown_market_or_timeframe' });
 
     async function getMarketAnalysis(req, res, next) {
@@ -86,10 +89,50 @@ function createMarketController({ engine, config, reports = null }) {
                 reports ? reports.read(market) : null,
                 engine.signalRecords(market),
             ]);
-            res.json(edgeSummary(market, report, log, liveParams(config)));
+            res.json(edgeSummary(market, report, log, liveParams(config, calc)));
         } catch (err) {
             next(err);
         }
+    }
+
+    // Calculation config (docs/contract/rest.md): values in use, defaults and allowed ranges.
+    function getCalcConfig(req, res) {
+        if (!calc) return res.status(404).json({ error: 'calc_config_disabled' });
+        res.json({
+            file: 'config/calculation.json',
+            config: calc.get(),
+            defaults: calc.defaults(),
+            limits: { ...LIMITS, weights: WEIGHT_LIMITS },
+            role_timeframes: config.TF_ROLES,
+        });
+    }
+
+    // Saves a full or partial config; it applies at once (no restart).
+    function updateCalcConfig(req, res, next) {
+        try {
+            if (!calc) return res.status(404).json({ error: 'calc_config_disabled' });
+            const { problems, config: saved, changed } = calc.update(req.body);
+            if (problems) return res.status(400).json({ error: 'invalid_config', problems });
+            res.json({ config: saved, changed });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    function getBacktestRuns(req, res) {
+        if (!runner) return res.status(404).json({ error: 'backtest_runner_disabled' });
+        res.json(runner.status());
+    }
+
+    // Body {"market": "BTCUSDT"} or {"market": "all"}: re-runs the backtest with the current config.
+    function startBacktestRun(req, res) {
+        if (!runner) return res.status(404).json({ error: 'backtest_runner_disabled' });
+        const market = req.body?.market;
+        const markets = market === 'all' ? config.MARKETS : [market];
+        if (market !== 'all' && !engine.isMarket(market)) return unknown(res);
+        const { error, jobs } = runner.start(markets);
+        if (error) return res.status(409).json({ error });
+        res.status(202).json({ jobs });
     }
 
     function getHealth(req, res) {
@@ -112,7 +155,7 @@ function createMarketController({ engine, config, reports = null }) {
         }
     }
 
-    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getHealth, resetData };
+    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getCalcConfig, updateCalcConfig, getBacktestRuns, startBacktestRun, getHealth, resetData };
 }
 
 module.exports = { createMarketController };

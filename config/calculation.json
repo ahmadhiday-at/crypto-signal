@@ -1,0 +1,27 @@
+{
+  "signal": {
+    "threshold": 5,
+    "min_rr": 1.5,
+    "stop_atr": 0.5,
+    "trailing_atr": 1.5,
+    "htf_proximity_percent": 1
+  },
+  "filters": {
+    "no_mans_land_percent": 1,
+    "volatility_extreme": 2,
+    "volatility_dead": 0.5
+  },
+  "weights": {
+    "1d": 3,
+    "4h": 2,
+    "1h": 1.5,
+    "15m": 1,
+    "1w": 1,
+    "1m": 1
+  },
+  "backtest": {
+    "days": 365,
+    "fee_pct": 0.1,
+    "split": 0.7
+  }
+}

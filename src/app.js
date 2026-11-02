@@ -21,7 +21,7 @@ function createHostCheck(allowedHosts) {
   return (hostHeader) => allowed.has(hostnameOf(hostHeader));
 }
 
-function createApp({ engine, config, reports = null, log = console }) {
+function createApp({ engine, config, reports = null, calc = null, runner = null, log = console }) {
   const app = express();
 
   app.disable("x-powered-by");
@@ -51,11 +51,15 @@ function createApp({ engine, config, reports = null, log = console }) {
   // The Market Dashboard of the first configured market is the main view.
   app.get("/", (req, res) => res.redirect(302, `/${encodeURIComponent(config.MARKETS[0])}`));
   app.use(express.static(path.join(__dirname, "../public")));
-  app.use("/api", createApiRouter(createMarketController({ engine, config, reports })));
+  app.use("/api", createApiRouter(createMarketController({ engine, config, reports, calc, runner })));
   app.use("/", viewRoutes);
 
   // Never leak internal error details to clients.
   app.use((err, req, res, next) => {
+    // Body parser errors (malformed JSON, body too large) are the client's.
+    if (err.type === "entity.parse.failed" || err.type === "entity.too.large") {
+      return res.status(err.status || 400).json({ error: err.type === "entity.too.large" ? "body_too_large" : "invalid_json" });
+    }
     log.error(`[API] ${req.method} ${req.path} failed: ${err.message}`);
     if (res.headersSent) return next(err);
     res.status(500).json({ error: "internal_error" });

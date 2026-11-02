@@ -2,7 +2,9 @@
 // report and the live signal log. Shown next to the signal so a BUY/SELL is never read as a proven
 // edge when the measured expectancy says otherwise.
 const { metrics } = require('./backtest');
-const { THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER } = require('./signal');
+const { MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
+const { FIXED_KEYS } = require('./backtest');
+const { defaultsOf } = require('../config/calculation');
 const binance = require('./binance.service');
 
 // Below this many taken trades a result is too small to call.
@@ -19,6 +21,9 @@ function paramsMatch(params, live) {
     if (params.window !== undefined && params.window !== live.window) return false;
     if ((params.min_rr ?? MIN_RISK_REWARD) !== live.min_rr) return false;
     if ((params.stop_atr ?? STOP_ATR_BUFFER) !== live.stop_atr) return false;
+    // Reports older than v2.14.0 carry no fixed values: they ran with the defaults.
+    const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
+    for (const k of FIXED_KEYS) if ((params[k] ?? defaults[k]) !== live[k]) return false;
     if ((params.target ?? 'tp1') !== 'tp1' || (params.side ?? 'both') !== 'both' || (params.skip_energy || []).length) return false;
     if (params.weights) {
         for (const tf of live.role_tfs) if (params.weights[tf] !== live.weights[tf]) return false;
@@ -27,7 +32,7 @@ function paramsMatch(params, live) {
 }
 
 // `report`: backtest report or null. `log`: engine.signalRecords() result or null.
-// `live`: {threshold, min_rr, stop_atr, window, weights, role_tfs}.
+// `live`: liveParams() result.
 function edgeSummary(market, report, log, live) {
     const reasons = [];
     let backtest = null;
@@ -74,14 +79,18 @@ function edgeSummary(market, report, log, live) {
     return { market, verdict, reasons, min_trades: MIN_TRADES, backtest, live_log: liveLog };
 }
 
-// Live parameters from the config, for paramsMatch. The backtest CLI uses the same window.
-function liveParams(config, window = binance.candleLimit() - 1) {
+// Live parameters, for paramsMatch. `calc` is the calculation config (src/config/calculation.js);
+// without it the defaults and env weights apply. The backtest CLI uses the same window.
+function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
+    const cfg = calc ? calc.get() : defaultsOf(config.TF_WEIGHTS);
+    const weights = calc ? calc.weights() : config.TF_WEIGHTS;
     return {
         window,
-        threshold: THRESHOLD,
-        min_rr: MIN_RISK_REWARD,
-        stop_atr: STOP_ATR_BUFFER,
-        weights: config.TF_WEIGHTS,
+        threshold: cfg.signal.threshold,
+        min_rr: cfg.signal.min_rr,
+        stop_atr: cfg.signal.stop_atr,
+        ...Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
+        weights,
         role_tfs: [...new Set(Object.values(config.TF_ROLES))],
     };
 }

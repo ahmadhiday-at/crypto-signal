@@ -7,7 +7,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { composeMarketState } = require('./market.service');
-const { computeSignal, THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER } = require('./signal');
+const { computeSignal, THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
 const { recordFrom, evaluate, EXPIRY_CANDLES } = require('./signal-log');
 
 const MARKET_RE = /^[A-Z0-9]{2,20}$/;
@@ -137,12 +137,25 @@ const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.en
 // candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
 // overrides replayed on the same snapshots; the base parameters always run and give the main report.
 // `splitSec` adds the out-of-sample `validation` (trades signalled before it are in-sample).
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, variants = [], splitSec = null, onProgress }) {
+// `fixed` holds the calculation-config values no variant changes (FIXED_KEYS); missing keys use the
+// signal defaults. They are written to the report params.
+const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
+
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, fixed = {}, variants = [], splitSec = null, onProgress }) {
+    const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
+    const fixedParams = Object.fromEntries(FIXED_KEYS.map(k => [k, fixed[k] ?? defaults[k]]));
+    const fixedOpts = {
+        trailingAtr: fixedParams.trailing_atr,
+        htfProximity: fixedParams.htf_proximity_percent,
+        noMansLand: fixedParams.no_mans_land_percent,
+        volatilityExtreme: fixedParams.volatility_extreme,
+        volatilityDead: fixedParams.volatility_dead,
+    };
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
     const snaps = {};
-    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: STOP_ATR_BUFFER, target: 'tp1', side: 'both', skip_energy: [], weights });
+    const base = normalizeParams({ threshold, min_rr: minRiskReward, stop_atr: stopAtr, target: 'tp1', side: 'both', skip_energy: [], weights });
     // A variant equal to the base parameters is not replayed twice.
     const seen = new Set();
     const unique = [base, ...variants.map(v => normalizeParams(base, v))].filter((p) => {
@@ -196,7 +209,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             const merged = states.get(run.weightsKey);
             if (!merged) { if (run === runs[0]) failed = true; continue; }
             const { params } = run;
-            const state = { ...merged, signal: computeSignal(merged, roles.htf, { threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target }) };
+            const state = { ...merged, signal: computeSignal(merged, roles.htf, { ...fixedOpts, threshold: params.threshold, minRiskReward: params.min_rr, stopAtr: params.stop_atr, target: params.target }) };
 
             const record = recordFrom(market, roles.entry, state, entry[i], params.threshold);
             if (!record) continue;
@@ -239,7 +252,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { ...main.params, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
+        params: { ...main.params, ...fixedParams, expiry_candles: EXPIRY_CANDLES, window, fee_pct: feePct },
         steps,
         skipped_steps: skipped,
         taken: groupReport(main.trades.filter(t => !t.filtered)),
@@ -279,4 +292,4 @@ function createReports({ dir }) {
     };
 }
 
-module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS, VALIDATION_MIN_TRADES };
+module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS, VALIDATION_MIN_TRADES, FIXED_KEYS };

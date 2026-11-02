@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculation Config</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
+        .k { color: #848e9c; }
+        th, td { padding: 4px 8px; white-space: nowrap; }
+        input[type=number] { background: #131722; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 2px 6px; width: 6.5rem; }
+        input[type=number].dirty { border-color: #eab308; }
+        input[type=number].bad { border-color: #ef4444; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+    </style>
+</head>
+<body class="min-h-screen p-3 flex flex-col gap-3">
+    <div class="flex flex-wrap justify-between items-center gap-3">
+        <div class="flex items-baseline gap-3">
+            <a id="back-link" href="/" class="text-2xl font-bold mono tracking-tighter text-white hover:text-blue-400">Dashboard</a>
+            <span class="text-sm font-semibold text-gray-400">Calculation config</span>
+        </div>
+        <span id="app-version" class="text-[10px] mono text-gray-500" title="App version"></span>
+    </div>
+
+    <div class="glass rounded-lg px-3 py-2 text-xs text-gray-300 border-l-4 border-l-blue-500">
+        Values used by the signal, its trade filters, the zone merge and the backtest. Saved to
+        <span id="file" class="mono text-blue-300">config/calculation.json</span> (editable by hand too) and applied to the live
+        signal at once, no restart. A backtest report made with other values is marked <span class="mono">params_differ</span>
+        until it is re-run below. Deployment settings (markets, timeframes, port, Binance URLs, <span class="mono">CANDLE_LIMIT</span>) stay in <span class="mono">.env</span>.
+    </div>
+
+    <div id="load-error" class="hidden glass rounded-lg p-4 text-sm text-red-300"></div>
+
+    <form id="form" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-3" autocomplete="off"></form>
+
+    <div id="actions" class="hidden flex flex-wrap items-center gap-2">
+        <button id="save" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 text-white hover:bg-blue-500">Save</button>
+        <button id="revert" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-700 text-white hover:bg-gray-600">Discard changes</button>
+        <button id="defaults" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-gray-700 text-white hover:bg-gray-600" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
+        <span id="save-status" class="text-xs"></span>
+    </div>
+
+    <div id="runs-card" class="hidden glass rounded-lg p-3">
+        <div class="flex flex-wrap justify-between items-baseline gap-2 mb-2">
+            <span class="text-sm font-bold text-white">Recalculate backtest <span class="k font-normal text-xs">(uses the saved config; downloads missing history from Binance)</span></span>
+            <button id="run-all" type="button" class="px-3 py-1 rounded-md text-xs font-semibold bg-green-700 text-white hover:bg-green-600">Run all markets</button>
+        </div>
+        <div class="min-w-0 overflow-x-auto">
+            <table class="w-full text-xs mono">
+                <thead><tr class="k text-left">
+                    <th>Market</th><th>Report</th><th>Config</th><th class="text-right">Trades</th><th class="text-right">Exp R</th>
+                    <th class="text-right">OOS exp R</th><th>Verdict</th><th>Run</th><th></th>
+                </tr></thead>
+                <tbody id="runs"></tbody>
+            </table>
+        </div>
+        <div id="run-note" class="mt-2 text-[11px] k"></div>
+    </div>
+
+    <script>
+        // Field descriptions per group; the keys and ranges come from GET /api/calc-config.
+        const GROUPS = {
+            signal: { title: 'Signal', help: {
+                threshold: 'Minimum |score| for BUY/SELL',
+                min_rr: 'Minimum plan risk/reward (else filter low_rr)',
+                stop_atr: 'Stop loss buffer beyond the entry zone, × ATR',
+                trailing_atr: 'Trailing stop distance, × ATR',
+                htf_proximity_percent: 'Max distance (%) to an HTF zone for ±3 points',
+            } },
+            filters: { title: 'Trade filters', help: {
+                no_mans_land_percent: 'mid_range farther than this % from any zone → no_mans_land',
+                volatility_extreme: 'volatility_ratio above this → volatility_extreme',
+                volatility_dead: 'volatility_ratio below this → volatility_dead',
+            } },
+            weights: { title: 'Zone weights per timeframe', help: {} },
+            backtest: { title: 'Backtest', help: {
+                days: 'History length in days',
+                fee_pct: 'Round-trip fee, % of price',
+                split: 'In-sample share for the out-of-sample check',
+            } },
+        };
+
+        const state = { saved: null, defaults: null, limits: null, roles: {}, markets: [], runs: null, edges: {} };
+        const $ = (id) => document.getElementById(id);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const fmt = (v, d = 3) => (v === null || v === undefined ? '-' : Number(v).toFixed(d));
+        const date = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-');
+
+        function limitsOf(group, key) {
+            return group === 'weights' ? state.limits.weights : state.limits[group][key];
+        }
+
+        function renderForm() {
+            const roleOf = Object.fromEntries(Object.entries(state.roles).map(([role, tf]) => [tf, role]));
+            $('form').innerHTML = Object.entries(GROUPS).map(([group, g]) => {
+                const rows = Object.keys(state.saved[group]).map((key) => {
+                    const [min, max, int] = limitsOf(group, key);
+                    const help = group === 'weights' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
+                    return `<div class="flex items-center justify-between gap-3 py-1 border-b border-white/5">
+                        <label for="f-${group}-${key}" class="min-w-0">
+                            <div class="mono text-xs text-white">${esc(key)}</div>
+                            <div class="text-[11px] k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${min}–${max}</div>
+                        </label>
+                        <input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono text-xs text-right text-white shrink-0">
+                    </div>`;
+                }).join('');
+                return `<div class="glass rounded-lg p-3"><div class="text-sm font-bold text-white mb-1">${esc(g.title)}</div>${rows}</div>`;
+            }).join('');
+            fillForm(state.saved);
+            $('form').addEventListener('input', markDirty);
+        }
+
+        function inputs() {
+            return [...$('form').querySelectorAll('input[data-group]')];
+        }
+
+        function fillForm(cfg) {
+            for (const el of inputs()) el.value = cfg[el.dataset.group][el.dataset.key] ?? state.saved[el.dataset.group][el.dataset.key];
+            markDirty();
+        }
+
+        // Reads the form; returns { value, bad } where bad lists invalid fields.
+        function readForm() {
+            const value = { signal: {}, filters: {}, weights: {}, backtest: {} };
+            const bad = [];
+            for (const el of inputs()) {
+                const { group, key } = el.dataset;
+                const [min, max, int] = limitsOf(group, key);
+                const v = el.value === '' ? NaN : Number(el.value);
+                const ok = Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
+                el.classList.toggle('bad', !ok);
+                if (!ok) bad.push(`${group}.${key}`);
+                value[group][key] = v;
+            }
+            return { value, bad };
+        }
+
+        function isDirty() {
+            return inputs().some(el => Number(el.value) !== state.saved[el.dataset.group][el.dataset.key]);
+        }
+
+        function markDirty() {
+            for (const el of inputs()) el.classList.toggle('dirty', Number(el.value) !== state.saved[el.dataset.group][el.dataset.key]);
+            const { bad } = readForm();
+            const dirty = isDirty();
+            $('save').disabled = !dirty || bad.length > 0;
+            $('revert').disabled = !dirty;
+            $('save-status').className = 'text-xs ' + (bad.length ? 'text-red-400' : 'text-yellow-400');
+            $('save-status').textContent = bad.length ? `Out of range: ${bad.join(', ')}` : dirty ? 'Unsaved changes' : '';
+            renderRuns();
+        }
+
+        async function save() {
+            const { value, bad } = readForm();
+            if (bad.length) return;
+            $('save').disabled = true;
+            try {
+                const res = await fetch('/api/calc-config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' },
+                    body: JSON.stringify(value),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.problems ? data.problems.join('; ') : data.error || `HTTP ${res.status}`);
+                state.saved = data.config;
+                fillForm(state.saved);
+                $('save-status').className = 'text-xs text-green-400';
+                $('save-status').textContent = 'Saved and applied. Re-run the backtest to measure it.';
+                await loadEdges();
+            } catch (err) {
+                $('save-status').className = 'text-xs text-red-400';
+                $('save-status').textContent = `Save failed: ${err.message}`;
+                markDirty();
+            }
+        }
+
+        async function loadEdges() {
+            await Promise.all(state.markets.map(async (m) => {
+                try {
+                    const res = await fetch(`/api/edge/${encodeURIComponent(m)}`);
+                    state.edges[m] = res.ok ? await res.json() : null;
+                } catch (e) {
+                    state.edges[m] = null;
+                }
+            }));
+            renderRuns();
+        }
+
+        const JOB_COLORS = { queued: 'text-gray-400', running: 'text-blue-300', done: 'text-green-400', failed: 'text-red-400' };
+        const VERDICT_COLORS = { positive: 'text-green-400', negative: 'text-red-400', unproven: 'text-yellow-400' };
+
+        function renderRuns() {
+            if (!state.markets.length) return;
+            const busy = state.runs?.running;
+            const dirty = state.saved && isDirty();
+            $('run-all').disabled = busy || dirty;
+            $('run-all').title = dirty ? 'Save the config first' : busy ? 'A backtest is running' : '';
+            $('runs').innerHTML = state.markets.map((m) => {
+                const e = state.edges[m];
+                const b = e?.backtest;
+                const job = state.runs?.jobs?.[m];
+                const match = !b ? '<span class="k">no report</span>'
+                    : b.params_match ? '<span class="text-green-400">current</span>' : '<span class="text-yellow-400">params_differ</span>';
+                const jobCell = job ? `<span class="${JOB_COLORS[job.state] || ''}" title="${esc(job.output.join('\n'))}">${esc(job.state)}</span> <span class="k">${esc((job.state === 'failed' ? job.error : job.progress) || '')}</span>` : '';
+                return `<tr class="border-t border-white/5">
+                    <td><a class="text-blue-300 hover:underline" href="/backtest/${encodeURIComponent(m)}">${esc(m)}</a></td>
+                    <td class="k">${b ? `${date(b.generated_at)} · fee ${esc(b.fee_pct)}%` : '-'}</td>
+                    <td>${match}</td>
+                    <td class="text-right">${b?.taken ? esc(b.taken.trades) : '-'}</td>
+                    <td class="text-right">${fmt(b?.taken?.expectancy_r)}</td>
+                    <td class="text-right">${b?.out_of_sample ? `${fmt(b.out_of_sample.expectancy_r)} <span class="k">(${esc(b.out_of_sample.trades)})</span>` : '-'}</td>
+                    <td class="${VERDICT_COLORS[e?.verdict] || ''}">${esc(e?.verdict || '-')}</td>
+                    <td class="max-w-[22rem] truncate">${jobCell}</td>
+                    <td><button type="button" data-run="${esc(m)}" class="px-2 py-0.5 rounded-md bg-gray-700 text-white hover:bg-gray-600" ${busy || dirty ? 'disabled' : ''}>Run</button></td>
+                </tr>`;
+            }).join('');
+            $('run-note').textContent = busy ? 'Running… markets run one after another; this page refreshes by itself.' : '';
+        }
+
+        let pollTimer = null;
+
+        async function loadRuns() {
+            try {
+                const res = await fetch('/api/backtest-runs');
+                if (!res.ok) return;
+                const prev = state.runs;
+                state.runs = await res.json();
+                const finished = Object.entries(state.runs.jobs).some(([m, j]) => j.state === 'done' && prev?.jobs?.[m]?.state !== 'done' && prev?.jobs?.[m]);
+                if (finished) await loadEdges();
+                renderRuns();
+                clearTimeout(pollTimer);
+                if (state.runs.running) pollTimer = setTimeout(loadRuns, 2000);
+            } catch (e) { /* keep the last state */ }
+        }
+
+        async function startRun(market) {
+            try {
+                const res = await fetch('/api/backtest-runs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' },
+                    body: JSON.stringify({ market }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+                $('run-note').textContent = '';
+            } catch (err) {
+                $('run-note').textContent = `Could not start: ${err.message}`;
+            }
+            await loadRuns();
+        }
+
+        async function init() {
+            try {
+                const [cfgRes, appRes] = await Promise.all([fetch('/api/calc-config'), fetch('/api/config')]);
+                if (!cfgRes.ok) throw new Error(`GET /api/calc-config: HTTP ${cfgRes.status}`);
+                const data = await cfgRes.json();
+                const app = appRes.ok ? await appRes.json() : {};
+                state.saved = data.config;
+                state.defaults = data.defaults;
+                state.limits = data.limits;
+                state.roles = data.role_timeframes || {};
+                state.markets = (app.markets || []).map(m => m.code);
+                $('file').textContent = data.file;
+                $('app-version').textContent = app.version ? `v${app.version}` : '';
+                if (state.markets[0]) $('back-link').href = `/${encodeURIComponent(state.markets[0])}`;
+            } catch (err) {
+                $('load-error').textContent = `Config unavailable: ${err.message}`;
+                $('load-error').classList.remove('hidden');
+                return;
+            }
+            for (const id of ['form', 'actions', 'runs-card']) $(id).classList.remove('hidden');
+            renderForm();
+            $('save').addEventListener('click', save);
+            $('revert').addEventListener('click', () => { fillForm(state.saved); $('save-status').textContent = ''; });
+            $('defaults').addEventListener('click', () => fillForm(state.defaults));
+            $('run-all').addEventListener('click', () => startRun('all'));
+            $('runs').addEventListener('click', (ev) => {
+                const m = ev.target.closest('button[data-run]')?.dataset.run;
+                if (m) startRun(m);
+            });
+            await Promise.all([loadEdges(), loadRuns()]);
+        }
+
+        init();
+    </script>
+</body>
+</html>

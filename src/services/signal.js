@@ -5,6 +5,7 @@ const THRESHOLD = 5;
 const HTF_PROXIMITY_PERCENT = 1;
 
 // Level 2.5B trade filter (docs/roadmap/level-2.5b.md). Starting values, to be reviewed.
+// These constants are the defaults; the live values come from config/calculation.json.
 const NO_MANS_LAND_PERCENT = 1;
 const VOLATILITY_EXTREME = 2.0;
 const VOLATILITY_DEAD = 0.5;
@@ -21,10 +22,10 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const round = (v) => (num(v) ? +v.toPrecision(10) : null);
 
 // Entry zone, stop loss, targets, risk/reward and a trailing stop for a BUY (long) or SELL (short).
-// Returns null when the inputs needed for a plan are missing. `stopAtr` and `target` are overridden
-// only by the backtest sweep (Level 6): `target` 'tp1' (default) is the nearest opposite zone, 'tp2'
-// the major HTF zone, and a number N a fixed target at N × risk.
-function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = 'tp1' } = {}) {
+// Returns null when the inputs needed for a plan are missing. `target` is overridden only by the
+// backtest sweep (Level 6): 'tp1' (default) is the nearest opposite zone, 'tp2' the major HTF zone,
+// and a number N a fixed target at N × risk.
+function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = 'tp1', trailingAtr = TRAILING_ATR } = {}) {
     const price = state.price;
     const atr = state.indicators?.atr;
     const long = action === 'BUY';
@@ -55,21 +56,21 @@ function tradePlan(state, action, htfTf, { stopAtr = STOP_ATR_BUFFER, target = '
         take_profit_1: round(tp1),
         take_profit_2: round(tp2),
         risk_reward: num(rr) ? +rr.toFixed(2) : null,
-        trailing_stop: round(long ? price - TRAILING_ATR * atr : price + TRAILING_ATR * atr),
+        trailing_stop: round(long ? price - trailingAtr * atr : price + trailingAtr * atr),
     };
 }
 
 // Returns the filter codes that reject a BUY/SELL; an empty list means the setup passes.
-function tradeFilters(state, action) {
+function tradeFilters(state, action, { noMansLand = NO_MANS_LAND_PERCENT, volatilityExtreme = VOLATILITY_EXTREME, volatilityDead = VOLATILITY_DEAD } = {}) {
     const failed = [];
     const dist = state.distance_percent || {};
     const nearest = Math.min(dist.to_support ?? Infinity, dist.to_resistance ?? Infinity);
-    if (state.context === 'mid_range' && nearest > NO_MANS_LAND_PERCENT) failed.push('no_mans_land');
+    if (state.context === 'mid_range' && nearest > noMansLand) failed.push('no_mans_land');
 
     const vr = state.volatility_ratio;
     if (typeof vr === 'number') {
-        if (vr > VOLATILITY_EXTREME) failed.push('volatility_extreme');
-        if (vr < VOLATILITY_DEAD) failed.push('volatility_dead');
+        if (vr > volatilityExtreme) failed.push('volatility_extreme');
+        if (vr < volatilityDead) failed.push('volatility_dead');
     }
 
     const confirmed = CONFIRMED_BREAKOUT.includes(state.breakout_confirmation);
@@ -92,8 +93,10 @@ function strengthOf(score, threshold = THRESHOLD) {
 }
 
 // `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
-// `threshold`, `minRiskReward`, `stopAtr` and `target` are overridden only by the backtest sweep (Level 6).
-function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, target = 'tp1' } = {}) {
+// `opts` holds the calculation config (signalOptions in src/config/calculation.js); missing keys use
+// the defaults above. `target` is overridden only by the backtest sweep (Level 6).
+function computeSignal(state, htfTf, opts = {}) {
+    const { threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, htfProximity = HTF_PROXIMITY_PERCENT } = opts;
     const reasons = [];
     let score = 0;
     const add = (code, points) => { reasons.push({ code, points }); score += points; };
@@ -106,10 +109,10 @@ function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MI
 
     const topSupport = state.levels?.support?.[0];
     const topResistance = state.levels?.resistance?.[0];
-    if (topSupport?.tfs?.includes(htfTf) && state.distance_percent?.to_support <= HTF_PROXIMITY_PERCENT) {
+    if (topSupport?.tfs?.includes(htfTf) && state.distance_percent?.to_support <= htfProximity) {
         add('strong_htf_support', 3);
     }
-    if (topResistance?.tfs?.includes(htfTf) && state.distance_percent?.to_resistance <= HTF_PROXIMITY_PERCENT) {
+    if (topResistance?.tfs?.includes(htfTf) && state.distance_percent?.to_resistance <= htfProximity) {
         add('strong_htf_resistance', -3);
     }
 
@@ -124,8 +127,8 @@ function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MI
     }
 
     let action = score >= threshold ? 'BUY' : score <= -threshold ? 'SELL' : 'WAIT';
-    const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf, { stopAtr, target });
-    const filters = action === 'WAIT' ? [] : tradeFilters(state, action);
+    const plan = action === 'WAIT' ? null : tradePlan(state, action, htfTf, opts);
+    const filters = action === 'WAIT' ? [] : tradeFilters(state, action, opts);
     if (action !== 'WAIT' && !(plan?.risk_reward >= minRiskReward)) filters.push('low_rr');
     if (filters.length) action = 'WAIT';
     if (state.status !== 'ok') {
@@ -136,4 +139,13 @@ function computeSignal(state, htfTf, { threshold = THRESHOLD, minRiskReward = MI
     return { action, score, strength: strengthOf(score, threshold), reasons, filtered: filters.length > 0, filters, plan };
 }
 
-module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER };
+// Defaults of the calculation config's `signal` and `filters` groups (config/calculation.json).
+const SIGNAL_DEFAULTS = {
+    threshold: THRESHOLD, min_rr: MIN_RISK_REWARD, stop_atr: STOP_ATR_BUFFER, trailing_atr: TRAILING_ATR,
+    htf_proximity_percent: HTF_PROXIMITY_PERCENT,
+};
+const FILTER_DEFAULTS = {
+    no_mans_land_percent: NO_MANS_LAND_PERCENT, volatility_extreme: VOLATILITY_EXTREME, volatility_dead: VOLATILITY_DEAD,
+};
+
+module.exports = { computeSignal, tradeFilters, tradePlan, REASON_CODES, FILTER_CODES, THRESHOLD, HTF_PROXIMITY_PERCENT, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS };

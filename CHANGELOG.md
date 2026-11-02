@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.14.0](docs/changelog/v2.14.0.md) — 2026-11-01 — Calculation config moved from .env to config/calculation.json, editable by hand or from /config, with a backtest re-run button.
 - [v2.13.1](docs/changelog/v2.13.1.md) — 2026-11-01 — A timeframe with too little Binance history (e.g. XAUTUSDT 1w) warns once and waits for its next candle instead of failing every 5 minutes.
 - [v2.13.0](docs/changelog/v2.13.0.md) — 2026-11-01 — `/` opens the dashboard of the default market; the dashboard links to Chart, Backtest and the signal log.
 - [v2.12.0](docs/changelog/v2.12.0.md) — 2026-11-01 — Dashboard shows how proven the signal is (backtest + live log verdict) via `/api/edge/:symbol`.

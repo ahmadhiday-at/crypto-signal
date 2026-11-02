@@ -224,7 +224,9 @@ function composeMarketState(market, snaps, roles, weights) {
     return enhanced;
 }
 
-function createMarketEngine({ storage, binance, indicators, config, signalLog = null, now = () => Date.now(), notify = {}, log = console }) {
+// `calc` is the calculation config (src/config/calculation.js); without it the engine uses the
+// env weights and the signal defaults.
+function createMarketEngine({ storage, binance, indicators, config, calc = null, signalLog = null, now = () => Date.now(), notify = {}, log = console }) {
     const nowSec = () => Math.floor(now() / 1000);
     const roles = config.TF_ROLES;
     const roleTfs = [...new Set(Object.values(roles))];
@@ -239,6 +241,9 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
     const summaryErrors = new Map();
     let resetPromise = null;
     let lastResetAt = null;
+
+    const weightsNow = () => (calc ? calc.weights() : config.TF_WEIGHTS);
+    const signalOf = (state) => computeSignal(state, roles.htf, calc ? calc.signalOptions() : {});
 
     const isMarket = (m) => markets.includes(m);
     const isTimeframe = (tf) => allTfs.includes(tf);
@@ -371,7 +376,7 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
 
         let enhanced;
         try {
-            enhanced = composeMarketState(market, snaps, roles, config.TF_WEIGHTS);
+            enhanced = composeMarketState(market, snaps, roles, weightsNow());
         } catch (err) {
             summaryErrors.set(market, { code: 'calculation_failed', at: t });
             log.error(`[MTF] ${market}: summary calculation failed: ${err.message}`);
@@ -387,7 +392,7 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
             status: summaryStatus(inputs, roleTfs, entryTf),
             errors: currentErrors(market),
         };
-        summary.signal = computeSignal(summary, roles.htf);
+        summary.signal = signalOf(summary);
 
         const problems = validateMarketState(summary);
         if (problems.length) {
@@ -541,7 +546,7 @@ function createMarketEngine({ storage, binance, indicators, config, signalLog = 
 
     // The signal depends on the status, which is recomputed on every read, so it is recomputed too.
     function withSignal(state) {
-        return { ...state, signal: computeSignal(state, roles.htf) };
+        return { ...state, signal: signalOf(state) };
     }
 
     async function getTimeframeSnapshot(market, tf) {

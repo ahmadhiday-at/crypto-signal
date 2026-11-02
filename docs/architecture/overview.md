@@ -85,7 +85,7 @@ Calculates a `breakout_score` (0.0 to 1.0) from:
 
 ### 5. API & Communication Layer
 
-- **REST API (`src/app.js`, `src/api/`):** Exposes config, per-timeframe chart data, the Market State, `GET /api/health` diagnostics, and `POST /api/reset` ([rest.md](../contract/rest.md)). Market and timeframe parameters are checked against the configured lists before they reach storage or Binance.
+- **REST API (`src/app.js`, `src/api/`):** Exposes config, per-timeframe chart data, the Market State, `GET /api/health` diagnostics, `POST /api/reset`, the calculation config (`/api/calc-config`) and backtest re-runs (`/api/backtest-runs`) ([rest.md](../contract/rest.md)). Market and timeframe parameters are checked against the configured lists before they reach storage or Binance.
 - **WebSocket Manager (`src/websocket/ws.manager.js`):** Same-origin connections only. Clients subscribe to one `{market, timeframe}` and receive `price` (live, display-only), `update_ready` (that timeframe's snapshot changed) and `summary_ready` (the market's Market State changed). Message shapes: [websocket.md](../contract/websocket.md).
 
 ---
@@ -104,8 +104,9 @@ Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static fi
 | URL | Page |
 | :-- | :--- |
 | `/` | 302 to `/{first MARKET_LIST market}` (since 2.13.0) |
-| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; header links: Chart, Backtest, Signal log CSV) |
+| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; header links: Chart, Backtest, Signal log CSV, Config) |
 | `/backtest/:market` | Backtest report (`public/backtest.html`) |
+| `/config` | Calculation config and backtest re-run (`public/config.html`, since 2.14.0) |
 | `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
 
 The page routes accept any path segment; the pages read the market and timeframe from the URL and, when the symbol or timeframe is not in `/api/config`, show a "not configured" notice listing the available markets (since 2.10.1).
@@ -131,6 +132,10 @@ A high-performance "command center" designed for rapid state assessment.
 
 Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve, the parameter sweep table (when `--sweep` was used), the out-of-sample validation table with the in-sample pick and its verdict (when `--split` was used), win rate/expectancy per condition at the signal candle (breakdown, taken or filtered; values with fewer than 20 trades greyed) and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
 
+### 4. Calculation config (`public/config.html`)
+
+Since 2.14.0. A form per group of `config/calculation.json` (signal, trade filters, zone weights, backtest) with defaults and ranges; Save applies at once (`PUT /api/calc-config`). Below it, one row per market: report date and fee, whether the report matches the saved config (`current` / `params_differ`), taken and out-of-sample expectancy, edge verdict, and the run state; Run / Run all markets start `POST /api/backtest-runs` (disabled while a run is going or the form has unsaved changes) and the page polls until it ends.
+
 ## 🚀 Design Goals
 
 1. **Determinism:** Given the same set of closed input candles, the Market State must always be the same (see [O1](./operating-model.md#o1-candle-finality)).
@@ -139,17 +144,17 @@ Shows the latest `npm run backtest` report: metrics for taken vs filtered trades
 
 ## Code Map
 
-Wiring is in `server.js`: `createMarketEngine` (`src/services/market.service.js`) gets storage, Binance client, indicator service, config and `notify` callbacks; `createApp` (`src/app.js`) builds Express around the engine; `createScheduler` (`src/jobs/scheduler.js`) drives it.
+Wiring is in `server.js`: `createCalcConfig` (`src/config/calculation.js`) loads and watches `config/calculation.json`; `createMarketEngine` (`src/services/market.service.js`) gets storage, Binance client, indicator service, config, `calc` and `notify` callbacks (a `calc` change calls `rebuildSummary` for every market); `createApp` (`src/app.js`) builds Express around the engine; `createScheduler` (`src/jobs/scheduler.js`) drives it.
 
 1. **Per-timeframe update** — `engine.updateTimeframe(market, tf)` (single-flight per market+tf): `binance.getKlines` (validated rows, retries, 429/418/451 cooldowns) → `candles.normalizeCandles` + `splitClosed` (forming candle kept aside) → `indicator.calculateAll` (throws `CalculationError` with a code) → `validateSnapshot` → monotonic check → atomic write to `data/chart/{MARKET}_{tf}.json` → `update_ready` over WS. Failures keep the old file and record `last_error` in the in-memory health map.
 2. **Summary** — `engine.rebuildSummary(market)` (serialised per market) reads the role snapshots, `mergeSnapshots` (weighted level merge, top 3) → `enhanceMarketState` (heuristic formula, regression-tested in `test/enhance.test.js`) → adds `schema_version`, `generated_at`, `inputs`, `status`, `errors` → `validateMarketState` → write `data/market/{MARKET}.json` → `summary_ready` over WS.
 3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
 
-Signal: `src/services/signal.js` `computeSignal(state, htfTf)` (pure) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
+Signal: `src/services/signal.js` `computeSignal(state, htfTf, opts)` (pure; `opts` = `calc.signalOptions()`) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
 
 Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engine as `signalLog`. After each published summary, `onSummary(market, summary, entryCandles)` first closes open records (WIN/LOSS/EXPIRED/UNKNOWN), then appends a new candidate. Errors are logged and never block publishing. `engine.initialize()` reloads open records; `engine.signalRecords(market)` serves `GET /api/signals/:symbol`.
 
-Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path; `--sweep` variants reuse each step's snapshots and only re-merge when the weights differ; `breakdown` groups trades per feature) → `createReports().write`. The server only reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`; `src/services/edge.js` `edgeSummary` → `GET /api/edge/:symbol`).
+Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path; `--sweep` variants reuse each step's snapshots and only re-merge when the weights differ; `breakdown` groups trades per feature) → `createReports().write`. The server reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`; `src/services/edge.js` `edgeSummary` → `GET /api/edge/:symbol`) and starts the CLI as a child process through `src/services/backtest-runner.js` (`POST /api/backtest-runs`).
 
 Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 

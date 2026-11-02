@@ -33,7 +33,7 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 - WS message shapes → `docs/contract/websocket.md`
 - Code map, components → `docs/architecture/overview.md`
 - Update/freshness/failure behaviour → `docs/architecture/operating-model.md`
-- Env vars, config → `docs/architecture/config.md`, `.env.example`
+- Env vars, calculation config (`config/calculation.json`) → `docs/architecture/config.md`, `.env.example`
 - Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
 - Backtest report fields → `docs/contract/rest.md` (Backtest report)
 - Planned work → `docs/roadmap/level-6.5.md` (active: signal quality); other levels in `docs/roadmap/`

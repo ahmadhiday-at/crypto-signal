@@ -27,6 +27,10 @@ function createApiRouter(controller) {
     router.get('/signals/:market', controller.getSignals);
     router.get('/backtest/:market', controller.getBacktest);
     router.get('/edge/:market', controller.getEdge);
+    router.get('/calc-config', controller.getCalcConfig);
+    router.put('/calc-config', requireSameOriginAction, express.json({ limit: '16kb' }), controller.updateCalcConfig);
+    router.get('/backtest-runs', controller.getBacktestRuns);
+    router.post('/backtest-runs', requireSameOriginAction, express.json({ limit: '4kb' }), controller.startBacktestRun);
     router.get('/health', controller.getHealth);
     router.post('/reset', requireSameOriginAction, controller.resetData);
     router.all('/reset', (req, res) => res.set('Allow', 'POST').status(405).json({ error: 'method_not_allowed' }));
