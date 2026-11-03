@@ -28,10 +28,12 @@
         Values used by the signal, its trade filters, the zone merge and the backtest. Saved to
         <span id="file" class="mono text-blue-300">config/calculation.json</span> (editable by hand too) and applied to the live
         signal at once, no restart. A backtest report made with other values is marked <span class="mono">params_differ</span>
-        until it is re-run below. Deployment settings (markets, timeframes, port, Binance URLs, <span class="mono">CANDLE_LIMIT</span>) stay in <span class="mono">.env</span>.
+        until it is re-run below. The <span class="mono">engine</span> group (role timeframes, candle limit) applies after a restart. Deployment settings (markets, timeframes, port, Binance URLs) stay in <span class="mono">.env</span>.
     </div>
 
     <div id="load-error" class="hidden glass rounded-lg p-4 t-body text-red-300"></div>
+
+    <div id="restart-note" class="hidden glass rounded-lg px-3 py-2 t-body text-yellow-200/90 border-l-4 border-l-yellow-500"></div>
 
     <form id="form" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-3" autocomplete="off"></form>
 
@@ -62,6 +64,13 @@
     <script>
         // Field descriptions per group; the keys and ranges come from GET /api/calc-config.
         const GROUPS = {
+            engine: { title: 'Engine (role timeframes, candle limit; restart required)', help: {
+                htf: 'Highest role: HTF zones and trend (was TF_HTF)',
+                structure: 'Structure timeframe (was TF_STRUCTURE)',
+                mid: 'Mid timeframe (was TF_MID)',
+                entry: 'Entry timeframe: signals, plans and the signal log (was TF_ENTRY)',
+                candle_limit: 'Candles fetched per timeframe; snapshots see this − 1 closed candles (was CANDLE_LIMIT)',
+            } },
             signal: { title: 'Signal', help: {
                 threshold: 'Minimum |score| for BUY/SELL',
                 min_rr: 'Minimum plan risk/reward (else filter low_rr)',
@@ -79,6 +88,7 @@
                 entry_max_atr: 'Price farther than this × ATR from the entry zone → far_from_entry (0 = off)',
             } },
             weights: { title: 'Zone weights per timeframe', help: {} },
+            lookback: { title: 'S/R lookback candles per timeframe (was MAPPING_CANDLE; changes recalculate every snapshot)', help: {} },
             scoring: { title: 'Score points', help: {
                 near_zone: 'Price inside the top support / resistance zone, ± points',
                 momentum: 'Bullish / bearish momentum, ± points',
@@ -169,7 +179,7 @@
         const date = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-');
 
         function limitsOf(group, key) {
-            return group === 'weights' ? state.limits.weights : state.limits[group][key];
+            return group === 'weights' || group === 'lookback' ? state.limits[group] : state.limits[group][key];
         }
 
         // A key is a choice when its limits list the allowed values instead of [min, max, integer].
@@ -180,7 +190,7 @@
             const roleOf = Object.fromEntries(Object.entries(state.roles).map(([role, tf]) => [tf, role]));
             $('form').innerHTML = Object.entries(GROUPS).map(([group, g]) => {
                 const rows = Object.keys(state.saved[group]).map((key) => {
-                    const help = group === 'weights' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
+                    const help = group === 'weights' || group === 'lookback' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
                     const choices = choicesOf(group, key);
                     const [min, max, int] = choices ? [] : limitsOf(group, key);
                     const field = choices
@@ -260,6 +270,7 @@
                 if (!res.ok) throw new Error(data.problems ? data.problems.join('; ') : data.error || `HTTP ${res.status}`);
                 state.saved = data.config;
                 fillForm(state.saved);
+                renderRestartNote();
                 $('save-status').className = 't-data text-green-400';
                 $('save-status').textContent = 'Saved and applied. Re-run the backtest to measure it.';
                 await loadEdges();
@@ -345,6 +356,17 @@
             await loadRuns();
         }
 
+        // The engine group applies at startup only: say which saved values wait for a restart.
+        function renderRestartNote() {
+            const note = $('restart-note');
+            const saved = state.saved.engine || {};
+            const diff = state.running ? Object.keys(saved).filter(k => saved[k] !== state.running[k]) : [];
+            note.classList.toggle('hidden', diff.length === 0);
+            note.textContent = diff.length
+                ? `Restart the app to apply: ${diff.map(k => `engine.${k} ${state.running[k]} → ${saved[k]}`).join(', ')}. Until then the running values stay in use (and backtest reports made with the new ones show params_differ).`
+                : '';
+        }
+
         async function init() {
             AppHeader.init();
             try {
@@ -356,6 +378,7 @@
                 state.defaults = data.defaults;
                 state.limits = data.limits;
                 state.roles = data.role_timeframes || {};
+                state.running = data.running_engine;
                 state.markets = (app.markets || []).map(m => m.code);
                 $('file').textContent = data.file;
             } catch (err) {
@@ -365,6 +388,7 @@
             }
             for (const id of ['form', 'actions', 'runs-card']) $(id).classList.remove('hidden');
             renderForm();
+            renderRestartNote();
             $('save').addEventListener('click', save);
             $('revert').addEventListener('click', () => { fillForm(state.saved); $('save-status').textContent = ''; });
             $('defaults').addEventListener('click', () => fillForm(state.defaults));

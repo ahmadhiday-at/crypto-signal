@@ -10,6 +10,9 @@ class CalculationError extends Error {
 
 const lastOf = (arr) => (Array.isArray(arr) && arr.length > 0 ? arr[arr.length - 1] : undefined);
 
+// S/R lookback candles for a timeframe missing from the calculation config's `lookback` group.
+const LOOKBACK_DEFAULT = 200;
+
 // Defaults of the calculation config's `indicators` and `zones` groups (config/calculation.json).
 // The snapshot keeps the field names ma14 / ma50 / ma200 whatever the configured periods are.
 const INDICATOR_DEFAULTS = {
@@ -24,7 +27,7 @@ const ZONE_DEFAULTS = {
 class IndicatorService {
     // `klines` must contain closed candles only, sorted and deduplicated. The forming candle is
     // carried through for chart display only (`meta.forming`) and never enters a calculation.
-    // `params` holds the calculation config's `indicators` and `zones` groups (defaults above).
+    // `params` holds the calculation config's `indicators`, `zones` and `lookback` groups (defaults above).
     calculateAll(klines, market, timeframe, meta = {}, params = {}) {
         const ind = { ...INDICATOR_DEFAULTS, ...params.indicators };
         const zoneParams = { ...ZONE_DEFAULTS, ...params.zones };
@@ -50,9 +53,8 @@ class IndicatorService {
             });
             const atr = ATR.calculate({ high: highs, low: lows, close: closes, period: ind.atr_period });
 
-            const mappingStr = process.env.MAPPING_CANDLE || "";
-            const mapping = Object.fromEntries(mappingStr.split(',').map(pair => pair.split(':')));
-            const baseCandles = mapping[timeframe] ? parseInt(mapping[timeframe]) : 200;
+            // S/R lookback of this timeframe (config `lookback`, was MAPPING_CANDLE).
+            const baseCandles = params.lookback?.[timeframe] ?? LOOKBACK_DEFAULT;
             
             const currentPrice = closes[closes.length - 1];
             const currentAtr = atr[atr.length - 1];

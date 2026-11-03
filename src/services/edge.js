@@ -44,6 +44,12 @@ function paramsMatch(params, live) {
     return true;
 }
 
+// Reports carry the role timeframes they ran with; reports without them match any roles.
+function rolesMatch(reportRoles, liveRoles) {
+    if (!reportRoles || !liveRoles) return true;
+    return ['htf', 'structure', 'mid', 'entry'].every(r => reportRoles[r] === liveRoles[r]);
+}
+
 // `report`: backtest report or null. `log`: engine.signalRecords() result or null.
 // `live`: liveParams() result.
 function edgeSummary(market, report, log, live) {
@@ -55,7 +61,7 @@ function edgeSummary(market, report, log, live) {
             generated_at: report.generated_at ?? null,
             period: report.period,
             fee_pct: report.params?.fee_pct ?? 0,
-            params_match: paramsMatch(report.params, live),
+            params_match: paramsMatch(report.params, live) && rolesMatch(report.roles, live.roles),
             taken: pick(report.taken?.summary),
             out_of_sample: base ? { split_at: report.validation.split_at, ...pick(base.out_of_sample) } : null,
         };
@@ -110,6 +116,7 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
         weights,
         calc: resultParams(cfg),
         min_trades: cfg.evaluation.min_trades,
+        roles: { ...config.TF_ROLES },
         role_tfs: [...new Set(Object.values(config.TF_ROLES))],
     };
 }

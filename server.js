@@ -10,13 +10,15 @@ const { createSignalLog } = require('./src/services/signal-log');
 const { createReports } = require('./src/services/backtest');
 const path = require('path');
 
-const { createCalcConfig, snapshotChanged } = require('./src/config/calculation');
+const { createCalcConfig, snapshotChanged, engineChanged, applyEngine } = require('./src/config/calculation');
 const { createBacktestRunner } = require('./src/services/backtest-runner');
 
 // Calculation config (config/calculation.json): loaded before the engine, reloaded on hand edits.
-const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, candleLimit: binanceService.candleLimit() });
+const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, envEngine: config.ENGINE_ENV });
 calc.load();
 calc.watch();
+// Role timeframes and candle limit come from the config (seeded by .env); they change on restart only.
+applyEngine(config, binanceService, calc.get());
 
 const engine = createMarketEngine({
     storage: require('./src/data/storage'),
@@ -38,6 +40,7 @@ const engine = createMarketEngine({
 // candles, then rebuild. Other groups only change the merge and enhancement: rebuild every summary.
 // Signal values apply on the next read either way.
 calc.onChange((next, prev) => {
+    if (engineChanged(next, prev)) console.warn('[CalcConfig] engine (role timeframes / candle limit) changed: restart the app to apply it');
     if (snapshotChanged(next, prev)) {
         engine.recalculateAll().catch(err => console.error(`[CalcConfig] recalculation failed: ${err.message}`));
         return;

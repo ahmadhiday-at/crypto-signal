@@ -62,8 +62,13 @@ class BinanceClient {
         return Math.floor(this.now() / 1000);
     }
 
+    // Set at startup from the calculation config `engine.candle_limit` (src/config/calculation.js).
+    setCandleLimit(limit) {
+        this._candleLimit = limit;
+    }
+
     candleLimit() {
-        const limit = parseInt(process.env.CANDLE_LIMIT, 10);
+        const limit = this._candleLimit ?? parseInt(process.env.CANDLE_LIMIT, 10);
         // Binance caps klines at 1000; at least 201 rows are needed for 200 closed candles.
         if (Number.isFinite(limit) && limit >= 201 && limit <= 1000) return limit;
         return 500;

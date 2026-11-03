@@ -271,3 +271,12 @@ test('GET /api/backtest/:market and the /backtest/:market page', async (t) => {
     const page = await fetch(`${base}/backtest/BTCUSDT`).then(r => r.text());
     assert.match(page, /<title>Backtest Report<\/title>/);
 });
+
+test('CLI --roles: entry, mid, structure, htf for one run', () => {
+    const { rolesOption } = require('../scripts/backtest');
+    assert.deepEqual(rolesOption(['BTCUSDT', '--roles', '1h,4h,1d,1w', '--days', '30']), {
+        roles: { entry: '1h', mid: '4h', structure: '1d', htf: '1w' }, rest: ['BTCUSDT', '--days', '30'],
+    });
+    assert.deepEqual(rolesOption(['BTCUSDT']).roles, null);
+    assert.throws(() => rolesOption(['--roles', '1h,4h']), /ENTRY,MID,STRUCTURE,HTF/);
+});

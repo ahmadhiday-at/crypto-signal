@@ -1263,7 +1263,7 @@ docker compose exec app npm run backtest -- BTCUSDT --days 365
 
 Jika Binance membalas HTTP 451, CLI berhenti dengan pesan error (lihat bagian 20); tidak ada workaround otomatis.
 
-Sejak v2.14.0 parameter dasar dan default `--days`/`--fee`/`--split` dibaca dari `config/calculation.json`. Config bisa diubah dan backtest dijalankan ulang dari halaman `/config` (proses anak di container `app`, jadi juga lewat VPN).
+Sejak v2.14.0 parameter dasar dan default `--days`/`--fee`/`--split` dibaca dari `config/calculation.json`. Sejak v2.21.0 role timeframe (`TF_*`), `CANDLE_LIMIT` dan `MAPPING_CANDLE` juga ada di file itu (grup `engine` dan `lookback`); nilai di `.env` hanya default awal. Ubah `engine` di `/config` lalu `docker compose restart app`; untuk satu backtest saja: `npm run backtest -- BTCUSDT --roles 1h,4h,1d,1w`. Config bisa diubah dan backtest dijalankan ulang dari halaman `/config` (proses anak di container `app`, jadi juga lewat VPN).
 
 Sweep parameter (sejak v2.9.0): bandingkan beberapa nilai sekaligus pada history yang sama (maks 144 kombinasi). Kunci: `threshold`, `min_rr`, `w_<tf>` (bobot zona TF role); sejak v2.11.0 juga `stop_atr`, `target` (`tp1`/`tp2`/angka R), `side` (`both`/`buy`/`sell`), `skip_energy` (mis. `explosive+building`).
 

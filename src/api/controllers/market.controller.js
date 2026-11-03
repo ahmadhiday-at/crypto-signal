@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, liveParams } = require('../../services/edge');
-const { LIMITS, WEIGHT_LIMITS } = require('../../config/calculation');
+const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
 
 // Read on each call so a version bump shows up without restarting the server.
 function appVersion() {
@@ -102,8 +102,10 @@ function createMarketController({ engine, config, reports = null, calc = null, r
             file: 'config/calculation.json',
             config: calc.get(),
             defaults: calc.defaults(),
-            limits: { ...LIMITS, weights: WEIGHT_LIMITS },
+            limits: { ...LIMITS, weights: WEIGHT_LIMITS, lookback: LOOKBACK_LIMITS },
             role_timeframes: config.TF_ROLES,
+            // Role timeframes and candle limit in use; a saved `engine` that differs needs a restart.
+            running_engine: config.ENGINE_RUNNING ?? null,
         });
     }
 

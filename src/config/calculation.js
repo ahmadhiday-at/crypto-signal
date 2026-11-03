@@ -14,9 +14,26 @@ const { EXPIRY_CANDLES } = require('../services/signal-log');
 const FILE = path.join(__dirname, '../../config/calculation.json');
 const WATCH_INTERVAL_MS = 2000;
 
+// Role timeframes and CANDLE_LIMIT (group `engine`): applied at startup only (src/config/calculation.js
+// applyEngine), so a change needs a restart. Seeded from TF_* / CANDLE_LIMIT in .env.
+const ROLE_KEYS = ['htf', 'structure', 'mid', 'entry'];
+const TF_CHOICES = { values: Object.keys(TF_SECONDS) };
+const ENGINE_DEFAULTS = { htf: '1d', structure: '4h', mid: '1h', entry: '15m', candle_limit: 500 };
+// S/R lookback candles per timeframe (group `lookback`, was MAPPING_CANDLE); unlisted timeframes use 200.
+const LOOKBACK_LIMITS = [20, 1000, true];
+const LOOKBACK_DEFAULT = 200;
+
 // [min, max, integer] per numeric key, { values } for a choice. Weights are checked separately: any
 // supported timeframe, 0.1–20 (a weight of 0 would fall back to the default weight in the zone merge).
 const LIMITS = {
+    engine: {
+        htf: TF_CHOICES,
+        structure: TF_CHOICES,
+        mid: TF_CHOICES,
+        entry: TF_CHOICES,
+        // Binance returns at most 1000 klines; at least 201 rows give 200 closed candles.
+        candle_limit: [201, 1000, true],
+    },
     signal: {
         threshold: [1, 15, true],
         min_rr: [0, 10],
@@ -118,20 +135,25 @@ const LIMITS = {
     },
 };
 const WEIGHT_LIMITS = [0.1, 20];
-const GROUPS = ['signal', 'filters', 'weights', 'scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
+const GROUPS = ['engine', 'signal', 'filters', 'weights', 'lookback', 'scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
-const SNAPSHOT_GROUPS = ['indicators', 'zones'];
+const SNAPSHOT_GROUPS = ['indicators', 'zones', 'lookback'];
 
 const BACKTEST_DEFAULTS = { days: 365, fee_pct: 0.1, split: 0.7 };
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 
 // `envWeights` is config.TF_WEIGHTS: the WEIGHT_* env vars seed the default weights.
-function defaultsOf(envWeights = {}) {
+// `envEngine` is config.ENGINE_ENV: the TF_* roles, CANDLE_LIMIT and MAPPING_CANDLE seed `engine`
+// and `lookback`.
+function defaultsOf(envWeights = {}, envEngine = {}) {
     const weights = {};
     for (const [tf, w] of Object.entries(envWeights)) if (TF_SECONDS[tf]) weights[tf] = w;
+    const lookback = {};
+    for (const [tf, n] of Object.entries(envEngine.lookback || {})) if (TF_SECONDS[tf]) lookback[tf] = n;
     return {
-        signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights,
+        engine: { ...ENGINE_DEFAULTS, ...(envEngine.roles || {}), candle_limit: envEngine.candle_limit ?? ENGINE_DEFAULTS.candle_limit },
+        signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights, lookback,
         scoring: { ...SCORING_DEFAULTS }, trend: { ...TREND_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
         market: { ...MARKET_DEFAULTS }, divergence: { ...DIVERGENCE_DEFAULTS },
         evaluation: { expiry_candles: EXPIRY_CANDLES, min_trades: 30 },
@@ -151,8 +173,11 @@ function hint(limits) {
 }
 
 // Rules between keys of the merged config (each key is already in range).
-function crossProblems(c, candleLimit) {
+function crossProblems(c) {
     const out = [];
+    const secs = ROLE_KEYS.map(r => TF_SECONDS[c.engine[r]]);
+    if (secs.some((v, i) => i > 0 && v > secs[i - 1])) out.push('engine: htf ≥ structure ≥ mid ≥ entry timeframe is required');
+    const candleLimit = c.engine.candle_limit;
     const order = (group, keys) => {
         for (let i = 1; i < keys.length; i++) {
             if (!(c[group][keys[i - 1]] < c[group][keys[i]])) out.push(`${group}: ${keys.join(' < ')} is required`);
@@ -165,7 +190,7 @@ function crossProblems(c, candleLimit) {
     const needed = Math.max(ind.ma_slow, ind.macd_slow + ind.macd_signal, ind.rsi_period + 1, ind.atr_period + 1);
     if (ind.min_candles < needed) out.push(`indicators.min_candles must be at least ${needed} (the longest indicator period)`);
     // Each snapshot sees CANDLE_LIMIT − 1 closed candles.
-    if (candleLimit && ind.min_candles > candleLimit - 1) out.push(`indicators.min_candles must be at most ${candleLimit - 1} (CANDLE_LIMIT − 1)`);
+    if (ind.min_candles > candleLimit - 1) out.push(`indicators.min_candles must be at most ${candleLimit - 1} (engine.candle_limit − 1)`);
     order('market', ['volume_low', 'volume_increasing', 'volume_high']);
     order('market', ['energy_cooling', 'energy_building', 'energy_explosive']);
     order('market', ['breakout_weak', 'breakout_strong']);
@@ -174,8 +199,8 @@ function crossProblems(c, candleLimit) {
 }
 
 // Merges `input` over `base` group by group. Returns { value, problems }; `value` is only usable
-// when `problems` is empty. `candleLimit` (CANDLE_LIMIT) bounds `indicators.min_candles`.
-function validate(input, base, { candleLimit = null } = {}) {
+// when `problems` is empty.
+function validate(input, base) {
     const problems = [];
     const value = copy(base);
     if (!input || typeof input !== 'object' || Array.isArray(input)) return { value, problems: ['config must be a JSON object'] };
@@ -184,13 +209,14 @@ function validate(input, base, { candleLimit = null } = {}) {
         const given = input[group];
         if (!given || typeof given !== 'object' || Array.isArray(given)) { problems.push(`${group} must be an object`); continue; }
         for (const [key, v] of Object.entries(given)) {
-            const limits = group === 'weights' ? (TF_SECONDS[key] ? WEIGHT_LIMITS : null) : LIMITS[group][key];
+            const perTf = { weights: WEIGHT_LIMITS, lookback: LOOKBACK_LIMITS }[group];
+            const limits = perTf ? (TF_SECONDS[key] ? perTf : null) : LIMITS[group][key];
             if (!limits) problems.push(`unknown key ${group}.${key}`);
             else if (!inRange(v, limits)) problems.push(`${group}.${key} must be ${hint(limits)}`);
             else value[group][key] = v;
         }
     }
-    if (!problems.length) problems.push(...crossProblems(value, candleLimit));
+    if (!problems.length) problems.push(...crossProblems(value));
     return { value, problems };
 }
 
@@ -219,16 +245,16 @@ const mergeWeights = (cfg) => ({ ...cfg.weights, DEFAULT: 1.0 });
 
 // Options for the per-timeframe snapshot (indicator.service calculateAll) and for the merged
 // Market State (market.service composeMarketState).
-const snapshotParams = (cfg) => ({ indicators: cfg.indicators, zones: cfg.zones });
+const snapshotParams = (cfg) => ({ indicators: cfg.indicators, zones: cfg.zones, lookback: cfg.lookback });
 const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence, trend: cfg.trend });
 
 // The groups whose values change backtest results; a report made with other values is params_differ.
-const RESULT_GROUPS = ['scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation'];
+const RESULT_GROUPS = ['scoring', 'trend', 'indicators', 'zones', 'lookback', 'market', 'divergence', 'evaluation'];
 const resultParams = (cfg) => Object.fromEntries(RESULT_GROUPS.map(g => [g, cfg[g]]));
 
-// `candleLimit` is CANDLE_LIMIT (binance.candleLimit()): `indicators.min_candles` must fit in it.
-function createCalcConfig({ file = FILE, envWeights = {}, candleLimit = null, log = console } = {}) {
-    const defaults = defaultsOf(envWeights);
+// `envWeights` / `envEngine` (config.TF_WEIGHTS / config.ENGINE_ENV) seed the defaults.
+function createCalcConfig({ file = FILE, envWeights = {}, envEngine = {}, log = console } = {}) {
+    const defaults = defaultsOf(envWeights, envEngine);
     let current = copy(defaults);
     const listeners = [];
 
@@ -274,7 +300,7 @@ function createCalcConfig({ file = FILE, envWeights = {}, candleLimit = null, lo
             log.error(`[CalcConfig] ${file} is not valid JSON (${err.message}); keeping the values in use`);
             return { loaded: false, error: 'invalid_json' };
         }
-        const { value, problems } = validate(parsed, defaults, { candleLimit });
+        const { value, problems } = validate(parsed, defaults);
         if (problems.length) {
             log.error(`[CalcConfig] ${file} rejected: ${problems.join('; ')}; keeping the values in use`);
             return { loaded: false, error: 'invalid_config', problems };
@@ -284,7 +310,7 @@ function createCalcConfig({ file = FILE, envWeights = {}, candleLimit = null, lo
 
     // Validates `input` (a full or partial config) over the values in use, saves and applies it.
     function update(input) {
-        const { value, problems } = validate(input, current, { candleLimit });
+        const { value, problems } = validate(input, current);
         if (problems.length) return { problems };
         write(value);
         const changed = apply(value);
@@ -322,10 +348,20 @@ function createCalcConfig({ file = FILE, envWeights = {}, candleLimit = null, lo
     };
 }
 
-// True when a config change touches the snapshot groups (indicators, zones).
+// True when a config change touches the snapshot groups (indicators, zones, lookback).
 const snapshotChanged = (next, prev) => SNAPSHOT_GROUPS.some(g => JSON.stringify(next[g]) !== JSON.stringify(prev[g]));
+const engineChanged = (next, prev) => JSON.stringify(next.engine) !== JSON.stringify(prev.engine);
+
+// Startup: the saved role timeframes and candle limit replace the .env values for this process.
+// Returns the engine values now running (shown by /config until the next restart).
+function applyEngine(config, binance, cfg) {
+    config.TF_ROLES = Object.fromEntries(ROLE_KEYS.map(r => [r, cfg.engine[r]]));
+    binance.setCandleLimit(cfg.engine.candle_limit);
+    config.ENGINE_RUNNING = { ...cfg.engine };
+    return config.ENGINE_RUNNING;
+}
 
 module.exports = {
     createCalcConfig, validate, defaultsOf, signalOptions, mergeWeights, snapshotParams, stateParams, resultParams, snapshotChanged,
-    LIMITS, WEIGHT_LIMITS, GROUPS, RESULT_GROUPS, FILE,
+    engineChanged, applyEngine, LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS, LOOKBACK_DEFAULT, ROLE_KEYS, GROUPS, RESULT_GROUPS, FILE,
 };

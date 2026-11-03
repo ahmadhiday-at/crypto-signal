@@ -17,7 +17,7 @@ const closed = (count = 300) => parseKlines(rawKlines({ tf: '1h', nowSec: MIDNIG
 
 test('defaults are valid and match the previous constants', () => {
     const d = defaultsOf({});
-    assert.deepEqual(validate({}, d, { candleLimit: 1000 }).problems, []);
+    assert.deepEqual(validate({}, d).problems, []);
     assert.deepEqual(d.scoring, { near_zone: 2, momentum: 2, htf_zone: 3, divergence: 2, volume: 1, strong_score: 7, breakout_confirmed: 'medium' });
     assert.equal(d.indicators.ma_slow, 200);
     assert.equal(d.indicators.min_candles, 200);
@@ -35,7 +35,7 @@ test('cross-key rules and CANDLE_LIMIT', () => {
     const problems = (input, opts) => validate(input, d, opts).problems;
     assert.deepEqual(problems({ indicators: { ma_fast: 60 } }), ['indicators: ma_fast < ma_mid < ma_slow is required']);
     assert.deepEqual(problems({ indicators: { ma_slow: 300 } }), ['indicators.min_candles must be at least 300 (the longest indicator period)']);
-    assert.deepEqual(problems({ indicators: { min_candles: 600 } }, { candleLimit: 500 }), ['indicators.min_candles must be at most 499 (CANDLE_LIMIT − 1)']);
+    assert.deepEqual(problems({ indicators: { min_candles: 600 } }), ['indicators.min_candles must be at most 499 (engine.candle_limit − 1)']);
     assert.deepEqual(problems({ market: { volume_low: 1.3 } }), ['market: volume_low < volume_increasing < volume_high is required']);
     assert.deepEqual(problems({ scoring: { near_zone: 1.5 } }), ['scoring.near_zone must be an integer 0–10']);
     assert.deepEqual(problems({ divergence: { pivot_width: 6, lookback: 12 } }), ['divergence: pivot_width × 2 < lookback is required']);
@@ -131,4 +131,40 @@ test('trend group and model: defaults, channel field and backtest sweep key', ()
     assert.deepEqual(mergeSnapshots('BTCUSDT', { '1d': snap }, roles, { DEFAULT: 1 }, { trend: { channel_candles: 5 } }).raw.channel, { high: 128, low: 114, candles: 5 });
     const { parseArgs } = require('../scripts/backtest');
     assert.deepEqual(parseArgs(['--sweep', 'model=bounce,trend_pullback', '--sweep', 'trend.stop_atr=1.5,3'], ['1d']).variants.length, 4);
+});
+
+test('engine and lookback: seeded from .env, validated, applied at startup', () => {
+    const env = { roles: { htf: '1w', structure: '1d', mid: '4h', entry: '1h' }, candle_limit: 1000, lookback: { '1h': 300, '7m': 5, '15m': 250 } };
+    const d = defaultsOf({}, env);
+    assert.deepEqual(d.engine, { htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 1000 });
+    assert.deepEqual(d.lookback, { '1h': 300, '15m': 250 }, 'unsupported timeframes are dropped');
+    assert.deepEqual(defaultsOf({}).engine, { htf: '1d', structure: '4h', mid: '1h', entry: '15m', candle_limit: 500 });
+    const problems = (input) => validate(input, d).problems;
+    assert.deepEqual(problems({ engine: { entry: '4h', mid: '1h' } }), ['engine: htf ≥ structure ≥ mid ≥ entry timeframe is required']);
+    assert.deepEqual(problems({ engine: { entry: '7m' } }), [`engine.entry must be one of ${Object.keys(require('../src/services/candles').TF_SECONDS).join(', ')}`]);
+    assert.deepEqual(problems({ lookback: { '1h': 10 } }), ['lookback.1h must be an integer 20–1000']);
+    assert.deepEqual(problems({ engine: { candle_limit: 201 } }), [], '200 closed candles fit');
+
+    const { applyEngine, snapshotChanged, engineChanged } = require('../src/config/calculation');
+    const config = { TF_ROLES: { htf: '1d', structure: '4h', mid: '1h', entry: '15m' } };
+    let limit = null;
+    const running = applyEngine(config, { setCandleLimit: (n) => { limit = n; } }, d);
+    assert.deepEqual(config.TF_ROLES, { htf: '1w', structure: '1d', mid: '4h', entry: '1h' });
+    assert.equal(limit, 1000);
+    assert.equal(running.candle_limit, 1000);
+    assert.equal(snapshotChanged({ ...d, lookback: { '1h': 150 } }, d), true);
+    assert.equal(engineChanged({ ...d, engine: { ...d.engine, entry: '15m' } }, d), true);
+
+    // The lookback reaches the S/R calculation (scaled by the volatility band, so within ±20%).
+    const seen = [];
+    const original = indicators.calculateSRLevels;
+    indicators.calculateSRLevels = function (...args) { seen.push(args[5]); return original.apply(this, args); };
+    try {
+        indicators.calculateAll(closed(), 'BTCUSDT', '1h', {}, { lookback: { '1h': 40 } });
+        indicators.calculateAll(closed(), 'BTCUSDT', '1h');
+    } finally {
+        indicators.calculateSRLevels = original;
+    }
+    assert.ok(seen[0] >= 32 && seen[0] <= 48, `lookback 40 → ${seen[0]}`);
+    assert.ok(seen[1] >= 160 && seen[1] <= 240, `default 200 → ${seen[1]}`);
 });

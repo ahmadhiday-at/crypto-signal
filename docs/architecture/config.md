@@ -13,10 +13,10 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `MARKET_LIST` | `BTCUSDT` | `env.js` | Comma-separated; invalid symbols dropped |
 | `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped |
 | `TIMEFRAME_LABELS` | timeframe codes | `env.js` | Same order as `TIMEFRAME_LIST` |
-| `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1d`, `4h`, `1h`, `15m` | `env.js` | Role timeframes; unsupported value aborts startup |
+| `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1d`, `4h`, `1h`, `15m` | `env.js` | Since 2.21.0 only the defaults of calculation config `engine` (role timeframes); unsupported value aborts startup |
 | `WEIGHT_1D`, `WEIGHT_4H`, `WEIGHT_1H`, `WEIGHT_15M`, `WEIGHT_1W`, `WEIGHT_1M` | `3.0`, `2.0`, `1.5`, `1.0`, `1.0`, `1.0` | `env.js` | Since 2.14.0 only the defaults of `weights` in the calculation config (used when the file lacks a key or is created) |
-| `MAPPING_CANDLE` | base 200 | `indicator.service.js` | `tf:candles` pairs; keys case-sensitive |
-| `CANDLE_LIMIT` | `500` | `binance.service.js` | Must be 201–1000, otherwise 500 |
+| `MAPPING_CANDLE` | base 200 | `env.js` | Since 2.21.0 only the defaults of calculation config `lookback`; `tf:candles` pairs, keys case-sensitive |
+| `CANDLE_LIMIT` | `500` | `env.js` | Since 2.21.0 only the default of calculation config `engine.candle_limit`; must be 201–1000, otherwise 500 |
 | `BINANCE_REST_URL` | `https://api.binance.com` | `binance.service.js` | |
 | `BINANCE_WS_URL` | `wss://stream.binance.com:9443/ws` | `binance.service.js` | |
 
@@ -28,6 +28,9 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 | Group | Key | Default | Range | Meaning |
 | :---- | :-- | :------ | :---- | :------ |
+| `engine` | `htf` / `structure` / `mid` / `entry` | `TF_*` env (`1d` / `4h` / `1h` / `15m`) | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
+| `engine` | `candle_limit` | `CANDLE_LIMIT` env (500) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
+| `lookback` | `<tf>` | `MAPPING_CANDLE` env, else 200 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
 | `signal` | `threshold` | 5 | integer 1–15 | Minimum \|score\| for BUY/SELL |
 | `signal` | `min_rr` | 1.5 | 0–10 | Minimum plan risk/reward (else filter `low_rr`) |
 | `signal` | `stop_atr` | 0.5 | 0–3 | Stop loss buffer beyond the entry zone, × ATR |
@@ -52,7 +55,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `indicators` | `ma_fast` / `ma_mid` / `ma_slow` | 14 / 50 / 200 | integer, fast < mid < slow | SMA periods; the fields stay `ma14` / `ma50` / `ma200` |
 | `indicators` | `rsi_period`, `atr_period` | 14, 14 | integer 2–100 | RSI and ATR periods |
 | `indicators` | `macd_fast` / `macd_slow` / `macd_signal` | 12 / 26 / 9 | integer, fast < slow | MACD periods |
-| `indicators` | `min_candles` | 200 | integer ≥ longest period, ≤ `CANDLE_LIMIT` − 1 | Closed candles needed per timeframe (else `insufficient_data`) |
+| `indicators` | `min_candles` | 200 | integer ≥ longest period, ≤ `engine.candle_limit` − 1 | Closed candles needed per timeframe (else `insufficient_data`) |
 | `indicators` | `rsi_bullish` / `rsi_bearish` | 60 / 40 | 50–100 / 0–50 | Momentum: RSI above / below with MACD histogram > 0 / < 0 |
 | `indicators` | `regime_ma_percent` | 1 | 0–10 | Regime `ranging` when fast and mid SMA are within this % of price |
 | `zones` | `cluster_percent` | 0.5 | 0–5 | Swings within this % form one zone |
@@ -60,7 +63,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `zones` | `touch_points`, `recency_candles`, `distance_penalty` | 2, 50, 10 | 0–20, 0–500, 0–100 | Zone score: touches × points + max(0, recency − candles since last touch) − distance × penalty |
 | `zones` | `ma_bonus`, `ma_proximity_percent` | 1, 1 | 0–20, 0–10 | Score bonus when the zone is within this % of the mid / slow SMA |
 | `zones` | `fallback_candles` | 100 | integer 10–1000 | High/low window for the fallback level |
-| `zones` | `lookback_volatility_band`, `lookback_scale` | 0.2, 0.2 | 0–1, 0–0.9 | `MAPPING_CANDLE` × (1 ± scale) when volatility is beyond its mean × (1 ± band) |
+| `zones` | `lookback_volatility_band`, `lookback_scale` | 0.2, 0.2 | 0–1, 0–0.9 | `lookback` × (1 ± scale) when volatility is beyond its mean × (1 ± band) |
 | `market` | `volume_candles` | 20 | integer 2–200 | Volume average window |
 | `market` | `volume_low` / `volume_increasing` / `volume_high` | 0.8 / 1.2 / 1.5 | 0–10, increasing | Volume state vs the average |
 | `market` | `energy_cooling` / `energy_building` / `energy_explosive` | 0.02 / 0.05 / 0.1 | ≥ 0, increasing | \|MACD histogram\| thresholds for `market_energy` (price units) |
@@ -79,7 +82,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 - **Loading:** at startup; a missing file is created with the defaults. Missing keys take the defaults. An unreadable, invalid-JSON or out-of-range file is rejected with a log line and the values in use stay.
 - **Reload:** the server polls the file every 2 s (works on Docker bind mounts; nodemon does not watch `config/`, so no restart). A change to `indicators` or `zones` recalculates every stored timeframe snapshot from its own candles (no Binance request), then rebuilds the Market States; other changes rebuild the Market States; the signal values apply on the next read. Snapshots are also recalculated once at startup (the file may have changed while the app was down). The signal log uses the live `threshold` and `evaluation.expiry_candles`.
-- **Cross-key rules:** SMA fast < mid < slow, MACD fast < slow, `rsi_bearish` < `rsi_bullish`, `min_candles` ≥ the longest indicator period and ≤ `CANDLE_LIMIT` − 1, volume / energy / breakout thresholds increasing, divergence `pivot_width` × 2 < `lookback`. A file or PUT breaking one is rejected.
+- **Cross-key rules:** SMA fast < mid < slow, MACD fast < slow, `rsi_bearish` < `rsi_bullish`, `min_candles` ≥ the longest indicator period and ≤ `engine.candle_limit` − 1, role timeframes htf ≥ structure ≥ mid ≥ entry, volume / energy / breakout thresholds increasing, divergence `pivot_width` × 2 < `lookback`. A file or PUT breaking one is rejected.
 - **Backtest:** `npm run backtest` and `/config` re-runs use the saved file. The [Edge](../contract/rest.md#edge) verdict reports `params_differ` until the report is re-run with the current values.
 - Still in code (operational, not calculation): the freshness constants (stale after 2 × timeframe), request timeouts, scheduler delay, reset cooldown, the 3-levels-per-side limit (Market State contract) and the zero-ATR zone width fallback (0.2% of price).
 
@@ -87,7 +90,8 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 - All config is in `src/config/env.js` (dotenv). Lists are comma-separated (`MARKET_LIST`, `TIMEFRAME_LIST`, `TIMEFRAME_LABELS`).
 - `PORT` (default 11000) is used by Node and by both sides of the Docker Compose port mapping.
-- `MAPPING_CANDLE`, `BINANCE_REST_URL`, `BINANCE_WS_URL` and `CANDLE_LIMIT` are read from `process.env` inside services, not via `env.js`. `MAPPING_CANDLE` keys are case-sensitive (`1h`, not `1H`); non-matching timeframes fall back to 200.
+- `BINANCE_REST_URL` and `BINANCE_WS_URL` are read from `process.env` inside services, not via `env.js`. `MAPPING_CANDLE` keys are case-sensitive (`1h`, not `1H`); non-matching timeframes seed 200.
+- **Engine at startup (2.21.0):** `server.js` and the backtest CLI apply `engine` from the file (roles → `config.TF_ROLES`, candle limit → `binance.setCandleLimit`). Saving another `engine` logs that a restart is needed and changes nothing until then; `GET /api/calc-config` returns `running_engine`. The CLI option `--roles ENTRY,MID,STRUCTURE,HTF` overrides the roles for one run.
 - Supported timeframes are the keys of `TF_SECONDS` in `src/services/candles.js`. Unsupported `TIMEFRAME_LIST` entries are dropped with a warning; an unsupported role timeframe aborts startup. A new timeframe needs a `TF_SECONDS` entry and, to carry weight, a `TF_WEIGHTS` entry.
 - `HOST` (default `0.0.0.0`) is the Node listen address; Compose forces `HOST=0.0.0.0` in the container and publishes on `BIND_ADDR` (default `127.0.0.1`). `ALLOWED_HOSTS` extends the Host allowlist (`localhost`, `127.0.0.1`, `[::1]`).
 - The staleness threshold, retry delays, cooldowns and the 5 s boundary delay are constants in `freshness.js`, `binance.service.js` and `scheduler.js`, not env vars.

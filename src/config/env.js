@@ -53,6 +53,21 @@ const TF_WEIGHTS = {
   DEFAULT: 1.0,
 };
 
+// Seeds of the calculation config groups `engine` and `lookback` (config/calculation.json wins once
+// it holds them; server.js applies the saved roles and candle limit at startup).
+const envCandleLimit = parseInt(process.env.CANDLE_LIMIT, 10);
+const mapping = Object.fromEntries(parseList("MAPPING_CANDLE", []).map((pair) => pair.split(":").map((s) => s.trim())));
+const LOOKBACK_ENV = {};
+for (const tf of [...new Set([...TIMEFRAMES, ...Object.values(TF_ROLES)])]) {
+  const n = parseInt(mapping[tf], 10);
+  LOOKBACK_ENV[tf] = Number.isInteger(n) && n >= 20 && n <= 1000 ? n : 200;
+}
+const ENGINE_ENV = {
+  roles: { ...TF_ROLES },
+  candle_limit: Number.isFinite(envCandleLimit) && envCandleLimit >= 201 && envCandleLimit <= 1000 ? envCandleLimit : 500,
+  lookback: LOOKBACK_ENV,
+};
+
 // Host names the server answers to (Host header). Blocks DNS-rebinding pages from reaching the API.
 const ALLOWED_HOSTS = [...new Set(["localhost", "127.0.0.1", "[::1]",
   ...parseList("ALLOWED_HOSTS", []).map((h) => h.toLowerCase())])];
@@ -68,4 +83,5 @@ module.exports = {
   TIMEFRAME_LABELS,
   TF_ROLES,
   TF_WEIGHTS,
+  ENGINE_ENV,
 };

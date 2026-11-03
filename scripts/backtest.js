@@ -1,6 +1,9 @@
 // Backtest CLI (docs/roadmap/level-5.md).
 // Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
-// The base parameters, and the --days/--fee/--split defaults, come from config/calculation.json.
+//        [--roles ENTRY,MID,STRUCTURE,HTF]
+// The base parameters, the role timeframes, the window (engine.candle_limit − 1) and the
+// --days/--fee/--split defaults come from config/calculation.json. --roles replaces the role
+// timeframes for this run only (e.g. --roles 1h,4h,1d,1w).
 // --sweep (Level 6) replays parameter variants on the same history. Keys: `model` (bounce,
 // trend_pullback, breakout), `threshold`, `min_rr`,
 // `stop_atr` (SL buffer in ATR), `target` (tp1, rr_zone, tp2 or a fixed R multiple), `htf_trend`
@@ -18,10 +21,10 @@
 // container so requests go through the VPN: docker compose exec app npm run backtest -- BTCUSDT
 const path = require('path');
 const config = require('../src/config/env');
-const { createCalcConfig, validate, LIMITS, RESULT_GROUPS } = require('../src/config/calculation');
+const { createCalcConfig, validate, applyEngine, LIMITS, LOOKBACK_LIMITS, RESULT_GROUPS } = require('../src/config/calculation');
 const binance = require('../src/services/binance.service');
 const indicators = require('../src/services/indicator.service');
-const { tfSeconds } = require('../src/services/candles');
+const { tfSeconds, TF_SECONDS } = require('../src/services/candles');
 const { createHistory } = require('../src/services/history');
 const { runBacktest, createReports, FIXED_KEYS } = require('../src/services/backtest');
 const { HTF_TREND_MODES, TARGET_MODES, MODELS } = require('../src/services/signal');
@@ -57,7 +60,7 @@ const SWEEP_KEYS = {
 function calcKeyParser(key) {
     const [group, name, extra] = key.split('.');
     if (extra !== undefined || !RESULT_GROUPS.includes(group) || key === 'evaluation.min_trades') return undefined;
-    const limits = LIMITS[group]?.[name];
+    const limits = group === 'lookback' ? (TF_SECONDS[name] ? LOOKBACK_LIMITS : null) : LIMITS[group]?.[name];
     if (!limits) return undefined;
     if (!Array.isArray(limits)) return [(raw) => (limits.values.includes(raw) ? raw : undefined), limits.values.join(', ')];
     const [min, max, int] = limits;
@@ -163,19 +166,37 @@ function printValidation(report, keys) {
     if (v.selected === null) console.log(`No variant has ${v.min_trades}+ in-sample trades.`);
 }
 
+// `--roles entry,mid,structure,htf` (taken out before the other options, which need the role
+// timeframes). Returns the role overrides and the remaining arguments.
+function rolesOption(argv) {
+    const i = argv.indexOf('--roles');
+    if (i === -1) return { roles: null, rest: argv };
+    const list = String(argv[i + 1] || '').split(',');
+    if (list.length !== 4) throw new Error('--roles expects ENTRY,MID,STRUCTURE,HTF, e.g. 1h,4h,1d,1w');
+    const [entry, mid, structure, htf] = list;
+    return { roles: { entry, mid, structure, htf }, rest: [...argv.slice(0, i), ...argv.slice(i + 2)] };
+}
+
 async function main() {
-    const roles = config.TF_ROLES;
-    const roleTfs = [...new Set(Object.values(roles))];
-    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, candleLimit: binance.candleLimit() });
+    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, envEngine: config.ENGINE_ENV });
     const loaded = calc.load();
     if (!loaded.loaded) throw new Error(`config/calculation.json is not usable (${loaded.error})`);
-    const cfg = calc.get();
-    const args = parseArgs(process.argv.slice(2), roleTfs, cfg.backtest);
+    let cfg = calc.get();
+    const { roles: roleOverride, rest } = rolesOption(process.argv.slice(2));
+    if (roleOverride) {
+        const { value, problems } = validate({ engine: roleOverride }, cfg);
+        if (problems.length) throw new Error(`--roles: ${problems.join('; ')}`);
+        cfg = value;
+    }
+    applyEngine(config, binance, cfg);
+    const roles = config.TF_ROLES;
+    const roleTfs = [...new Set(Object.values(roles))];
+    const args = parseArgs(rest, roleTfs, cfg.backtest);
     const window = binance.candleLimit() - 1;
     // Each swept calculation value must also pass the cross-key rules (e.g. MA fast < mid < slow).
     for (const v of args.variants) {
         if (!v.calc) continue;
-        const { problems } = validate(v.calc, cfg, { candleLimit: window + 1 });
+        const { problems } = validate(v.calc, cfg);
         if (problems.length) throw new Error(`--sweep variant ${JSON.stringify(v.calc)}: ${problems.join('; ')}`);
     }
     const nowSec = Math.floor(Date.now() / 1000);
@@ -227,4 +248,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArgs };
+module.exports = { parseArgs, rolesOption };

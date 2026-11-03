@@ -95,7 +95,7 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 Since 2.14.0. Values in `config/calculation.json` ([config.md](../architecture/config.md#calculation-config)).
 
-- `GET /api/calc-config` → `{file, config, defaults, limits, role_timeframes}`. `config` and `defaults` have the groups `signal`, `filters`, `weights`, `backtest`; `limits` gives `[min, max, integer]` per numeric key and `{values}` for a choice (`filters.htf_trend` since 2.16.0, `signal.target` since 2.17.0) (`weights`: one pair for every timeframe).
+- `GET /api/calc-config` → `{file, config, defaults, limits, role_timeframes, running_engine}`. `config` and `defaults` have the groups listed in [config.md](../architecture/config.md#calculation-config) (`engine` and `lookback` since 2.21.0); `running_engine` is the `engine` in use since startup (a saved `engine` that differs waits for a restart); `limits` gives `[min, max, integer]` per numeric key and `{values}` for a choice (`filters.htf_trend` since 2.16.0, `signal.target` since 2.17.0) (`weights`, `lookback`: one triple for every timeframe).
 - `PUT /api/calc-config` with a JSON body (full or partial config; missing keys keep the values in use). Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise). 400 `invalid_config` with `problems` (list of messages) or 400 `invalid_json`; 200 `{config, changed}`. The file is written atomically and the values apply at once: weights rebuild every Market State, the signal values apply on the next read.
 - A report made with other values gets `params_differ` in [Edge](#edge).
 

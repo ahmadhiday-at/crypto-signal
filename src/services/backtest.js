@@ -139,7 +139,7 @@ function normalizeParams(base, over = {}) {
 
 const paramsKey = (p) => JSON.stringify([...PARAM_KEYS.map(k => p[k]), Object.entries(p.weights).sort(), p.calc]);
 // Variants sharing these values share the per-timeframe snapshots / the merged state.
-const snapshotKey = (p) => JSON.stringify([p.calc.indicators, p.calc.zones]);
+const snapshotKey = (p) => JSON.stringify([p.calc.indicators, p.calc.zones, p.calc.lookback]);
 const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market, p.calc.divergence, p.calc.trend.channel_candles]);
 
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
@@ -181,7 +181,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
     const snapshotSets = new Map();
     for (const params of unique) {
         const key = snapshotKey(params);
-        if (!snapshotSets.has(key)) snapshotSets.set(key, { params: { indicators: params.calc.indicators, zones: params.calc.zones }, snaps: {} });
+        if (!snapshotSets.has(key)) snapshotSets.set(key, { params: { indicators: params.calc.indicators, zones: params.calc.zones, lookback: params.calc.lookback }, snaps: {} });
     }
     const runs = unique.map(params => ({
         params,
