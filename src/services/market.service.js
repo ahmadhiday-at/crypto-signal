@@ -8,7 +8,7 @@ const { detectDivergence } = require('./divergence');
 // market energy, breakout score and its confirmation, dominant side and the volatility ratio.
 const MARKET_DEFAULTS = {
     volume_candles: 20, volume_high: 1.5, volume_increasing: 1.2, volume_low: 0.8,
-    energy_explosive: 0.1, energy_building: 0.05, energy_cooling: 0.02,
+    energy_explosive: 0.15, energy_building: 0.07, energy_cooling: 0.03,
     breakout_distance_percent: 1, breakout_volume_high: 1, breakout_volume_increasing: 0.8, breakout_volume_normal: 0.5, breakout_volume_low: 0.3,
     compression_bonus: 0.2, breakout_strong: 0.7, breakout_weak: 0.4, dominant_percent: 20, volatility_candles: 100,
 };
@@ -84,11 +84,13 @@ function enhanceMarketState(data, params = {}) {
     }
 
     let market_energy = "stable";
+    // The histogram is in price units, so it is measured against ATR to compare across symbols.
     const macdHist = data.indicators?.macd?.histogram || 0;
-    const absMacd = Math.abs(macdHist);
-    if (volume_state === "high" && absMacd > p.energy_explosive) market_energy = "explosive";
-    else if (volume_state === "increasing" && absMacd > p.energy_building) market_energy = "building";
-    else if (volume_state === "low" || absMacd < p.energy_cooling) market_energy = "cooling";
+    const atr = data.indicators?.atr;
+    const macdAtr = atr > 0 ? Math.abs(macdHist) / atr : 0;
+    if (volume_state === "high" && macdAtr > p.energy_explosive) market_energy = "explosive";
+    else if (volume_state === "increasing" && macdAtr > p.energy_building) market_energy = "building";
+    else if (volume_state === "low" || macdAtr < p.energy_cooling) market_energy = "cooling";
 
     const minDistance = Math.min(distSupportPct, distResistancePct);
     const distanceFactor = Math.max(0, 1 - (minDistance / p.breakout_distance_percent));

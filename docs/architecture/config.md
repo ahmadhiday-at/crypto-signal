@@ -70,7 +70,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `zones` | `lookback_volatility_band`, `lookback_scale` | 0.2, 0.2 | 0–1, 0–0.9 | `lookback` × (1 ± scale) when volatility is beyond its mean × (1 ± band) |
 | `market` | `volume_candles` | 20 | integer 2–200 | Volume average window |
 | `market` | `volume_low` / `volume_increasing` / `volume_high` | 0.8 / 1.2 / 1.5 | 0–10, increasing | Volume state vs the average |
-| `market` | `energy_cooling` / `energy_building` / `energy_explosive` | 0.02 / 0.05 / 0.1 | ≥ 0, increasing | \|MACD histogram\| thresholds for `market_energy` (price units) |
+| `market` | `energy_cooling` / `energy_building` / `energy_explosive` | 0.03 / 0.07 / 0.15 | 0–10, increasing | \|MACD histogram\| / ATR thresholds for `market_energy` (since 2.23.0; about p10 / p25 / p50 over 3 years of BTC, BNB, SOL on 15m and 1h) |
 | `market` | `breakout_distance_percent` | 1 | 0.01–10 | Breakout score distance factor = max(0, 1 − nearest zone % ÷ this) |
 | `market` | `breakout_volume_high` / `_increasing` / `_normal` / `_low` | 1 / 0.8 / 0.5 / 0.3 | 0–1 | Breakout score volume factor |
 | `market` | `compression_bonus` | 0.2 | 0–1 | Breakout score bonus in compression |
