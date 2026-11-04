@@ -21,6 +21,16 @@
     "entry": "1h",
     "candle_limit": 1000
   },
+  "shadow": {
+    "enabled": "on",
+    "model": "trend_pullback",
+    "htf": "1w",
+    "structure": "1d",
+    "mid": "1d",
+    "entry": "4h",
+    "stop_atr": 3,
+    "target_r": 2
+  },
   "signal": {
     "threshold": 5,
     "min_rr": 1.5,
