@@ -65,3 +65,51 @@ test('mergeSnapshots passes the last 20 closed volumes to the volume comparison'
     assert.equal(out.market_energy, 'explosive', 'the merged state carries the latest ATR (0.5 / 2 = 0.25)');
     assert.deepEqual(Object.keys(raw.ohlcv), ['time', 'open', 'high', 'low', 'close', 'volume']);
 });
+
+const snapOf = (price, support, resistance, candles = [{ time: 0, open: 90, high: 130, low: 70, close: price, volume: 1, close_time: 900 }]) => ({
+    price, context: 'mid_range', momentum: 'neutral', regime: 'ranging', timestamp: 0, support, resistance,
+    indicators: { volume: [1], ma14: [1], macd: [{ MACD: 1, signal: 1, histogram: 0 }], atr: [1] }, candles,
+});
+const ROLES = { htf: '1w', structure: '1d', mid: '4h', entry: '1h' };
+const WEIGHTS = { DEFAULT: 1 };
+
+test('merged levels are sided by the current price, not by the close of their own timeframe', () => {
+    // The weekly close was 110, so the weekly level at 105 is its support, but the price is now 100.
+    const snaps = {
+        '1w': snapOf(110, [lvl(104, 106, 50)], [lvl(119, 121, 50)]),
+        '1d': snapOf(100, [lvl(89, 91, 10)], [lvl(109, 111, 10)]),
+        '4h': snapOf(100, [lvl(89, 91, 10)], [lvl(109, 111, 10)]),
+        '1h': snapOf(100, [lvl(94, 96, 10)], [lvl(102, 103, 10)]),
+    };
+    const { raw } = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS);
+    assert.ok(raw.levels.support.every(l => l.mid < 100), 'support below the price');
+    assert.ok(raw.levels.resistance.every(l => l.mid > 100), 'resistance above the price');
+    assert.ok(raw.levels.resistance.some(l => l.mid === 105 && l.tfs.includes('1w')), 'the old weekly support is resistance now');
+});
+
+test('a side left without levels gets the entry timeframe extreme, inside the fallback window', () => {
+    const candles = [
+        { time: 0, open: 50, high: 60, low: 40, close: 50, volume: 1, close_time: 900 },
+        { time: 900, open: 90, high: 130, low: 70, close: 100, volume: 1, close_time: 1800 },
+    ];
+    const above = () => snapOf(100, [], [lvl(109, 111, 10)], candles);
+    const snaps = { '1w': above(), '1d': above(), '4h': above(), '1h': above() };
+    const { raw } = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS, { zones: { fallback_candles: 1 } });
+    assert.deepEqual(raw.levels.support, [{ low: 70, high: 70, mid: 70, score: 1, tfs: ['1h'] }]);
+    const wider = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS, { zones: { fallback_candles: 2 } });
+    assert.equal(wider.raw.levels.support[0].mid, 40);
+    assert.equal(raw.levels.resistance[0].mid, 110);
+});
+
+test('zone width follows ATR up to max_width_percent of the zone price', () => {
+    const indicators = require('../src/services/indicator.service');
+    const candles = [100, 104, 100, 96, 100, 104, 100, 96, 100, 104, 100].map((c, i) => ({ time: i, high: c + 1, low: c - 1, close: c }));
+    const zones = (atr, over = {}) => indicators.calculateSRLevels(candles, 100.5, atr, 100, 100, 50, { ...indicators.ZONE_DEFAULTS, ...over }).support[0];
+    const narrow = zones(1);
+    assert.equal(+(narrow.high - narrow.low).toFixed(6), 1, 'ATR 1 × 0.5 on each side');
+    const capped = zones(40);
+    assert.ok(Math.abs((capped.high - capped.low) / capped.mid * 100 - 2) < 1e-9, 'capped at 2% of its price');
+    const wider = zones(40, { max_width_percent: 10 });
+    assert.ok(Math.abs((wider.high - wider.low) / wider.mid * 100 - 10) < 1e-9, 'the limit is a config value');
+});
+

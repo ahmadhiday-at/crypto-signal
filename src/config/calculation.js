@@ -113,6 +113,7 @@ const LIMITS = {
     zones: {
         cluster_percent: [0, 5],
         width_atr: [0, 5],
+        max_width_percent: [0.1, 50],
         touch_points: [0, 20],
         recency_candles: [0, 500, true],
         distance_penalty: [0, 100],
@@ -273,7 +274,7 @@ const mergeWeights = (cfg) => ({ ...cfg.weights, DEFAULT: 1.0 });
 // Options for the per-timeframe snapshot (indicator.service calculateAll) and for the merged
 // Market State (market.service composeMarketState).
 const snapshotParams = (cfg) => ({ indicators: cfg.indicators, zones: cfg.zones, lookback: cfg.lookback });
-const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence, trend: cfg.trend });
+const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence, trend: cfg.trend, zones: cfg.zones });
 
 // The groups whose values change backtest results; a report made with other values is params_differ.
 const RESULT_GROUPS = ['scoring', 'trend', 'indicators', 'zones', 'lookback', 'market', 'divergence', 'evaluation'];

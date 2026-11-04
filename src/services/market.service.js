@@ -4,6 +4,7 @@ const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = r
 const { computeSignal, TREND_DEFAULTS } = require('./signal');
 const { detectDivergence } = require('./divergence');
 const { isCurrentRecord } = require('./signal-log');
+const { ZONE_DEFAULTS } = require('./indicator.service');
 
 // Defaults of the calculation config's `market` group (config/calculation.json): volume state,
 // market energy, breakout score and its confirmation, dominant side and the volatility ratio.
@@ -163,6 +164,8 @@ function mergeSnapshots(market, snaps, roles, weights, params = {}) {
     const channelCandles = { ...TREND_DEFAULTS, ...params.trend }.channel_candles;
     // Two roles may share a timeframe; each timeframe is merged once.
     const tfList = [...new Set(Object.values(roles))];
+    const entryData = snaps[roles.entry];
+    const price = entryData.price;
     const timeframesState = {};
     const mergedSupport = [];
     const mergedResistance = [];
@@ -185,11 +188,27 @@ function mergeSnapshots(market, snaps, roles, weights, params = {}) {
         const data = snaps[tf];
         timeframesState[tf] = { price: data.price, context: data.context, momentum: data.momentum, regime: data.regime, trend: trendOf(data), timestamp: data.timestamp };
         const weight = weights[tf] || weights['DEFAULT'];
-        if (data.support) mergeSide(mergedSupport, data.support, tf, weight);
-        if (data.resistance) mergeSide(mergedResistance, data.resistance, tf, weight);
+        // A snapshot sides its levels by its own close, which can be days old on a long timeframe.
+        // Here a level is support or resistance by where it stands from the current price.
+        for (const [own, target] of [[data.support, mergedSupport], [data.resistance, mergedResistance]]) {
+            for (const lvl of own || []) {
+                const side = lvl.mid < price ? mergedSupport : lvl.mid > price ? mergedResistance : target;
+                mergeSide(side, [lvl], tf, weight);
+            }
+        }
     }
 
-    const entryData = snaps[roles.entry];
+    // Every level on one side of the price: the other side gets the entry timeframe's recent extreme.
+    const recent = entryData.candles.slice(-{ ...ZONE_DEFAULTS, ...params.zones }.fallback_candles);
+    if (!mergedSupport.length && recent.length) {
+        const low = Math.min(...recent.map(c => c.low));
+        mergedSupport.push({ low, high: low, mid: low, score: 1, tfs: [roles.entry] });
+    }
+    if (!mergedResistance.length && recent.length) {
+        const high = Math.max(...recent.map(c => c.high));
+        mergedResistance.push({ low: high, high, mid: high, score: 1, tfs: [roles.entry] });
+    }
+
     const lastIndicators = {};
     for (const [key, values] of Object.entries(entryData.indicators || {})) {
         // Arrays hold one value per candle (MACD holds {MACD, signal, histogram} objects).
@@ -253,7 +272,7 @@ function codeOf(err) {
 
 // Builds the Market State fields (without freshness or signal) from the role snapshots.
 // Shared by the live engine and the backtest. Throws when a side has no merged level.
-// `params` holds the calculation config's `market` and `divergence` groups.
+// `params` holds the calculation config's `market`, `divergence`, `trend` and `zones` groups.
 function composeMarketState(market, snaps, roles, weights, params = {}) {
     const { raw, volumeHistory } = mergeSnapshots(market, snaps, roles, weights, params);
     if (raw.levels.support.length === 0 || raw.levels.resistance.length === 0) throw new Error('no merged levels');

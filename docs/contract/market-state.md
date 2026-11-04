@@ -172,7 +172,8 @@ Targets come only from the top 3 levels per side in `levels`.
 3. **Fallback levels.** When a timeframe has no pivot-based zone on one side, a zero-width level at the 100-candle high/low with `score: 1` and no `touches` is used.
 4. **`price` lags the market by up to one entry candle.** It is the last closed close, by design. The live ticker price is available separately (WebSocket `price` messages) and is display-only.
 5. **Volume comparison (changed in 2.0.0).** `volume_state`, `market_energy`, `breakout_score` and `fake_breakout_risk` now compare the latest closed volume with the average of the last 20 closed candles, as documented. Before 2.0.0 the volume history was not passed through, so `volume_state` was always `normal`.
-6. **`market_energy` is scale-free (changed in 2.23.0).** It compares \|MACD histogram\| / ATR of the entry timeframe with the `market.energy_*` thresholds. Before 2.23.0 the raw histogram (price units) was compared, so the label depended on the symbol's price.
+6. **Zone width and side (changed in 3.2.0).** A zone is at most `zones.max_width_percent` of its price wide. In the merged `levels`, a level is support or resistance by its `mid` against the current `price`, whatever side its timeframe gave it. A side left empty gets a zero-width level at the entry timeframe's recent low / high, `score: 1`.
+7. **`market_energy` is scale-free (changed in 2.23.0).** It compares \|MACD histogram\| / ATR of the entry timeframe with the `market.energy_*` thresholds. Before 2.23.0 the raw histogram (price units) was compared, so the label depended on the symbol's price.
 
 ---
 

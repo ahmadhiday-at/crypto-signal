@@ -20,7 +20,7 @@ const INDICATOR_DEFAULTS = {
     min_candles: 200, rsi_bullish: 60, rsi_bearish: 40, regime_ma_percent: 1,
 };
 const ZONE_DEFAULTS = {
-    cluster_percent: 0.5, width_atr: 0.5, touch_points: 2, recency_candles: 50, distance_penalty: 10,
+    cluster_percent: 0.5, width_atr: 0.5, max_width_percent: 2, touch_points: 2, recency_candles: 50, distance_penalty: 10,
     ma_bonus: 1, ma_proximity_percent: 1, fallback_candles: 100, lookback_volatility_band: 0.2, lookback_scale: 0.2,
 };
 
@@ -225,7 +225,8 @@ class IndicatorService {
             }
 
             const zones = clusters.map(c => {
-                const width = (atr || price * 0.002) * ATR_MULTIPLIER;
+                // Half-width from ATR, so a long timeframe's zone stays a price level, not a 10% band.
+                const width = Math.min((atr || price * 0.002) * ATR_MULTIPLIER, c.mid * zp.max_width_percent / 200);
                 return {
                     low: c.mid - width,
                     high: c.mid + width,

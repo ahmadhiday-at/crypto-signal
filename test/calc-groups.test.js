@@ -59,7 +59,7 @@ test('indicator and zone params change the snapshot', () => {
     const { ZONE_DEFAULTS } = indicators;
     const half = (zp) => { const l = indicators.calculateSRLevels(zigzag, 100, 1, null, null, 60, zp).support[0]; return (l.high - l.low) / 2; };
     assert.equal(half(ZONE_DEFAULTS), 0.5);
-    assert.equal(half({ ...ZONE_DEFAULTS, width_atr: 2 }), 2);
+    assert.equal(half({ ...ZONE_DEFAULTS, width_atr: 2, max_width_percent: 50 }), 2);
     assert.throws(() => indicators.calculateAll(candles, 'BTCUSDT', '1h', {}, { indicators: { min_candles: 400 } }), /need at least 400/);
 });
 

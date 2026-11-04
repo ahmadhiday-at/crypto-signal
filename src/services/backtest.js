@@ -226,7 +226,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             if (!ready(set)) continue;
             if (!states.has(run.stateKey)) {
                 try {
-                    const stateParams = { market: run.params.calc.market, divergence: run.params.calc.divergence, trend: run.params.calc.trend };
+                    const stateParams = { market: run.params.calc.market, divergence: run.params.calc.divergence, trend: run.params.calc.trend, zones: run.params.calc.zones };
                     states.set(run.stateKey, { ...composeMarketState(market, set.snaps, roles, run.params.weights, stateParams), generated_at: t, status: 'ok' });
                 } catch (e) {
                     states.set(run.stateKey, null);

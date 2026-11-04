@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v3.2.0](docs/changelog/v3.2.0.md) — 2026-11-04 — Zones are at most 2% wide (config) and merged levels are sided by the current price.
 - [v3.1.1](docs/changelog/v3.1.1.md) — 2026-11-04 — Backtest fee default becomes 0.2% round trip; a report with a lower fee no longer counts as proof.
 - [v3.1.0](docs/changelog/v3.1.0.md) — 2026-11-04 — Signal records name their model, config hash and app version; stats keep models apart.
 - [v3.0.0](docs/changelog/v3.0.0.md) — 2026-11-04 — Markets and timeframes move to /config; `.env` holds server settings and secrets only.

@@ -60,6 +60,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `indicators` | `regime_ma_percent` | 1 | 0–10 | Regime `ranging` when fast and mid SMA are within this % of price |
 | `zones` | `cluster_percent` | 0.5 | 0–5 | Swings within this % form one zone |
 | `zones` | `width_atr` | 0.5 | 0–5 | Zone half-width, × ATR |
+| `zones` | `max_width_percent` | 2 | 0.1–50 | Maximum total zone width, % of its price (since 3.2.0) |
 | `zones` | `touch_points`, `recency_candles`, `distance_penalty` | 2, 50, 10 | 0–20, 0–500, 0–100 | Zone score: touches × points + max(0, recency − candles since last touch) − distance × penalty |
 | `zones` | `ma_bonus`, `ma_proximity_percent` | 1, 1 | 0–20, 0–10 | Score bonus when the zone is within this % of the mid / slow SMA |
 | `zones` | `fallback_candles` | 100 | integer 10–1000 | High/low window for the fallback level |
