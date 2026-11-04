@@ -161,7 +161,7 @@ const GROUPS = ['engine', 'shadow', 'signal', 'filters', 'weights', 'lookback', 
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
 const SNAPSHOT_GROUPS = ['indicators', 'zones', 'lookback'];
 
-const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.1, split: 0.7 };
+const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.2, split: 0.7 };
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 

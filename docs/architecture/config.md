@@ -77,7 +77,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `evaluation` | `expiry_candles` | 96 | integer 1–2000 | Entry candles before an open trade is `EXPIRED` (signal log and backtest) |
 | `evaluation` | `min_trades` | 30 | integer 1–1000 | Minimum taken trades for the Edge verdict and the out-of-sample pick |
 | `backtest` | `days` | 1095 (since 2.24.0) | integer 1–1500 | History length (CLI `--days` default) |
-| `backtest` | `fee_pct` | 0.1 | 0–5 | Round-trip fee, % of price (CLI `--fee` default) |
+| `backtest` | `fee_pct` | 0.2 (since 3.1.1) | 0–5 | Round-trip fee (both sides together), % of price (CLI `--fee` default). Standard Binance spot is 0.1% per side; set your account's rate |
 | `backtest` | `split` | 0.7 | 0.5–0.9 | Out-of-sample split (CLI `--split` default) |
 
 - **Loading:** at startup; a missing file is created with the defaults. Missing keys take the defaults. An unreadable, invalid-JSON or out-of-range file is rejected with a log line and the values in use stay.

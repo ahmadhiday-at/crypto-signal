@@ -127,6 +127,7 @@ test('trend group and model: defaults, channel field and backtest sweep key', ()
     assert.equal(d.signal.model, 'trend_pullback');
     assert.equal(d.trend.stop_atr, 3);
     assert.equal(d.backtest.days, 1095);
+    assert.equal(d.backtest.fee_pct, 0.2);
     assert.equal(d.trend.channel_candles, 20);
     assert.deepEqual(validate({ signal: { model: 'scalp' } }, d).problems, ['signal.model must be one of bounce, trend_pullback, breakout']);
     const { mergeSnapshots } = require('../src/services/market.service');

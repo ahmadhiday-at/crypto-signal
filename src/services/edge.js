@@ -20,6 +20,8 @@ const pick = (s) => (s ? { trades: s.trades, win_rate: s.win_rate, expectancy_r:
 function paramsMatch(params, live) {
     if (!params) return false;
     if (params.threshold !== live.threshold) return false;
+    // A report that paid less than the configured fee looks better than it is. No fee at all has its own reason (no_fees).
+    if (params.fee_pct > 0 && params.fee_pct < live.fee_pct) return false;
     // The snapshot window (engine.candle_limit − 1) changes indicators and zones, so it must match too.
     if (params.window !== undefined && params.window !== live.window) return false;
     if ((params.min_rr ?? MIN_RISK_REWARD) !== live.min_rr) return false;
@@ -116,6 +118,7 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
     const weights = calc ? calc.weights() : config.TF_WEIGHTS;
     return {
         window,
+        fee_pct: cfg.backtest.fee_pct,
         threshold: cfg.signal.threshold,
         min_rr: cfg.signal.min_rr,
         stop_atr: cfg.signal.stop_atr,
