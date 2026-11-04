@@ -14,10 +14,10 @@ const { createCalcConfig, snapshotChanged, engineChanged, applyEngine } = requir
 const { createBacktestRunner } = require('./src/services/backtest-runner');
 
 // Calculation config (config/calculation.json): loaded before the engine, reloaded on hand edits.
-const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, envEngine: config.ENGINE_ENV });
+const calc = createCalcConfig();
 calc.load();
 calc.watch();
-// Role timeframes and candle limit come from the config (seeded by .env); they change on restart only.
+// Markets, timeframes, roles and candle limit come from the config; they change on restart only.
 applyEngine(config, binanceService, calc.get());
 
 const engine = createMarketEngine({

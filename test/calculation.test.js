@@ -9,19 +9,20 @@ const { silentLog, testConfig } = require('./helpers');
 
 const tempFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'calc-')), 'config', 'calculation.json');
 
-test('a missing file is created with the defaults, env weights included', () => {
+test('a missing file is created with the defaults', () => {
     const file = tempFile();
-    const calc = createCalcConfig({ file, envWeights: { ...testConfig.TF_WEIGHTS, '4h': 2.5 }, log: silentLog });
+    const calc = createCalcConfig({ file, log: silentLog });
     assert.deepEqual(calc.load(), { loaded: true, changed: false });
     const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.equal(saved.signal.threshold, 5);
-    assert.equal(saved.weights['4h'], 2.5);
+    assert.equal(saved.weights['4h'], 2);
+    assert.deepEqual(saved.engine.markets, ['BTCUSDT', 'BNBUSDT', 'SOLUSDT']);
     assert.equal(saved.weights.DEFAULT, undefined);
     assert.equal(calc.weights().DEFAULT, 1);
 });
 
 test('validate merges partial input and rejects unknown keys and out-of-range values', () => {
-    const base = defaultsOf(testConfig.TF_WEIGHTS);
+    const base = defaultsOf();
     const ok = validate({ signal: { threshold: 6 }, weights: { '30m': 1.2 } }, base);
     assert.deepEqual(ok.problems, []);
     assert.equal(ok.value.signal.threshold, 6);
@@ -48,7 +49,7 @@ test('validate merges partial input and rejects unknown keys and out-of-range va
 
 test('update saves and notifies; invalid hand edits keep the values in use', () => {
     const file = tempFile();
-    const calc = createCalcConfig({ file, envWeights: testConfig.TF_WEIGHTS, log: silentLog });
+    const calc = createCalcConfig({ file, log: silentLog });
     calc.load();
     const seen = [];
     calc.onChange(cfg => seen.push(cfg.signal.threshold));
@@ -78,7 +79,7 @@ test('update saves and notifies; invalid hand edits keep the values in use', () 
 });
 
 test('signal options change the score threshold, filters and plan', () => {
-    const cfg = defaultsOf(testConfig.TF_WEIGHTS);
+    const cfg = defaultsOf();
     cfg.signal.model = 'bounce';
     const state = {
         status: 'ok', price: 100, context: 'near_support', momentum: 'bullish', volume_state: 'high', volatility_ratio: 2.5,

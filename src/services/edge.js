@@ -19,7 +19,7 @@ const pick = (s) => (s ? { trades: s.trades, win_rate: s.win_rate, expectancy_r:
 function paramsMatch(params, live) {
     if (!params) return false;
     if (params.threshold !== live.threshold) return false;
-    // The snapshot window (CANDLE_LIMIT − 1) changes indicators and zones, so it must match too.
+    // The snapshot window (engine.candle_limit − 1) changes indicators and zones, so it must match too.
     if (params.window !== undefined && params.window !== live.window) return false;
     if ((params.min_rr ?? MIN_RISK_REWARD) !== live.min_rr) return false;
     if ((params.stop_atr ?? STOP_ATR_BUFFER) !== live.stop_atr) return false;
@@ -111,7 +111,7 @@ function edgeSummary(market, report, log, live) {
 // Live parameters, for paramsMatch. `calc` is the calculation config (src/config/calculation.js);
 // without it the defaults and env weights apply. The backtest CLI uses the same window.
 function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
-    const cfg = calc ? calc.get() : defaultsOf(config.TF_WEIGHTS);
+    const cfg = calc ? calc.get() : defaultsOf();
     const weights = calc ? calc.weights() : config.TF_WEIGHTS;
     return {
         window,

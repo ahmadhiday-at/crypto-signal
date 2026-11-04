@@ -15,6 +15,9 @@ const { createApp } = require('../src/app');
 const indicatorService = require('../src/services/indicator.service');
 const { rawKlines, fakeBinance, tempStorage, testConfig, silentLog } = require('./helpers');
 
+// The CLI reads its default market from the config that applyEngine fills at startup.
+require('../src/config/env').MARKETS = testConfig.MARKETS;
+
 const NOW = 1_800_000_000;
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-bt-'));
 

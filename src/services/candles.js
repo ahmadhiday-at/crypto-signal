@@ -20,6 +20,13 @@ const TF_SECONDS = {
 // Binance weekly candles open on Monday 00:00 UTC; the Unix epoch was a Thursday.
 const WEEK_OFFSET = 4 * 86400;
 
+// Display label of a timeframe, e.g. 15m → 15 Minute.
+const TF_UNITS = { m: 'Minute', h: 'Hour', d: 'Day', w: 'Week' };
+function tfLabel(tf) {
+    const unit = TF_UNITS[String(tf).slice(-1)];
+    return unit ? `${String(tf).slice(0, -1)} ${unit}` : tf;
+}
+
 function tfSeconds(tf) {
     return TF_SECONDS[tf] || null;
 }
@@ -118,7 +125,7 @@ function countGaps(candles, tf) {
     return gaps;
 }
 
-module.exports = {
+module.exports = { tfLabel,
     TF_SECONDS,
     tfSeconds,
     isBoundary,

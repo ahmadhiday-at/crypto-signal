@@ -11,17 +11,10 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `BIND_ADDR` | `127.0.0.1` | `docker-compose.yml` | Host interface the port is published on |
 | `ADMIN_TOKEN` | empty | `env.js` | Since 2.25.0: token (at least 16 characters) for config save, backtest run and reset; without it those actions are refused. See [rest.md](../contract/rest.md#admin-token) |
 | `ALLOWED_HOSTS` | empty | `env.js` | Extra Host names besides `localhost`, `127.0.0.1`, `[::1]` |
-| `MARKET_LIST` | `BTCUSDT` | `env.js` | Comma-separated; invalid symbols dropped |
-| `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped. Role timeframes are always fetched and can be charted (since 2.25.2) |
-| `TIMEFRAME_LABELS` | timeframe codes | `env.js` | Same order as `TIMEFRAME_LIST` |
-| `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1w`, `1d`, `4h`, `1h` (since 2.24.0) | `env.js` | Since 2.21.0 only the defaults of calculation config `engine` (role timeframes); unsupported value aborts startup |
-| `WEIGHT_1D`, `WEIGHT_4H`, `WEIGHT_1H`, `WEIGHT_15M`, `WEIGHT_1W`, `WEIGHT_1M` | `3.0`, `2.0`, `1.5`, `1.0`, `1.0`, `1.0` | `env.js` | Since 2.14.0 only the defaults of `weights` in the calculation config (used when the file lacks a key or is created) |
-| `MAPPING_CANDLE` | base 200 | `env.js` | Since 2.21.0 only the defaults of calculation config `lookback`; `tf:candles` pairs, keys case-sensitive |
-| `CANDLE_LIMIT` | `500` | `env.js` | Since 2.21.0 only the default of calculation config `engine.candle_limit`; must be 201–1000, otherwise 500 |
 | `BINANCE_REST_URL` | `https://api.binance.com` | `binance.service.js` | |
 | `BINANCE_WS_URL` | `wss://stream.binance.com:9443/ws` | `binance.service.js` | |
 
-Since 2.25.1 `.env.example` lists deployment settings only. `TF_*`, `WEIGHT_*`, `MAPPING_CANDLE` and `CANDLE_LIMIT` still work as seeds, but `config/calculation.json` holds those values and wins.
+Removed in 3.0.0 (now in `config/calculation.json`, a startup warning names any still set): `MARKET_LIST`, `TIMEFRAME_LIST`, `TIMEFRAME_LABELS`, `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY`, `CANDLE_LIMIT`, `MAPPING_CANDLE`, `WEIGHT_*`.
 
 ## Calculation config
 
@@ -29,13 +22,15 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 | Group | Key | Default | Range | Meaning |
 | :---- | :-- | :------ | :---- | :------ |
-| `engine` | `htf` / `structure` / `mid` / `entry` | `TF_*` env (`1w` / `1d` / `4h` / `1h`) | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
+| `engine` | `markets` | `BTCUSDT`, `BNBUSDT`, `SOLUSDT` | 1–20 upper-case symbols, no duplicates | Markets to track (since 3.0.0). Restart needed |
+| `engine` | `timeframes` | `1w`, `1d`, `4h`, `1h`, `30m`, `15m`, `1m` | supported timeframes, at least 1, no duplicates | Timeframes fetched and charted, role timeframes always added (since 3.0.0). Restart needed |
+| `engine` | `htf` / `structure` / `mid` / `entry` | `1w` / `1d` / `4h` / `1h` | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
 | `shadow` | `enabled` | `on` | `off` / `on` | Shadow signal log (since 2.22.0): a second model logged to `data/signals-shadow/` next to the live signal, which it does not change |
 | `shadow` | `model` | `bounce` (since 2.24.0) | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
-| `shadow` | `htf` / `structure` / `mid` / `entry` | `1d` / `4h` / `1h` / `15m` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in TIMEFRAME_LIST or the live roles; applied at once) |
+| `shadow` | `htf` / `structure` / `mid` / `entry` | `1d` / `4h` / `1h` / `15m` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in engine.timeframes or the live roles; applied at once) |
 | `shadow` | `stop_atr`, `target_r` | 3, 2 | 0.1–20, 0.5–20 | Shadow trend-model stop (× ATR) and target (× risk); other values come from the live groups |
-| `engine` | `candle_limit` | `CANDLE_LIMIT` env (500) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
-| `lookback` | `<tf>` | `MAPPING_CANDLE` env, else 200 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
+| `engine` | `candle_limit` | 1000 (since 3.0.0) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
+| `lookback` | `<tf>` | 200; `30m`, `15m` 300; `1m` 500 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
 | `signal` | `threshold` | 5 | integer 1–15 | Minimum \|score\| for BUY/SELL |
 | `signal` | `min_rr` | 1.5 | 0–10 | Minimum plan risk/reward (else filter `low_rr`) |
 | `signal` | `stop_atr` | 0.5 | 0–3 | Stop loss buffer beyond the entry zone, × ATR |
@@ -47,7 +42,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `filters` | `volatility_dead` | 0.5 | 0–10 | `volatility_ratio` below → `volatility_dead` |
 | `filters` | `htf_trend` | `off` | `off` / `htf` / `htf+structure` | HTF trend filter (since 2.16.0): BUY rejected when a checked timeframe trends `down`, SELL when `up` → `against_htf_trend` |
 | `filters` | `entry_max_atr` | 0 | 0–10 | Entry location (since 2.17.0): price farther than this × ATR from the entry zone → `far_from_entry`; 0 = off |
-| `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
+| `weights` | `<tf>` | `1d` 3, `4h` 2, `1h` 1.5, others 1 | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
 | `scoring` | `near_zone` / `momentum` / `htf_zone` / `divergence` / `volume` | 2 / 2 / 3 / 2 / 1 | integer 0–10 (volume 0–5) | Points per signal reason (since 2.18.0) |
 | `scoring` | `strong_score` | 7 | integer 1–30 | \|score\| for strength `strong` |
 | `signal` | `model` | `trend_pullback` (since 2.24.0) | `bounce` / `trend_pullback` / `breakout` | Signal model (since 2.20.0), see [market-state.md §4.2](../contract/market-state.md#42-trend-models-added-in-2200) |
@@ -93,11 +88,11 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 ## Notes
 
-- All config is in `src/config/env.js` (dotenv). Lists are comma-separated (`MARKET_LIST`, `TIMEFRAME_LIST`, `TIMEFRAME_LABELS`).
+- Env vars are read in `src/config/env.js` (dotenv): server settings and secrets only. Timeframe labels come from the code (`tfLabel` in `candles.js`).
 - `PORT` (default 11000) is used by Node and by both sides of the Docker Compose port mapping.
-- `BINANCE_REST_URL` and `BINANCE_WS_URL` are read from `process.env` inside services, not via `env.js`. `MAPPING_CANDLE` keys are case-sensitive (`1h`, not `1H`); non-matching timeframes seed 200.
-- **Engine at startup (2.21.0):** `server.js` and the backtest CLI apply `engine` from the file (roles → `config.TF_ROLES`, candle limit → `binance.setCandleLimit`). Saving another `engine` logs that a restart is needed and changes nothing until then; `GET /api/calc-config` returns `running_engine`. The CLI option `--roles ENTRY,MID,STRUCTURE,HTF` overrides the roles for one run.
-- Supported timeframes are the keys of `TF_SECONDS` in `src/services/candles.js`. Unsupported `TIMEFRAME_LIST` entries are dropped with a warning; an unsupported role timeframe aborts startup. A new timeframe needs a `TF_SECONDS` entry and, to carry weight, a `TF_WEIGHTS` entry.
+- `BINANCE_REST_URL` and `BINANCE_WS_URL` are read from `process.env` inside services, not via `env.js`.
+- **Engine at startup (2.21.0):** `server.js` and the backtest CLI apply `engine` from the file (markets → `config.MARKETS`, timeframes → `config.TIMEFRAMES`, roles → `config.TF_ROLES`, candle limit → `binance.setCandleLimit`). Saving another `engine` logs that a restart is needed and changes nothing until then; `GET /api/calc-config` returns `running_engine`. The CLI option `--roles ENTRY,MID,STRUCTURE,HTF` overrides the roles for one run.
+- Supported timeframes are the keys of `TF_SECONDS` in `src/services/candles.js`. An invalid `engine` value rejects the whole file (the defaults or last valid values stay in use, and the reason is logged). A new timeframe needs a `TF_SECONDS` entry and, to carry weight, a `TF_WEIGHTS` entry.
 - `HOST` (default `0.0.0.0`) is the Node listen address; Compose forces `HOST=0.0.0.0` in the container and publishes on `BIND_ADDR` (default `127.0.0.1`). `ALLOWED_HOSTS` extends the Host allowlist (`localhost`, `127.0.0.1`, `[::1]`).
 - The staleness threshold, retry delays, cooldowns and the 5 s boundary delay are constants in `freshness.js`, `binance.service.js` and `scheduler.js`, not env vars.
 - `data/` is committed to git; running the app produces diffs there.

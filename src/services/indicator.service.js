@@ -53,7 +53,7 @@ class IndicatorService {
             });
             const atr = ATR.calculate({ high: highs, low: lows, close: closes, period: ind.atr_period });
 
-            // S/R lookback of this timeframe (config `lookback`, was MAPPING_CANDLE).
+            // S/R lookback of this timeframe (config `lookback`).
             const baseCandles = params.lookback?.[timeframe] ?? LOOKBACK_DEFAULT;
             
             const currentPrice = closes[closes.length - 1];

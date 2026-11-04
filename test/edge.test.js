@@ -79,7 +79,7 @@ test('GET /api/edge/:market', async (t) => {
 
     const empty = await fetch(`${base}/api/edge/BTCUSDT`).then(r => r.json());
     assert.deepEqual([empty.verdict, empty.reasons, empty.live_log], ['unproven', ['no_backtest'], null]);
-    // The endpoint compares with the active CANDLE_LIMIT (from .env when present).
+    // The endpoint compares with the active candle limit (default 1000).
     const window = require('../src/services/binance.service').candleLimit() - 1;
     await reports.write('BTCUSDT', report({ taken: { summary: summary(71, -0.24) }, params: { ...report().params, window } }));
     const neg = await fetch(`${base}/api/edge/BTCUSDT`).then(r => r.json());
@@ -91,7 +91,7 @@ test('GET /api/edge/:market', async (t) => {
 test('calculation config API, edge params_differ and backtest re-run', async (t) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-calc-'));
     const reports = createReports({ dir: path.join(dir, 'backtest') });
-    const calc = createCalcConfig({ file: path.join(dir, 'calculation.json'), envWeights: testConfig.TF_WEIGHTS, log: silentLog });
+    const calc = createCalcConfig({ file: path.join(dir, 'calculation.json'), log: silentLog });
     calc.load();
     const started = [];
     const runner = {

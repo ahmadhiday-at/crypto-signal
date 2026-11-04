@@ -148,7 +148,7 @@ function trendTfsOf(mode, htfTf, structureTf) {
 
 // `state` is a Market State (contract v2) with `status` already computed; `htfTf` is the TF_HTF role.
 // `opts` holds the calculation config (signalOptions in src/config/calculation.js) plus
-// `structureTf` and `entryTf` (the TF_STRUCTURE / TF_ENTRY roles); missing keys use the defaults
+// `structureTf` and `entryTf` (the structure and entry roles); missing keys use the defaults
 // above. `opts.model` picks the signal model (MODELS).
 function computeSignal(state, htfTf, opts = {}) {
     const model = opts.model ?? MODEL;

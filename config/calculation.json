@@ -1,5 +1,20 @@
 {
   "engine": {
+    "markets": [
+      "BTCUSDT",
+      "BNBUSDT",
+      "XAUTUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "1w",
+      "1d",
+      "4h",
+      "1h",
+      "30m",
+      "15m",
+      "1m"
+    ],
     "htf": "1w",
     "structure": "1d",
     "mid": "4h",

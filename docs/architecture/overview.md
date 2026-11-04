@@ -26,7 +26,7 @@ Responsible for the interface between the system and the external market.
 
 Transforms raw price data into mathematical and structural insights.
 
-- **S/R Clustering Engine:** Identifies "Zones" of support and resistance by clustering swing-high/low pivots that lie within 0.5% of each other. The lookback adapts to volatility (`MAPPING_CANDLE` base, ±20%).
+- **S/R Clustering Engine:** Identifies "Zones" of support and resistance by clustering swing-high/low pivots that lie within 0.5% of each other. The lookback adapts to volatility (`lookback` base, ±20%).
 - **Indicator Suite:** Calculates MA14, MA50, MA200, RSI, MACD and ATR.
 - **Volatility Analysis:** Uses ATR to set the zone width (0.5 × ATR on each side of the zone centre).
 
@@ -103,7 +103,7 @@ Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static fi
 
 | URL | Page |
 | :-- | :--- |
-| `/` | 302 to `/{first MARKET_LIST market}` (since 2.13.0) |
+| `/` | 302 to `/{first engine.markets market}` (since 2.13.0) |
 | `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; Signal log CSV link) |
 | `/backtest/:market` | Backtest report (`public/backtest.html`) |
 | `/config` | Calculation config and backtest re-run (`public/config.html`, since 2.14.0) |

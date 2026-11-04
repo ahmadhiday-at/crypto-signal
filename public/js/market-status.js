@@ -44,11 +44,11 @@
         return { level: 'unavailable', showValues: false, title: 'UNAVAILABLE', detail: 'Unknown status ' + data.status, errors: errors };
     }
 
-    // Status for a URL symbol that is not in the server's MARKET_LIST (`markets`: configured codes).
+    // Status for a URL symbol that is not in the server's engine.markets (`markets`: configured codes).
     function describeUnknownMarket(market, markets) {
         return {
             level: 'unavailable', showValues: false, title: 'NOT CONFIGURED',
-            detail: market + ' is not in the market list (MARKET_LIST). Available: ' + (markets.length ? markets.join(', ') : 'none') + '.',
+            detail: market + ' is not in the market list (engine.markets). Available: ' + (markets.length ? markets.join(', ') : 'none') + '.',
             errors: [],
         };
     }

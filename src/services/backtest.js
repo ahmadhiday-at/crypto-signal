@@ -143,7 +143,7 @@ const snapshotKey = (p) => JSON.stringify([p.calc.indicators, p.calc.zones, p.ca
 const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market, p.calc.divergence, p.calc.trend.channel_candles]);
 
 // `candlesByTf` holds closed candles per role timeframe, sorted. `window` is the number of closed
-// candles each snapshot sees (the live app uses CANDLE_LIMIT − 1). `variants` (sweep) are parameter
+// candles each snapshot sees (the live app uses engine.candle_limit − 1). `variants` (sweep) are parameter
 // overrides replayed on the same snapshots; the base parameters always run and give the main report.
 // `splitSec` adds the out-of-sample `validation` (trades signalled before it are in-sample).
 // `fixed` holds the calculation-config values no variant changes (FIXED_KEYS); missing keys use the

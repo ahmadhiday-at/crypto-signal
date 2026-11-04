@@ -372,7 +372,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
 
     // Shadow signal log (calculation config `shadow`): a second model on its own role timeframes,
     // built from the stored snapshots after each published summary and logged apart. The live signal
-    // is not touched. Its role timeframes must be among the fetched ones (TIMEFRAME_LIST + roles).
+    // is not touched. Its role timeframes must be among the fetched ones (engine.timeframes + roles).
     const shadowLatest = new Map();
     let shadowWarned = null;
     async function runShadow(market) {
@@ -382,7 +382,7 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         const missing = tfs.filter(tf => !allTfs.includes(tf));
         if (missing.length) {
             const key = missing.join(',');
-            if (shadowWarned !== key) log.warn(`[Shadow] role timeframes ${key} are not fetched (add them to TIMEFRAME_LIST); shadow log paused`);
+            if (shadowWarned !== key) log.warn(`[Shadow] role timeframes ${key} are not fetched (add them to engine.timeframes); shadow log paused`);
             shadowWarned = key;
             return;
         }

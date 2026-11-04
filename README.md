@@ -1,6 +1,6 @@
 # 📈 Crypto Signal: Market State Engine
 
-[![Version](https://img.shields.io/badge/version-2.25.2-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
 A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1W, 1D, 4H and 1H timeframes into a single top-down view:
@@ -21,7 +21,7 @@ Requires Node.js 22 or higher (the Docker image uses Node 24).
 git clone <your-repo-url>
 cd crypto-signal
 npm install
-cp .env.example .env    # then adjust MARKET_LIST, TIMEFRAME_LIST, PORT, HOST, ...
+cp .env.example .env    # then set ADMIN_TOKEN; markets and timeframes are on /config
 ```
 
 Every option is described in [.env.example](./.env.example). Default port: `11000`. For local runs set `HOST=127.0.0.1`.

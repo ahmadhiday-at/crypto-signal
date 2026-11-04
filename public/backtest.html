@@ -321,7 +321,7 @@
                 const config = (await header) || { markets: [] };
                 const empty = document.getElementById('empty');
                 empty.classList.remove('hidden');
-                empty.textContent = `${market} is not in the market list (MARKET_LIST). Available: ${config.markets.map(m => m.code).join(', ') || 'none'}.`;
+                empty.textContent = `${market} is not in the market list (engine.markets). Available: ${config.markets.map(m => m.code).join(', ') || 'none'}.`;
                 return;
             }
             if (!res.ok) {

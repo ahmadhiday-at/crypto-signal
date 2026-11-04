@@ -178,7 +178,7 @@ function rolesOption(argv) {
 }
 
 async function main() {
-    const calc = createCalcConfig({ envWeights: config.TF_WEIGHTS, envEngine: config.ENGINE_ENV });
+    const calc = createCalcConfig();
     const loaded = calc.load();
     if (!loaded.loaded) throw new Error(`config/calculation.json is not usable (${loaded.error})`);
     let cfg = calc.get();

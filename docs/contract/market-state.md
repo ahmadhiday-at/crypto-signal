@@ -28,8 +28,8 @@ The server validates every Market State against this contract (`src/services/con
 - **Candle close time:** the end of the candle interval, i.e. open time + timeframe length. A candle is **closed** once the current time has reached its close time.
 - **Prices:** quote currency of the pair (USDT for `*USDT`).
 - **Fractions vs percentages:** `distance.*` is a fraction (`0.0069` = 0.69%); `distance_percent.*` is the same value in percent.
-- **Entry timeframe:** the timeframe assigned to the `TF_ENTRY` role (default `1h` since 2.24.0). Fields marked *entry TF* are taken from it.
-- **Role timeframes:** `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` (default `1w`, `1d`, `4h`, `1h` since 2.24.0). Only these feed the Market State. Other configured timeframes are used for charts only.
+- **Entry timeframe:** the timeframe assigned to the `engine.entry` role (default `1h` since 2.24.0). Fields marked *entry TF* are taken from it.
+- **Role timeframes:** config `engine.htf`, `structure`, `mid`, `entry` (default `1w`, `1d`, `4h`, `1h` since 2.24.0). Only these feed the Market State. Other configured timeframes are used for charts only.
 - **Closed candles only:** every field below is derived from closed candles. The forming candle and the live ticker price never enter the Market State.
 
 ---
@@ -111,7 +111,7 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 | :--- | :----- | :--- |
 | `near_support` / `near_resistance` | +2 / −2 | `context` is `near_support` / `near_resistance` |
 | `bullish_momentum` / `bearish_momentum` | +2 / −2 | `momentum` is `bullish` / `bearish` |
-| `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `TF_HTF` timeframe in `tfs` and is ≤ 1% from `price` |
+| `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `engine.htf` timeframe in `tfs` and is ≤ 1% from `price` |
 | `bullish_divergence` / `bearish_divergence` | +2 / −2 | `divergence` is `bullish` / `bearish` (added in 2.4.0) |
 | `volume_surge` / `weak_volume` | ±1 | only when score ≠ 0: `volume_state` `high` adds 1 toward the current direction, `low` moves 1 toward zero |
 | `data_not_current` | 0 | `status` is not `ok`; forces `action` = `WAIT` |
@@ -128,9 +128,9 @@ The calculation config `signal.model` picks the model; `bounce` is §4.1; since 
 
 | Code | Points | When |
 | :--- | :----- | :--- |
-| `htf_trend_up` / `htf_trend_down` | ± `htf_points` (3) | TF_HTF trend |
-| `structure_trend_up` / `_down` | ± `structure_points` (2) | TF_STRUCTURE trend (skipped when it equals TF_HTF) |
-| `entry_trend_up` / `_down` | ± `entry_points` (1) | TF_ENTRY trend (skipped when it equals a higher role) |
+| `htf_trend_up` / `htf_trend_down` | ± `htf_points` (3) | `engine.htf` trend |
+| `structure_trend_up` / `_down` | ± `structure_points` (2) | `engine.structure` trend (skipped when it equals `engine.htf`) |
+| `entry_trend_up` / `_down` | ± `entry_points` (1) | `engine.entry` trend (skipped when it equals a higher role) |
 | `pullback_to_ma` | `pullback_points` (2) in the direction of the trend points | `trend_pullback`: \|price − `indicators.ma50`\| ≤ `pullback_atr` × ATR |
 | `channel_breakout_up` / `_down` | ± `breakout_points` (3) | `breakout`: `price` > `channel.high` (< `channel.low`), not against the trend points |
 | `bullish_momentum` / `bearish_momentum` | ± `momentum_points` (1) | MACD histogram has the sign of the score |
@@ -158,7 +158,7 @@ BUY / SELL at \|score\| ≥ `signal.threshold`. Filters: `volatility_extreme`, `
 | `entry_zone` | `[low, high]` of `levels.support[0]` | `[low, high]` of `levels.resistance[0]` |
 | `stop_loss` | zone low − 0.5 × ATR | zone high + 0.5 × ATR |
 | `take_profit_1` | nearest resistance `mid` above `price`, or `null`; with config `signal.target` = `rr_zone` (2.17.0) the first one giving RR ≥ `min_rr` (nearest if none); `tp2` = TP2 | mirror (support below `price`) |
-| `take_profit_2` | highest-scored `TF_HTF` resistance beyond TP1, or `null` | highest-scored `TF_HTF` support beyond TP1, or `null` |
+| `take_profit_2` | highest-scored `engine.htf` resistance beyond TP1, or `null` | highest-scored `engine.htf` support beyond TP1, or `null` |
 | `risk_reward` | (TP1 − price) ÷ (price − stop), 2 decimals; `null` if not computable | (price − TP1) ÷ (stop − price) |
 | `trailing_stop` | price − 1.5 × ATR | price + 1.5 × ATR |
 | `entry_distance_atr` | distance from `price` to the entry zone ÷ ATR, 0 inside the zone, 2 decimals (added in 2.17.0) | same |

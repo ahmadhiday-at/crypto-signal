@@ -14,16 +14,21 @@ const { EXPIRY_CANDLES } = require('../services/signal-log');
 const FILE = path.join(__dirname, '../../config/calculation.json');
 const WATCH_INTERVAL_MS = 2000;
 
-// Role timeframes and CANDLE_LIMIT (group `engine`): applied at startup only (src/config/calculation.js
-// applyEngine), so a change needs a restart. Seeded from TF_* / CANDLE_LIMIT in .env.
+// Markets, timeframes, role timeframes and candle limit (group `engine`): applied at startup only
+// (applyEngine below), so a change needs a restart.
 const ROLE_KEYS = ['htf', 'structure', 'mid', 'entry'];
 const TF_CHOICES = { values: Object.keys(TF_SECONDS) };
-const ENGINE_DEFAULTS = { htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 500 };
+const ENGINE_DEFAULTS = {
+    markets: ['BTCUSDT', 'BNBUSDT', 'SOLUSDT'], timeframes: ['1w', '1d', '4h', '1h', '30m', '15m', '1m'],
+    htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 1000,
+};
+const WEIGHT_DEFAULTS = { '1w': 1, '1d': 3, '4h': 2, '1h': 1.5, '15m': 1, '1m': 1 };
+const LOOKBACK_DEFAULTS = { '1w': 200, '1d': 200, '4h': 200, '1h': 200, '30m': 300, '15m': 300, '1m': 500 };
 // Shadow signal log (group `shadow`): a second model on its own role timeframes, logged next to the
 // live signal without changing it. Its other values (threshold, filters, points) are the live ones.
 const SHADOW_DEFAULTS = { enabled: 'on', model: 'bounce', htf: '1d', structure: '4h', mid: '1h', entry: '15m', stop_atr: 3, target_r: 2 };
 
-// S/R lookback candles per timeframe (group `lookback`, was MAPPING_CANDLE); unlisted timeframes use 200.
+// S/R lookback candles per timeframe (group `lookback`); unlisted timeframes use 200.
 const LOOKBACK_LIMITS = [20, 1000, true];
 const LOOKBACK_DEFAULT = 200;
 
@@ -31,6 +36,9 @@ const LOOKBACK_DEFAULT = 200;
 // supported timeframe, 0.1–20 (a weight of 0 would fall back to the default weight in the zone merge).
 const LIMITS = {
     engine: {
+        // Symbols become file names and URL segments, so only plain upper-case symbols are accepted.
+        markets: { list: true, pattern: '^[A-Z0-9]{5,20}$', min_items: 1, max_items: 20 },
+        timeframes: { list: true, values: Object.keys(TF_SECONDS), min_items: 1 },
         htf: TF_CHOICES,
         structure: TF_CHOICES,
         mid: TF_CHOICES,
@@ -157,18 +165,11 @@ const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.1, split: 0.7 };
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 
-// `envWeights` is config.TF_WEIGHTS: the WEIGHT_* env vars seed the default weights.
-// `envEngine` is config.ENGINE_ENV: the TF_* roles, CANDLE_LIMIT and MAPPING_CANDLE seed `engine`
-// and `lookback`.
-function defaultsOf(envWeights = {}, envEngine = {}) {
-    const weights = {};
-    for (const [tf, w] of Object.entries(envWeights)) if (TF_SECONDS[tf]) weights[tf] = w;
-    const lookback = {};
-    for (const [tf, n] of Object.entries(envEngine.lookback || {})) if (TF_SECONDS[tf]) lookback[tf] = n;
+function defaultsOf() {
     return {
-        engine: { ...ENGINE_DEFAULTS, ...(envEngine.roles || {}), candle_limit: envEngine.candle_limit ?? ENGINE_DEFAULTS.candle_limit },
+        engine: copy(ENGINE_DEFAULTS),
         shadow: { ...SHADOW_DEFAULTS },
-        signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights, lookback,
+        signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights: { ...WEIGHT_DEFAULTS }, lookback: { ...LOOKBACK_DEFAULTS },
         scoring: { ...SCORING_DEFAULTS }, trend: { ...TREND_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
         market: { ...MARKET_DEFAULTS }, divergence: { ...DIVERGENCE_DEFAULTS },
         evaluation: { expiry_candles: EXPIRY_CANDLES, min_trades: 30 },
@@ -177,11 +178,17 @@ function defaultsOf(envWeights = {}, envEngine = {}) {
 }
 
 function inRange(v, limits) {
+    if (limits.list) {
+        if (!Array.isArray(v) || v.length < limits.min_items || v.length > (limits.max_items ?? Infinity)) return false;
+        if (new Set(v).size !== v.length) return false;
+        return v.every(item => (limits.values ? limits.values.includes(item) : typeof item === 'string' && new RegExp(limits.pattern).test(item)));
+    }
     if (!Array.isArray(limits)) return limits.values.includes(v);
     const [min, max, int] = limits;
     return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
 }
 function hint(limits) {
+    if (limits.list) return `a list without duplicates of ${limits.values ? limits.values.join(', ') : 'upper-case symbols'} (at least ${limits.min_items})`;
     if (!Array.isArray(limits)) return `one of ${limits.values.join(', ')}`;
     const [min, max, int] = limits;
     return `${int ? 'an integer' : 'a number'} ${min}–${max}`;
@@ -194,6 +201,9 @@ function crossProblems(c) {
         const secs = ROLE_KEYS.map(r => TF_SECONDS[c[group][r]]);
         if (secs.some((v, i) => i > 0 && v > secs[i - 1])) out.push(`${group}: htf ≥ structure ≥ mid ≥ entry timeframe is required`);
     }
+    const fetched = new Set([...c.engine.timeframes, ...ROLE_KEYS.map(r => c.engine[r])]);
+    const missing = ROLE_KEYS.map(r => c.shadow[r]).filter(tf => !fetched.has(tf));
+    if (missing.length) out.push(`shadow: ${[...new Set(missing)].join(', ')} must be in engine.timeframes or the engine roles`);
     const candleLimit = c.engine.candle_limit;
     const order = (group, keys) => {
         for (let i = 1; i < keys.length; i++) {
@@ -206,7 +216,7 @@ function crossProblems(c) {
     const ind = c.indicators;
     const needed = Math.max(ind.ma_slow, ind.macd_slow + ind.macd_signal, ind.rsi_period + 1, ind.atr_period + 1);
     if (ind.min_candles < needed) out.push(`indicators.min_candles must be at least ${needed} (the longest indicator period)`);
-    // Each snapshot sees CANDLE_LIMIT − 1 closed candles.
+    // Each snapshot sees engine.candle_limit − 1 closed candles.
     if (ind.min_candles > candleLimit - 1) out.push(`indicators.min_candles must be at most ${candleLimit - 1} (engine.candle_limit − 1)`);
     order('market', ['volume_low', 'volume_increasing', 'volume_high']);
     order('market', ['energy_cooling', 'energy_building', 'energy_explosive']);
@@ -269,9 +279,8 @@ const stateParams = (cfg) => ({ market: cfg.market, divergence: cfg.divergence, 
 const RESULT_GROUPS = ['scoring', 'trend', 'indicators', 'zones', 'lookback', 'market', 'divergence', 'evaluation'];
 const resultParams = (cfg) => Object.fromEntries(RESULT_GROUPS.map(g => [g, cfg[g]]));
 
-// `envWeights` / `envEngine` (config.TF_WEIGHTS / config.ENGINE_ENV) seed the defaults.
-function createCalcConfig({ file = FILE, envWeights = {}, envEngine = {}, log = console } = {}) {
-    const defaults = defaultsOf(envWeights, envEngine);
+function createCalcConfig({ file = FILE, log = console } = {}) {
+    const defaults = defaultsOf();
     let current = copy(defaults);
     const listeners = [];
 
@@ -382,12 +391,14 @@ function shadowOptions(cfg) {
 const snapshotChanged = (next, prev) => SNAPSHOT_GROUPS.some(g => JSON.stringify(next[g]) !== JSON.stringify(prev[g]));
 const engineChanged = (next, prev) => JSON.stringify(next.engine) !== JSON.stringify(prev.engine);
 
-// Startup: the saved role timeframes and candle limit replace the .env values for this process.
+// Startup: the saved markets, timeframes, roles and candle limit are what this process runs on.
 // Returns the engine values now running (shown by /config until the next restart).
 function applyEngine(config, binance, cfg) {
+    config.MARKETS = [...cfg.engine.markets];
+    config.TIMEFRAMES = [...cfg.engine.timeframes];
     config.TF_ROLES = Object.fromEntries(ROLE_KEYS.map(r => [r, cfg.engine[r]]));
     binance.setCandleLimit(cfg.engine.candle_limit);
-    config.ENGINE_RUNNING = { ...cfg.engine };
+    config.ENGINE_RUNNING = copy(cfg.engine);
     return config.ENGINE_RUNNING;
 }
 

@@ -243,8 +243,8 @@ test('without a configured token every action is refused', () => {
     assert.equal(call('a-long-enough-token-1234', 'a-long-enough-token-123').code, 401);
 });
 
-test('role timeframes can be charted even when TIMEFRAME_LIST omits them', async (t) => {
-    const config = { ...testConfig, TIMEFRAMES: ['15m'], TIMEFRAME_LABELS: ['15 Minute'], TF_ROLES: { htf: '1d', structure: '4h', mid: '1h', entry: '1h' }, ALLOWED_HOSTS: ['127.0.0.1'] };
+test('role timeframes can be charted even when engine.timeframes omits them', async (t) => {
+    const config = { ...testConfig, TIMEFRAMES: ['15m'], TF_ROLES: { htf: '1d', structure: '4h', mid: '1h', entry: '1h' }, ALLOWED_HOSTS: ['127.0.0.1'] };
     const now = (MIDNIGHT + 5) * 1000;
     const engine = createMarketEngine({ storage: tempStorage(), binance: fakeBinance({ now: () => now }), indicators: require('../src/services/indicator.service'), config, now: () => now, log: silentLog });
     await engine.initialize();
@@ -253,12 +253,12 @@ test('role timeframes can be charted even when TIMEFRAME_LIST omits them', async
     t.after(() => new Promise(r => server.close(r)));
     const base = `http://127.0.0.1:${server.address().port}`;
     const body = await fetch(`${base}/api/config`).then(r => r.json());
-    assert.deepEqual(body.timeframes, [{ code: '1d', label: '1d' }, { code: '4h', label: '4h' }, { code: '1h', label: '1h' }, { code: '15m', label: '15 Minute' }]);
+    assert.deepEqual(body.timeframes, [{ code: '1d', label: '1 Day' }, { code: '4h', label: '4 Hour' }, { code: '1h', label: '1 Hour' }, { code: '15m', label: '15 Minute' }]);
     assert.equal((await fetch(`${base}/api/BTCUSDT/1h`)).status, 200, 'every listed timeframe has data');
     assert.equal((await fetch(`${base}/api/BTCUSDT/30m`)).status, 404, 'a timeframe that is not fetched stays unknown');
 });
 
-test('a TIMEFRAME_LIST that holds the roles keeps its order and labels', async (t) => {
+test('a timeframe list that holds the roles keeps its order', async (t) => {
     const s = await startServer();
     t.after(s.close);
     const { timeframes } = (await req(s.base, '/api/config')).body;

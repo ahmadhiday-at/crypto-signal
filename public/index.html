@@ -243,7 +243,7 @@
                 });
 
                 const problems = [];
-                if (!markets.includes(globalMarket)) problems.push(`${globalMarket} is not in the market list (MARKET_LIST). Available: ${markets.join(', ') || 'none'}.`);
+                if (!markets.includes(globalMarket)) problems.push(`${globalMarket} is not in the market list (engine.markets). Available: ${markets.join(', ') || 'none'}.`);
                 if (!tfs.includes(globalTf)) problems.push(`${globalTf} is not a configured timeframe. Available: ${tfs.join(', ')}.`);
                 if (problems.length) {
                     const statusEl = document.getElementById('data-status');

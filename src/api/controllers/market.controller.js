@@ -5,15 +5,14 @@ const path = require('path');
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, shadowSummary, liveParams } = require('../../services/edge');
 const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
-const { tfSeconds } = require('../../services/candles');
+const { tfSeconds, tfLabel } = require('../../services/candles');
 
-// TIMEFRAME_LIST plus the role timeframes, which are always fetched. With additions the list runs
+// engine.timeframes plus the role timeframes, which are always fetched. With additions the list runs
 // from the longest timeframe to the shortest; otherwise it keeps the configured order.
 function chartTimeframes(config) {
-    const listed = config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code }));
     const added = [...new Set(Object.values(config.TF_ROLES))].filter(tf => !config.TIMEFRAMES.includes(tf));
-    if (!added.length) return listed;
-    return [...listed, ...added.map(code => ({ code, label: code }))].sort((a, b) => tfSeconds(b.code) - tfSeconds(a.code));
+    const codes = added.length ? [...config.TIMEFRAMES, ...added].sort((a, b) => tfSeconds(b) - tfSeconds(a)) : config.TIMEFRAMES;
+    return codes.map(code => ({ code, label: tfLabel(code) }));
 }
 
 // Read on each call so a version bump shows up without restarting the server.
@@ -118,7 +117,7 @@ function createMarketController({ engine, config, reports = null, calc = null, r
             defaults: calc.defaults(),
             limits: { ...LIMITS, weights: WEIGHT_LIMITS, lookback: LOOKBACK_LIMITS },
             role_timeframes: config.TF_ROLES,
-            // Role timeframes and candle limit in use; a saved `engine` that differs needs a restart.
+            // Markets, timeframes, roles and candle limit in use; a saved `engine` that differs needs a restart.
             running_engine: config.ENGINE_RUNNING ?? null,
         });
     }
