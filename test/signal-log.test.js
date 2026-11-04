@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { createSignalLog, evaluate, candidateDirection, toCsv, EXPIRY_CANDLES } = require('../src/services/signal-log');
+const { createSignalLog, isCurrentRecord, configHash, evaluate, candidateDirection, toCsv, EXPIRY_CANDLES } = require('../src/services/signal-log');
 const { createMarketEngine } = require('../src/services/market.service');
 const { createApp } = require('../src/app');
 const { edgeSummary, liveParams } = require('../src/services/edge');
@@ -130,7 +130,7 @@ test('engine passes each published summary and entry candles to the log; log err
     assert.equal(calls[1][0], 'summary');
     assert.equal(calls[1][2], 'ok');
     assert.ok(calls[1][3] >= 200, 'closed entry candles are passed');
-    assert.deepEqual(await engine.signalRecords('BTCUSDT'), { market: 'BTCUSDT', entry_tf: '15m', stats: { total: 0, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 }, records: [] });
+    assert.deepEqual(await engine.signalRecords('BTCUSDT'), { market: 'BTCUSDT', entry_tf: '15m', model: null, stats: { total: 0, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 }, records: [] });
 });
 
 test('GET /api/signals/:market serves JSON and CSV', async (t) => {
@@ -185,3 +185,66 @@ test('signal stats and Edge cover the current entry timeframe; records keep the 
     const edge = edgeSummary('BTCUSDT', null, body, liveParams(testConfig, null, 499));
     assert.equal(edge.live_log.trades, 1);
 });
+
+test('new records carry the model, config hash and version; the config is kept once per hash', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    const config = { model: 'trend_pullback', roles: { entry: '1h' }, signal: { threshold: 5 } };
+    const describe = () => ({ model: config.model, config, app_version: '9.9.9' });
+    const log = createSignalLog({ dir, entryTf: '1h', describe, log: silentLog });
+    await log.load(['BTCUSDT']);
+    const state = (score) => ({
+        status: 'ok', price: 100, generated_at: 1000,
+        signal: { score, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: score > 0 ? 90 : 110, take_profit_1: score > 0 ? 120 : 80, risk_reward: 2, entry_zone: [100, 100] } },
+    });
+    await log.onSummary('BTCUSDT', state(8), [{ time: 3600, high: 101, low: 99, close: 100, close_time: 7200 }]);
+    await log.onSummary('BTCUSDT', state(-8), [{ time: 7200, high: 101, low: 99, close: 100, close_time: 10800 }]);
+    const records = await log.records('BTCUSDT');
+    assert.equal(records.length, 2);
+    const hash = configHash(config);
+    for (const r of records) assert.deepEqual([r.model, r.config_hash, r.app_version], ['trend_pullback', hash, '9.9.9']);
+    assert.match(hash, /^[0-9a-f]{12}$/);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'configs')), [`${hash}.json`]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'configs', `${hash}.json`), 'utf8')), config);
+    const csv = toCsv(records).split('\n');
+    assert.ok(csv[0].endsWith('model,config_hash,app_version'));
+    assert.ok(csv[1].endsWith(`trend_pullback,${hash},9.9.9`));
+});
+
+test('the config hash ignores key order and changes with any value', () => {
+    assert.equal(configHash({ a: 1, b: { c: 2, d: 3 } }), configHash({ b: { d: 3, c: 2 }, a: 1 }));
+    assert.notEqual(configHash({ a: 1 }), configHash({ a: 2 }));
+});
+
+test('a failed config snapshot does not cost the record', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    fs.writeFileSync(path.join(dir, 'configs'), 'a file where the folder should be');
+    const warnings = [];
+    const log = createSignalLog({ dir, entryTf: '1h', describe: () => ({ model: 'breakout', config: { a: 1 }, app_version: '1' }), log: { ...silentLog, warn: (m) => warnings.push(m) } });
+    await log.load(['BTCUSDT']);
+    const state = { status: 'ok', price: 100, generated_at: 1000, signal: { score: 8, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: 90, take_profit_1: 120, risk_reward: 2 } } };
+    await log.onSummary('BTCUSDT', state, [{ time: 3600, high: 101, low: 99, close: 100, close_time: 7200 }]);
+    assert.equal((await log.records('BTCUSDT')).length, 1);
+    assert.equal(warnings.length, 1);
+});
+
+test('stats keep models apart on one timeframe; records without a model still count', () => {
+    assert.equal(isCurrentRecord({ timeframe: '1h', model: 'breakout' }, '1h', 'breakout'), true);
+    assert.equal(isCurrentRecord({ timeframe: '1h', model: 'bounce' }, '1h', 'breakout'), false);
+    assert.equal(isCurrentRecord({ timeframe: '1h' }, '1h', 'breakout'), true, 'older than 3.1.0');
+    assert.equal(isCurrentRecord({ timeframe: '15m', model: 'breakout' }, '1h', 'breakout'), false);
+});
+
+test('another model does not block a new record, and each model keeps its own open record', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    const old = { type: 'signal', id: 'BTCUSDT-0-BUY', market: 'BTCUSDT', timeframe: '1h', model: 'bounce', candle_time: 0, candle_close_time: 3600, signal: 'BUY', filtered: false, price: 100, sl: 50, tp1: 200, risk_reward: 2 };
+    fs.writeFileSync(path.join(dir, 'BTCUSDT.jsonl'), JSON.stringify(old) + '\n');
+    const log = createSignalLog({ dir, entryTf: '1h', describe: () => ({ model: 'trend_pullback', config: { a: 1 }, app_version: '1' }), log: silentLog });
+    await log.load(['BTCUSDT']);
+    const state = { status: 'ok', price: 100, generated_at: 1000, signal: { score: 8, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: 90, take_profit_1: 120, risk_reward: 2 } } };
+    const candle = { time: 3600, high: 101, low: 99, close: 100, close_time: 7200 };
+    await log.onSummary('BTCUSDT', state, [candle]);
+    await log.onSummary('BTCUSDT', state, [candle]);
+    const records = await log.records('BTCUSDT');
+    assert.deepEqual(records.map(r => [r.model, r.result]), [['bounce', null], ['trend_pullback', null]]);
+});
+

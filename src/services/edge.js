@@ -2,6 +2,7 @@
 // report and the live signal log. Shown next to the signal so a BUY/SELL is never read as a proven
 // edge when the measured expectancy says otherwise.
 const { metrics } = require('./backtest');
+const { isCurrentRecord } = require('./signal-log');
 const { MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
 const { FIXED_KEYS } = require('./backtest');
 const { defaultsOf, resultParams, RESULT_GROUPS } = require('../config/calculation');
@@ -51,8 +52,8 @@ function rolesMatch(reportRoles, liveRoles) {
 }
 
 // Taken records of a signal log: open count and the summary of the closed ones (rr before fees).
-function logSummary(records, entryTf) {
-    const taken = records.filter(r => !r.filtered && (!entryTf || r.timeframe === entryTf));
+function logSummary(records, entryTf, model) {
+    const taken = records.filter(r => !r.filtered && isCurrentRecord(r, entryTf, model));
     const closed = taken.filter(r => CLOSED.includes(r.result)).map(r => ({ ...r, net_r: r.rr }));
     return { open: taken.filter(r => r.result === null).length, ...pick(metrics(closed).summary) };
 }
@@ -62,7 +63,7 @@ function shadowSummary(body) {
     if (!body || !body.enabled) return null;
     return {
         model: body.model, roles: body.roles, latest: body.latest ? { action: body.latest.signal.action, score: body.latest.signal.score, status: body.latest.status } : null,
-        ...logSummary(body.records, body.entry_tf),
+        ...logSummary(body.records, body.entry_tf, body.model),
     };
 }
 
@@ -83,7 +84,7 @@ function edgeSummary(market, report, log, live) {
         };
     }
 
-    const liveLog = log ? logSummary(log.records, log.entry_tf) : null;
+    const liveLog = log ? logSummary(log.records, log.entry_tf, log.model) : null;
 
     let verdict;
     const taken = backtest?.taken;

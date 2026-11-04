@@ -3,6 +3,7 @@ const { computeInputs, summaryStatus, inputStatus, FUTURE_TOLERANCE_S } = requir
 const { SCHEMA_VERSION, ERROR_CODES, validateMarketState, validateSnapshot } = require('./contract');
 const { computeSignal, TREND_DEFAULTS } = require('./signal');
 const { detectDivergence } = require('./divergence');
+const { isCurrentRecord } = require('./signal-log');
 
 // Defaults of the calculation config's `market` group (config/calculation.json): volume state,
 // market energy, breakout score and its confirmation, dominant side and the volatility ratio.
@@ -695,17 +696,18 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         if (!l) return null;
         const records = await l.records(market);
         const so = source === 'shadow' && calc ? calc.shadowOptions() : null;
-        // Stats and Edge cover the current entry timeframe; `records` keeps the whole dataset.
+        // Stats and Edge cover the current entry timeframe and model; `records` keeps the whole dataset.
         const entry_tf = source === 'shadow' ? so?.roles.entry ?? null : config.TF_ROLES.entry;
-        const current = records.filter(r => !entry_tf || r.timeframe === entry_tf);
+        const model = source === 'shadow' ? so?.signal.model ?? null : calc?.get().signal.model ?? null;
+        const current = records.filter(r => isCurrentRecord(r, entry_tf, model));
         const stats = { total: current.length, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 };
         for (const r of current) {
             if (r.result === null) stats.open++;
             else stats[r.result] = (stats[r.result] || 0) + 1;
         }
-        if (source !== 'shadow') return { market, entry_tf, stats, records };
+        if (source !== 'shadow') return { market, entry_tf, model, stats, records };
         return {
-            market, source, entry_tf, enabled: Boolean(so), model: so?.signal.model ?? null, roles: so?.roles ?? null,
+            market, source, entry_tf, enabled: Boolean(so), model, roles: so?.roles ?? null,
             latest: shadowLatest.get(market) ?? null, stats, records,
         };
     }

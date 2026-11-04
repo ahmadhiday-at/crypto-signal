@@ -1,11 +1,10 @@
 // Request handlers. Every market/timeframe parameter is checked against the configured lists before
 // it reaches storage or Binance.
-const fs = require('fs');
-const path = require('path');
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, shadowSummary, liveParams } = require('../../services/edge');
 const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
 const { tfSeconds, tfLabel } = require('../../services/candles');
+const { appVersion } = require('../../config/version');
 
 // engine.timeframes plus the role timeframes, which are always fetched. With additions the list runs
 // from the longest timeframe to the shortest; otherwise it keeps the configured order.
@@ -13,15 +12,6 @@ function chartTimeframes(config) {
     const added = [...new Set(Object.values(config.TF_ROLES))].filter(tf => !config.TIMEFRAMES.includes(tf));
     const codes = added.length ? [...config.TIMEFRAMES, ...added].sort((a, b) => tfSeconds(b) - tfSeconds(a)) : config.TIMEFRAMES;
     return codes.map(code => ({ code, label: tfLabel(code) }));
-}
-
-// Read on each call so a version bump shows up without restarting the server.
-function appVersion() {
-    try {
-        return JSON.parse(fs.readFileSync(path.join(__dirname, '../../../package.json'), 'utf8')).version;
-    } catch (e) {
-        return null;
-    }
 }
 
 // `calc` (calculation config) and `runner` (backtest runner) are optional; their endpoints answer

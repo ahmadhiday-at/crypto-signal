@@ -387,6 +387,13 @@ function shadowOptions(cfg) {
     };
 }
 
+// Every value that decides a signal, for the signal log's config_hash and config snapshot. `overrides`
+// replaces groups for the shadow model. Markets and backtest settings are left out on purpose.
+function signalConfig(cfg, model, roles, overrides = {}) {
+    const { signal, filters, weights, scoring, trend, indicators, zones, lookback, market, divergence, evaluation } = cfg;
+    return { model, roles, signal, filters, weights, scoring, trend, indicators, zones, lookback, market, divergence, evaluation, ...overrides };
+}
+
 // True when a config change touches the snapshot groups (indicators, zones, lookback).
 const snapshotChanged = (next, prev) => SNAPSHOT_GROUPS.some(g => JSON.stringify(next[g]) !== JSON.stringify(prev[g]));
 const engineChanged = (next, prev) => JSON.stringify(next.engine) !== JSON.stringify(prev.engine);
@@ -404,5 +411,5 @@ function applyEngine(config, binance, cfg) {
 
 module.exports = {
     createCalcConfig, validate, defaultsOf, signalOptions, mergeWeights, snapshotParams, stateParams, resultParams, snapshotChanged,
-    engineChanged, applyEngine, shadowOptions, SHADOW_DEFAULTS, LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS, LOOKBACK_DEFAULT, ROLE_KEYS, GROUPS, RESULT_GROUPS, FILE,
+    engineChanged, applyEngine, shadowOptions, signalConfig, SHADOW_DEFAULTS, LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS, LOOKBACK_DEFAULT, ROLE_KEYS, GROUPS, RESULT_GROUPS, FILE,
 };

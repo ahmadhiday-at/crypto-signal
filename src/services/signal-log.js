@@ -4,6 +4,7 @@
 // line with the same id closes it. Readers merge the two.
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 const { THRESHOLD } = require('./signal');
 
 // A record still open after this many entry-timeframe candles is closed as EXPIRED. Default of the
@@ -14,6 +15,19 @@ const MARKET_RE = /^[A-Z0-9]{2,20}$/;
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const round = (v, d = 4) => (num(v) ? +v.toFixed(d) : null);
+
+// Same content, same hash: keys are sorted so their order in the file does not matter.
+function canonical(v) {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.keys(v).sort().map(k => [k, canonical(v[k])]));
+    return v;
+}
+const configHash = (config) => crypto.createHash('sha256').update(JSON.stringify(canonical(config))).digest('hex').slice(0, 12);
+
+// True for a record of the current entry timeframe and model. Records older than 3.1.0 have no model.
+function isCurrentRecord(r, entryTf, model) {
+    return (!entryTf || r.timeframe === entryTf) && (!model || !r.model || r.model === model);
+}
 
 // The direction the score points to before filters, or null when it is not a candidate.
 function candidateDirection(state, threshold = THRESHOLD) {
@@ -99,8 +113,10 @@ function recordFrom(market, entryTf, state, last, threshold = THRESHOLD) {
 
 // `threshold` returns the live score threshold (calculation config), read on every summary.
 // `threshold` and `expiry` return the live calculation config values; `entryTf` is a timeframe or a
-// function returning it (the shadow log follows its configured entry timeframe).
-function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = () => EXPIRY_CANDLES, log = console }) {
+// function returning it (the shadow log follows its configured entry timeframe). `describe` returns
+// `{ model, config, app_version }`: new records carry the model, the config's hash and the version,
+// and the full config is kept once per hash in `{dir}/configs/{hash}.json`.
+function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = () => EXPIRY_CANDLES, describe = null, log = console }) {
     const entryOf = typeof entryTf === 'function' ? entryTf : () => entryTf;
     // market -> Map(id -> record) of records without an outcome yet.
     const open = new Map();
@@ -143,6 +159,32 @@ function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = (
         return [...byId.values()].map(({ type, ...r }) => r);
     }
 
+    // A failed snapshot is logged and retried on the next record; it never costs the record.
+    const savedConfigs = new Set();
+    async function saveConfig(hash, config) {
+        if (savedConfigs.has(hash)) return;
+        try {
+            const configs = path.join(dir, 'configs');
+            await fs.mkdir(configs, { recursive: true });
+            const file = path.join(configs, `${hash}.json`);
+            const tmp = `${file}.${process.pid}.tmp`;
+            await fs.writeFile(tmp, JSON.stringify(config, null, 2) + '\n');
+            await fs.rename(tmp, file);
+            savedConfigs.add(hash);
+        } catch (e) {
+            log.warn(`[SignalLog] config snapshot ${hash} not saved: ${e.message}`);
+        }
+    }
+
+    // The metadata fields of a new record, or none without `describe`.
+    async function metadata() {
+        if (!describe) return {};
+        const { model, config, app_version } = describe();
+        const config_hash = configHash(config);
+        await saveConfig(config_hash, config);
+        return { model, config_hash, app_version };
+    }
+
     async function append(market, entry) {
         await fs.mkdir(dir, { recursive: true });
         await fs.appendFile(fileOf(market), JSON.stringify(entry) + '\n');
@@ -172,10 +214,11 @@ function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = (
             pending.delete(r.id);
         }
 
-        const record = recordFrom(market, entryOf(), state, candles[candles.length - 1], threshold());
-        if (!record) return;
-        // One open record per direction: a setup that persists over several candles is logged once.
-        if ([...pending.values()].some(r => r.signal === record.signal)) return;
+        const candidate = recordFrom(market, entryOf(), state, candles[candles.length - 1], threshold());
+        if (!candidate) return;
+        const record = { ...candidate, ...(await metadata()) };
+        // One open record per direction and model: a setup that persists over several candles is logged once.
+        if ([...pending.values()].some(r => r.signal === record.signal && isCurrentRecord(r, null, record.model))) return;
         await append(market, record);
         const { type, ...rest } = record;
         pending.set(record.id, { ...rest, result: null, rr: null, closed_at: null, bars: null });
@@ -189,6 +232,7 @@ const CSV_COLUMNS = [
     'risk_reward', 'result', 'rr', 'closed_at', 'bars',
     'context', 'momentum', 'regime', 'volume_state', 'breakout_confirmation', 'divergence', 'volatility_ratio',
     'distance_to_support', 'distance_to_resistance', 'rsi', 'atr', 'score', 'reasons',
+    'model', 'config_hash', 'app_version',
 ];
 
 // Flattens records (features included) into CSV; list values are joined with '|'.
@@ -205,4 +249,4 @@ function toCsv(rows) {
     return [CSV_COLUMNS.join(','), ...lines].join('\n') + '\n';
 }
 
-module.exports = { createSignalLog, evaluate, candidateDirection, recordFrom, toCsv, EXPIRY_CANDLES, RESULTS };
+module.exports = { createSignalLog, isCurrentRecord, configHash, evaluate, candidateDirection, recordFrom, toCsv, EXPIRY_CANDLES, RESULTS };

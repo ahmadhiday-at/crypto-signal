@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v3.1.0](docs/changelog/v3.1.0.md) — 2026-11-04 — Signal records name their model, config hash and app version; stats keep models apart.
 - [v3.0.0](docs/changelog/v3.0.0.md) — 2026-11-04 — Markets and timeframes move to /config; `.env` holds server settings and secrets only.
 - [v2.25.2](docs/changelog/v2.25.2.md) — 2026-11-04 — Role timeframes can always be charted, even when TIMEFRAME_LIST omits them.
 - [v2.25.1](docs/changelog/v2.25.1.md) — 2026-11-04 — `.env.example` keeps deployment settings only; S/R lookback moves to config/calculation.json.

@@ -10,7 +10,8 @@ const { createSignalLog } = require('./src/services/signal-log');
 const { createReports } = require('./src/services/backtest');
 const path = require('path');
 
-const { createCalcConfig, snapshotChanged, engineChanged, applyEngine } = require('./src/config/calculation');
+const { createCalcConfig, snapshotChanged, engineChanged, applyEngine, signalConfig } = require('./src/config/calculation');
+const { appVersion } = require('./src/config/version');
 const { createBacktestRunner } = require('./src/services/backtest-runner');
 
 // Calculation config (config/calculation.json): loaded before the engine, reloaded on hand edits.
@@ -29,11 +30,21 @@ const engine = createMarketEngine({
     signalLog: createSignalLog({
         dir: path.join(__dirname, 'data/signals'), entryTf: config.TF_ROLES.entry,
         threshold: () => calc.get().signal.threshold, expiry: () => calc.get().evaluation.expiry_candles,
+        describe: () => {
+            const cfg = calc.get();
+            return { model: cfg.signal.model, config: signalConfig(cfg, cfg.signal.model, config.TF_ROLES), app_version: appVersion() };
+        },
     }),
     // Shadow model (config `shadow`), logged apart in data/signals-shadow/.
     shadowLog: createSignalLog({
         dir: path.join(__dirname, 'data/signals-shadow'), entryTf: () => calc.get().shadow.entry,
         threshold: () => calc.get().signal.threshold, expiry: () => calc.get().evaluation.expiry_candles,
+        describe: () => {
+            const cfg = calc.get();
+            const so = calc.shadowOptions();
+            const model = so?.signal.model ?? cfg.shadow.model;
+            return { model, config: signalConfig(cfg, model, so?.roles ?? null, { trend: so?.signal.trend ?? cfg.trend }), app_version: appVersion() };
+        },
     }),
     notify: {
         timeframeUpdated: (market, timeframe) => wsManager.broadcastUpdate(market, timeframe),

@@ -46,7 +46,7 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
 - [ ] **Level 2.5B:** no-man's-land 1%, volatility 2.0 / 0.5, min RR 1.5.
 - [ ] **Level 3:** SL buffer 0.5 × ATR, trailing 1.5 × ATR.
 - [ ] **Level 6:** false-breakout analysis (when `fake_breakout_risk` was wrong; keep, change or drop it).
-- [ ] **Level 4:** Signal Log card on the dashboard; dataset keeps growing toward 1,000 labeled trades. Since v2.22.0 the shadow log collects a second layout in parallel (since v2.24.0 `bounce` on 15m) (`/api/signals/:symbol?source=shadow`).
+- [ ] **Level 4:** Signal Log card on the dashboard; dataset keeps growing toward 1,000 labeled trades. Since v3.1.0 each new record names its model, config hash and app version. Since v2.22.0 the shadow log collects a second layout in parallel (since v2.24.0 `bounce` on 15m) (`/api/signals/:symbol?source=shadow`).
 
 ## Success criteria
 
