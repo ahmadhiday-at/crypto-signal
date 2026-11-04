@@ -73,7 +73,12 @@ function evaluate(record, candles, expiry = EXPIRY_CANDLES) {
         const c = after[i];
         const hitSl = long ? c.low <= record.sl : c.high >= record.sl;
         const hitTp = long ? c.high >= record.tp1 : c.low <= record.tp1;
-        if (hitSl) return { result: 'LOSS', rr: -1, closed_at: c.close_time, bars: i + 1 };
+        if (hitSl) {
+            // A candle that opens beyond the stop fills at its open, which costs more than 1 R.
+            const fill = num(c.open) ? (long ? Math.min(c.open, record.sl) : Math.max(c.open, record.sl)) : record.sl;
+            const lost = long ? fill - record.price : record.price - fill;
+            return { result: 'LOSS', rr: risk > 0 ? round(lost / risk, 2) : -1, closed_at: c.close_time, bars: i + 1 };
+        }
         if (hitTp) return { result: 'WIN', rr: record.risk_reward, closed_at: c.close_time, bars: i + 1 };
         if (i + 1 >= expiry) {
             const move = long ? c.close - record.price : record.price - c.close;

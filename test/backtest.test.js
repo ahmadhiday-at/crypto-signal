@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { runBacktest, metrics, breakdown, createReports, VALIDATION_MIN_TRADES } = require('../src/services/backtest');
+const { runBacktest, metrics, breakdown, createReports, expectancyInterval, walkForward, evaluateTrailing, VALIDATION_MIN_TRADES } = require('../src/services/backtest');
 const { parseArgs } = require('../scripts/backtest');
 const { createHistory } = require('../src/services/history');
 const { evaluate, EXPIRY_CANDLES } = require('../src/services/signal-log');
@@ -283,3 +283,103 @@ test('CLI --roles: entry, mid, structure, htf for one run', () => {
     assert.deepEqual(rolesOption(['BTCUSDT']).roles, null);
     assert.throws(() => rolesOption(['--roles', '1h,4h']), /ENTRY,MID,STRUCTURE,HTF/);
 });
+
+test('next_open entry fills at the next open and measures the risk from there', () => {
+    const candles = history(10);
+    const args = { market: 'BTCUSDT', candlesByTf: candles, roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400, model: 'bounce' };
+    const report = runBacktest({ ...args, entryMode: 'next_open', target: 2, minRiskReward: 0 });
+    const entry = candles['15m'];
+    assert.equal(report.params.entry, 'next_open');
+    assert.ok(report.trades.length > 0);
+    for (const tr of report.trades) {
+        const i = entry.findIndex(c => c.close_time === tr.time);
+        assert.equal(tr.price, entry[i + 1].open);
+        assert.equal(tr.risk_reward, +(Math.abs(tr.tp1 - tr.price) / Math.abs(tr.price - tr.sl)).toFixed(2));
+    }
+});
+
+test('slippage is a cost on top of the fee', () => {
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400, model: 'bounce' };
+    const both = runBacktest({ ...args, feePct: 0.2, slippagePct: 0.05 });
+    const fee = runBacktest({ ...args, feePct: 0.25 });
+    assert.deepEqual(both.trades.map(t => t.net_r), fee.trades.map(t => t.net_r));
+    assert.equal(both.params.slippage_pct, 0.05);
+});
+
+test('a candle that opens beyond the stop fills at its open and costs more than 1 R', () => {
+    const buy = { signal: 'BUY', price: 100, sl: 90, tp1: 120, risk_reward: 2, candle_time: 0, candle_close_time: 900 };
+    const candle = { time: 900, close_time: 1800, close: 80 };
+    assert.equal(evaluate(buy, [{ ...candle, open: 80, high: 85, low: 75 }]).rr, -2);
+    assert.equal(evaluate(buy, [{ ...candle, open: 95, high: 96, low: 85 }]).rr, -1);
+    assert.equal(evaluate({ ...buy, signal: 'SELL', sl: 110, tp1: 80 }, [{ ...candle, open: 120, high: 125, low: 115 }]).rr, -2);
+});
+
+test('the trailing stop follows the best price, never moves back and is not set by its own candle', () => {
+    const buy = { signal: 'BUY', price: 100, sl: 90, tp1: 120, candle_time: 0, candle_close_time: 900 };
+    const c = (i, open, high, low, close) => ({ time: 900 * (i + 1), close_time: 900 * (i + 2), open, high, low, close });
+    // High 120 lifts the stop to 110 for the next candle; 108 then hits it at 110.
+    assert.deepEqual(evaluateTrailing(buy, [c(0, 100, 120, 99, 118), c(1, 118, 119, 108, 109)], 96, 10), { result: 'WIN', rr: 1, closed_at: 2700, bars: 2 });
+    // A candle touching 120 and 95 in one bar: the stop in force is still 90, so it survives.
+    assert.equal(evaluateTrailing(buy, [c(0, 100, 120, 95, 118)], 96, 10), null);
+    // The stop never moves back after the price falls.
+    const held = evaluateTrailing(buy, [c(0, 100, 130, 99, 125), c(1, 125, 126, 121, 122), c(2, 122, 123, 119, 120)], 96, 10);
+    assert.deepEqual([held.result, held.rr, held.bars], ['WIN', 2, 3]);
+    // Below the entry it is a loss; at expiry the close decides.
+    assert.equal(evaluateTrailing(buy, [c(0, 100, 101, 89, 90)], 96, 10).result, 'LOSS');
+    assert.deepEqual(evaluateTrailing(buy, [c(0, 100, 105, 99, 104)], 1, 10), { result: 'EXPIRED', rr: 0.4, closed_at: 1800, bars: 1 });
+    // The mirror for a short.
+    const sell = { signal: 'SELL', price: 100, sl: 110, tp1: 80, candle_time: 0, candle_close_time: 900 };
+    assert.deepEqual(evaluateTrailing(sell, [c(0, 100, 101, 80, 82), c(1, 82, 92, 81, 91)], 96, 10), { result: 'WIN', rr: 1, closed_at: 2700, bars: 2 });
+});
+
+test('walk-forward picks each period from the earlier ones only', () => {
+    const trade = (time, net_r) => ({ time, net_r, closed_at: time + 1, result: net_r > 0 ? 'WIN' : 'LOSS', filtered: false });
+    // Variant A wins early and loses late, B the opposite. B has the better last period, but A still
+    // leads on everything before it, so A is picked and its loss in that period counts.
+    const span = 400;
+    const a = []; const b = [];
+    for (let t = 0; t < span; t++) { a.push(trade(t, t < 200 ? 1 : -1)); b.push(trade(t, t < 200 ? -1 : 1)); }
+    const wf = walkForward([{ trades: a }, { trades: b }], 0, span, 3, 30);
+    assert.deepEqual(wf.rows.map(r => r.selected), [0, 0, 0]);
+    assert.deepEqual(wf.rows.map(r => r.test.expectancy_r), [1, -1, -1]);
+    assert.equal(wf.rows.length, 3);
+    assert.equal(wf.judged_folds, 3);
+    assert.equal(wf.test.trades, 300);
+    // Too few earlier trades: the period is left out instead of guessed.
+    const thin = walkForward([{ trades: a.slice(0, 5) }], 0, span, 3, 30);
+    assert.deepEqual([thin.rows[0].selected, thin.judged_folds, thin.ci95], [null, 0, null]);
+});
+
+test('the expectancy interval is repeatable and contains the mean', () => {
+    const rs = Array.from({ length: 200 }, (_, i) => (i % 3 ? -1 : 2.2));
+    const [low, high] = expectancyInterval(rs);
+    assert.deepEqual(expectancyInterval(rs), [low, high]);
+    const mean = rs.reduce((a, b) => a + b, 0) / rs.length;
+    assert.ok(low < mean && mean < high);
+    assert.equal(expectancyInterval([1]), null);
+});
+
+test('each written report leaves a summary line for later comparison', async () => {
+    const reports = createReports({ dir: fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-runs-')) });
+    assert.deepEqual(await reports.history('BTCUSDT'), []);
+    const report = (hash, generated_at) => ({ generated_at, config_hash: hash, roles: {}, period: {}, params: { model: 'trend_pullback', fee_pct: 0.2, slippage_pct: 0.05, exit: 'fixed' }, taken: { summary: { trades: 3 }, ci95: [-1, 1] }, sweep: null, validation: null, walk_forward: null });
+    await reports.write('BTCUSDT', report('aaa', 1));
+    await reports.write('BTCUSDT', report('bbb', 2));
+    const runs = await reports.history('BTCUSDT');
+    assert.deepEqual(runs.map(r => r.config_hash), ['bbb', 'aaa']);
+    assert.deepEqual([runs[0].fee_pct, runs[0].slippage_pct, runs[0].ci95], [0.2, 0.05, [-1, 1]]);
+    assert.equal((await reports.read('BTCUSDT')).config_hash, 'bbb', 'the latest report is unchanged');
+});
+
+test('CLI options: slippage, entry, folds and offline', () => {
+    const tfs = testConfig.TIMEFRAMES;
+    const cfg = { days: 200, fee_pct: 0.2, slippage_pct: 0.05, entry: 'next_open', split: 0.7, folds: 6 };
+    const a = parseArgs([], tfs, cfg);
+    assert.deepEqual([a.slippage, a.entry, a.folds, a.offline], [0.05, 'next_open', 6, false]);
+    const b = parseArgs(['--slippage', '0.1', '--entry', 'close', '--folds', 'none', '--offline'], tfs, cfg);
+    assert.deepEqual([b.slippage, b.entry, b.folds, b.offline], [0.1, 'close', null, true]);
+    assert.throws(() => parseArgs(['--entry', 'mid'], tfs, cfg), /close or next_open/);
+    assert.throws(() => parseArgs(['--folds', '1'], tfs, cfg), /2–12/);
+    assert.deepEqual(parseArgs(['--sweep', 'exit=fixed,trailing', '--sweep', 'trail_atr=2,4'], tfs, cfg).variants.length, 4);
+});
+

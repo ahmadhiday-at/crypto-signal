@@ -28,7 +28,7 @@
     </header>
 
     <div class="glass rounded-lg px-3 py-2 t-body text-yellow-200/80 border-l-4 border-l-yellow-500">
-        Hypothetical results, not executed trades: entry at the close of the signal candle, exit at TP1 or SL
+        Hypothetical results, not executed trades: entry at <span id="entry-note">the close of the signal candle</span>, exit at <span id="exit-note">TP1 or SL</span>
         (both in one candle counts as SL), expiry after <span id="expiry">96</span> entry candles. Results are in R (multiples of the planned risk).
         <span id="fee-note"></span>
     </div>
@@ -87,6 +87,27 @@
                 </table>
             </div>
             <div class="t-body mt-2" id="validation-verdict"></div>
+        </div>
+
+        <div id="wf-card" class="hidden glass rounded-lg p-3">
+            <div class="mb-2"><span class="t-label k">Walk-forward</span> <span class="t-meta k">each period is judged with the variant that was best before it</span></div>
+            <div class="min-w-0 overflow-x-auto">
+                <table class="w-full t-data mono">
+                    <thead><tr class="k text-left"><th>From</th><th class="text-right">Trades</th><th class="text-right">Exp R</th><th class="text-right">PF</th></tr></thead>
+                    <tbody id="wf"></tbody>
+                </table>
+            </div>
+            <div class="t-body mt-2" id="wf-verdict"></div>
+        </div>
+
+        <div id="history-card" class="hidden glass rounded-lg p-3">
+            <div class="mb-2"><span class="t-label k">Earlier runs</span> <span class="t-meta k">newest first; the same config hash means the same signal settings</span></div>
+            <div class="min-w-0 overflow-x-auto">
+                <table class="w-full t-data mono">
+                    <thead><tr class="k text-left"><th>Run</th><th>Config</th><th>Model</th><th>Exit</th><th class="text-right">Costs %</th><th class="text-right">Trades</th><th class="text-right">Exp R</th><th class="text-right">95% interval</th><th class="text-right">OOS exp</th><th class="text-right">WF exp</th></tr></thead>
+                    <tbody id="history"></tbody>
+                </table>
+            </div>
         </div>
 
         <div class="glass rounded-lg p-3">
@@ -293,6 +314,32 @@
             }
         }
 
+        function renderWalkForward(report) {
+            const w = report.walk_forward;
+            if (!w) return;
+            document.getElementById('wf-card').classList.remove('hidden');
+            const day = (s) => new Date(s * 1000).toISOString().slice(0, 10);
+            document.getElementById('wf').innerHTML = w.rows.map(r => `<tr><td>${day(r.from)}</td><td class="text-right">${r.test.trades}</td><td class="text-right ${tone(r.test.expectancy_r)}">${fmtNum(r.test.expectancy_r, 3)}</td><td class="text-right">${fmtNum(r.test.profit_factor, 2)}</td></tr>`).join('');
+            const verdict = document.getElementById('wf-verdict');
+            const interval = w.ci95 ? `, 95% interval ${fmtNum(w.ci95[0], 3)} to ${fmtNum(w.ci95[1], 3)} R` : '';
+            verdict.className = `t-body mt-2 ${tone(w.test.expectancy_r)}`;
+            verdict.textContent = `All periods: ${fmtNum(w.test.expectancy_r, 3)} R over ${w.test.trades} trades, positive in ${w.positive_folds} of ${w.judged_folds}${interval}.`;
+        }
+
+        async function renderHistory(market) {
+            const body = await fetch(`/api/backtest-history/${encodeURIComponent(market)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+            if (!body || !body.runs.length) return;
+            document.getElementById('history-card').classList.remove('hidden');
+            const when = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-');
+            const safe = (v) => String(v ?? '-').replace(/[&<>"']/g, '');
+            document.getElementById('history').innerHTML = body.runs.slice(0, 20).map(r => `<tr><td>${when(r.generated_at)}</td><td>${safe(r.config_hash)}</td><td>${safe(r.model)}</td><td>${safe(r.exit)}</td>
+                <td class="text-right">${fmtNum((r.fee_pct || 0) + (r.slippage_pct || 0), 2)}</td><td class="text-right">${r.taken?.trades ?? '-'}</td>
+                <td class="text-right ${tone(r.taken?.expectancy_r)}">${fmtNum(r.taken?.expectancy_r, 3)}</td>
+                <td class="text-right">${r.ci95 ? `${fmtNum(r.ci95[0], 3)} … ${fmtNum(r.ci95[1], 3)}` : '-'}</td>
+                <td class="text-right ${tone(r.out_of_sample?.expectancy_r)}">${fmtNum(r.out_of_sample?.expectancy_r, 3)}</td>
+                <td class="text-right ${tone(r.walk_forward?.test?.expectancy_r)}">${fmtNum(r.walk_forward?.test?.expectancy_r, 3)}</td></tr>`).join('');
+        }
+
         function renderBreakdown(report) {
             const group = report[document.getElementById('breakdown-group').value];
             const dims = group.breakdown || {};
@@ -334,17 +381,22 @@
             document.getElementById('period').textContent =
                 `${fmtTime(report.period.start)} → ${fmtTime(report.period.end)} · entry ${report.entry_tf} · generated ${fmtTime(report.generated_at)}`;
             document.getElementById('expiry').textContent = report.params.expiry_candles;
+            if (report.params.entry === 'next_open') document.getElementById('entry-note').textContent = 'the open after the signal candle';
+            if (report.params.exit === 'trailing') document.getElementById('exit-note').textContent = `a stop trailing ${report.params.trail_atr} × ATR behind the best price`;
             if (isNum(report.params.min_rr)) {
                 document.getElementById('period').textContent += ` · threshold ${report.params.threshold} · min RR ${report.params.min_rr}`;
             }
             document.getElementById('fee-note').textContent = report.params.fee_pct
-                ? `Fee ${fmtNum(report.params.fee_pct)}% round trip included.`
+                ? `Fee ${fmtNum(report.params.fee_pct)}% and slippage ${fmtNum(report.params.slippage_pct ?? 0)}% round trip included.`
                 : 'No fees or slippage included.';
             renderGroup('taken', report.taken);
             renderGroup('filtered', report.filtered);
+            if (report.taken.ci95) document.getElementById('s-taken').insertAdjacentText('beforeend', ` · 95% interval ${fmtNum(report.taken.ci95[0], 3)} to ${fmtNum(report.taken.ci95[1], 3)} R`);
             renderEquity(report);
             renderSweep(report);
             renderValidation(report);
+            renderWalkForward(report);
+            renderHistory(report.market);
             document.getElementById('min-sample').textContent = MIN_SAMPLE;
             renderBreakdown(report);
             document.getElementById('breakdown-group').addEventListener('change', () => renderBreakdown(report));

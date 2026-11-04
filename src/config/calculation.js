@@ -154,7 +154,10 @@ const LIMITS = {
     backtest: {
         days: [1, 1500, true],
         fee_pct: [0, 5],
+        slippage_pct: [0, 5],
+        entry: { values: ['close', 'next_open'] },
         split: [0.5, 0.9],
+        folds: [2, 12, true],
     },
 };
 const WEIGHT_LIMITS = [0.1, 20];
@@ -162,7 +165,7 @@ const GROUPS = ['engine', 'shadow', 'signal', 'filters', 'weights', 'lookback', 
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
 const SNAPSHOT_GROUPS = ['indicators', 'zones', 'lookback'];
 
-const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.2, split: 0.7 };
+const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.2, slippage_pct: 0.05, entry: 'next_open', split: 0.7, folds: 6 };
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 

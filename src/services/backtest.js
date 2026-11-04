@@ -99,6 +99,78 @@ function breakdown(trades) {
     return out;
 }
 
+// 95% interval of the mean, by resampling the trades. The fixed seed gives the same interval on a rerun.
+function expectancyInterval(rs, samples = 2000) {
+    if (rs.length < 2) return null;
+    let seed = 12345;
+    const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const means = [];
+    for (let k = 0; k < samples; k++) {
+        let sum = 0;
+        for (let i = 0; i < rs.length; i++) sum += rs[Math.floor(random() * rs.length)];
+        means.push(sum / rs.length);
+    }
+    means.sort((a, b) => a - b);
+    return [r4(means[Math.floor(samples * 0.025)]), r4(means[Math.floor(samples * 0.975)])];
+}
+const closedRs = (trades) => trades.filter(t => CLOSED_RESULTS.includes(t.result)).map(t => t.net_r);
+
+// Walk-forward: the period is cut into `folds` + 1 equal parts. Each part after the first is judged
+// with the variant that was best on everything before it, so no result is chosen with hindsight.
+// A part without a variant of `minTrades` earlier taken trades is left out.
+function walkForward(runs, startSec, endSec, folds, minTrades = VALIDATION_MIN_TRADES) {
+    const taken = runs.map(run => run.trades.filter(t => !t.filtered));
+    const len = (endSec - startSec) / (folds + 1);
+    const rows = [];
+    const chosen = [];
+    for (let k = 1; k <= folds; k++) {
+        const from = Math.floor(startSec + k * len);
+        const to = k === folds ? Infinity : Math.floor(startSec + (k + 1) * len);
+        let selected = null;
+        let best = -Infinity;
+        taken.forEach((list, idx) => {
+            const s = metrics(list.filter(t => t.time < from)).summary;
+            if (s.trades >= minTrades && s.expectancy_r !== null && s.expectancy_r > best) { best = s.expectancy_r; selected = idx; }
+        });
+        const inFold = selected === null ? [] : taken[selected].filter(t => t.time >= from && t.time < to);
+        if (selected !== null) chosen.push(...inFold);
+        rows.push({ from, selected, train_expectancy_r: selected === null ? null : r4(best), test: metrics(inFold).summary });
+    }
+    const judged = rows.filter(r => r.test.trades > 0);
+    return {
+        folds, min_trades: minTrades, rows,
+        test: metrics(chosen).summary,
+        ci95: expectancyInterval(closedRs(chosen)),
+        positive_folds: judged.filter(r => r.test.expectancy_r > 0).length,
+        judged_folds: judged.length,
+    };
+}
+
+// Trailing exit (backtest option): the stop follows the best price since entry at `distance` and
+// never moves back. No target: the trade ends at the stop or at expiry. The stop in force during a
+// candle comes from the candles before it, so a candle never protects itself with its own extreme.
+function evaluateTrailing(record, candles, expiry, distance) {
+    const long = record.signal === 'BUY';
+    const risk = long ? record.price - record.sl : record.sl - record.price;
+    const rOf = (exit) => (risk > 0 ? r2((long ? exit - record.price : record.price - exit) / risk) : null);
+    const after = candles.filter(c => c.time > record.candle_time);
+    if (after.length && after[0].time > record.candle_close_time) return { result: 'UNKNOWN', rr: null, closed_at: after[0].close_time, bars: null };
+    let stop = record.sl;
+    let best = record.price;
+    for (let i = 0; i < after.length; i++) {
+        const c = after[i];
+        if (long ? c.low <= stop : c.high >= stop) {
+            const fill = long ? Math.min(c.open ?? stop, stop) : Math.max(c.open ?? stop, stop);
+            const rr = rOf(fill);
+            return { result: rr > 0 ? 'WIN' : 'LOSS', rr, closed_at: c.close_time, bars: i + 1 };
+        }
+        if (i + 1 >= expiry) return { result: 'EXPIRED', rr: rOf(c.close), closed_at: c.close_time, bars: i + 1 };
+        best = long ? Math.max(best, c.high) : Math.min(best, c.low);
+        stop = long ? Math.max(stop, best - distance) : Math.min(stop, best + distance);
+    }
+    return null;
+}
+
 // Out-of-sample check (Level 6): the variant with the best in-sample taken expectancy and at least
 // this many in-sample taken trades is the one judged on the later, unseen part of the period.
 const VALIDATION_MIN_TRADES = 30;
@@ -127,7 +199,9 @@ function validation(runs, splitSec, minTrades = VALIDATION_MIN_TRADES) {
 // `skip_energy` drop candidates (backtest only: such candidates are neither taken nor filtered).
 // `calc` holds the calculation config groups RESULT_GROUPS (score points, indicators, zones, market,
 // divergence, evaluation); a variant overrides single keys, e.g. { calc: { scoring: { near_zone: 3 } } }.
-const PARAM_KEYS = ['model', 'threshold', 'min_rr', 'stop_atr', 'target', 'htf_trend', 'entry_max_atr', 'side', 'skip_energy'];
+// `entry` (`close` / `next_open`), `exit` (`fixed` / `trailing`) and `trail_atr` only change how a
+// trade is priced and closed here; the live signal log stays on the signal candle close and fixed exit.
+const PARAM_KEYS = ['model', 'threshold', 'min_rr', 'stop_atr', 'target', 'htf_trend', 'entry_max_atr', 'side', 'skip_energy', 'entry', 'exit', 'trail_atr'];
 
 function normalizeParams(base, over = {}) {
     const p = { weights: { ...base.weights, ...(over.weights || {}) } };
@@ -153,7 +227,7 @@ const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market
 // each distinct indicators/zones set computes its own snapshots, so such sweeps cost more time.
 const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
 
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, model = SIGNAL_DEFAULTS.model, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, model = SIGNAL_DEFAULTS.model, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, slippagePct = 0, entryMode = 'close', exit = 'fixed', trailAtr = 3, folds = null, onProgress }) {
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     const fixedParams = Object.fromEntries(FIXED_KEYS.map(k => [k, fixed[k] ?? defaults[k]]));
     const fixedOpts = {
@@ -168,7 +242,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
     const roleTfs = [...new Set(Object.values(roles))];
     const entry = candlesByTf[roles.entry] || [];
     const pointer = Object.fromEntries(roleTfs.map(tf => [tf, -1]));
-    const base = normalizeParams({ model, threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], weights, calc: baseCalc });
+    const base = normalizeParams({ model, threshold, min_rr: minRiskReward, stop_atr: stopAtr, target, htf_trend: htfTrend, entry_max_atr: entryMaxAtr, side: 'both', skip_energy: [], entry: entryMode, exit, trail_atr: trailAtr, weights, calc: baseCalc });
     const minTrades = base.calc.evaluation.min_trades;
     const trendTfs = [...new Set([roles.htf, roles.structure].filter(Boolean))];
     // A variant equal to the base parameters is not replayed twice.
@@ -245,17 +319,30 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             if ((run.busyUntil[group][record.signal] ?? -Infinity) >= t) continue;
 
             const expiry = params.calc.evaluation.expiry_candles;
-            const outcome = evaluate(record, entry.slice(i, i + expiry + 2), expiry);
-            const risk = Math.abs(record.price - record.sl);
-            const feeR = risk > 0 ? (feePct / 100) * record.price / risk : 0;
+            const trade = { ...record };
+            if (params.entry === 'next_open') {
+                const next = entry[i + 1];
+                if (!next) continue;
+                // The stop and target stay where the plan put them; the risk is measured from the fill.
+                const long = record.signal === 'BUY';
+                if (long ? next.open <= record.sl || next.open >= record.tp1 : next.open >= record.sl || next.open <= record.tp1) continue;
+                trade.price = next.open;
+                trade.risk_reward = r2(Math.abs(record.tp1 - next.open) / Math.abs(next.open - record.sl));
+            }
+            const future = entry.slice(i, i + expiry + 2);
+            const outcome = params.exit === 'trailing'
+                ? evaluateTrailing(trade, future, expiry, params.trail_atr * record.features.atr)
+                : evaluate(trade, future, expiry);
+            const risk = Math.abs(trade.price - trade.sl);
+            const costR = risk > 0 ? ((feePct + slippagePct) / 100) * trade.price / risk : 0;
             run.trades.push({
                 id: record.id, time: record.candle_close_time, signal: record.signal, filtered: record.filtered,
                 filters: record.filters, strength: record.strength, score: state.signal.score,
-                price: record.price, sl: record.sl, tp1: record.tp1, risk_reward: record.risk_reward,
+                price: trade.price, sl: trade.sl, tp1: trade.tp1, risk_reward: trade.risk_reward,
                 features: featuresOf(state, record, trendTfs),
                 result: outcome ? outcome.result : null,
                 rr: outcome ? outcome.rr : null,
-                net_r: outcome && Number.isFinite(outcome.rr) ? r4(outcome.rr - feeR) : null,
+                net_r: outcome && Number.isFinite(outcome.rr) ? r4(outcome.rr - costR) : null,
                 closed_at: outcome ? outcome.closed_at : null,
                 bars: outcome ? outcome.bars : null,
             });
@@ -279,10 +366,10 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
         entry_tf: roles.entry,
         roles,
         period: { start: entry.find(c => c.close_time >= startSec)?.close_time ?? null, end: [...entry].reverse().find(c => c.close_time <= endSec)?.close_time ?? null },
-        params: { ...main.params, ...fixedParams, expiry_candles: main.params.calc.evaluation.expiry_candles, window, fee_pct: feePct },
+        params: { ...main.params, ...fixedParams, expiry_candles: main.params.calc.evaluation.expiry_candles, window, fee_pct: feePct, slippage_pct: slippagePct },
         steps,
         skipped_steps: skipped,
-        taken: groupReport(main.trades.filter(t => !t.filtered)),
+        taken: { ...groupReport(main.trades.filter(t => !t.filtered)), ci95: expectancyInterval(closedRs(main.trades.filter(t => !t.filtered))) },
         filtered: groupReport(main.trades.filter(t => t.filtered)),
         sweep: variants.length ? runs.map((run, idx) => ({
             base: idx === 0,
@@ -291,6 +378,7 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
             filtered: metrics(run.trades.filter(t => t.filtered)).summary,
         })) : null,
         validation: splitSec === null ? null : validation(runs, splitSec, minTrades),
+        walk_forward: folds ? walkForward(runs, startSec, Math.min(endSec, entry[entry.length - 1]?.close_time ?? endSec), folds, minTrades) : null,
         trades: main.trades,
     };
 }
@@ -315,8 +403,33 @@ function createReports({ dir }) {
             const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
             await fs.writeFile(tmp, JSON.stringify(report));
             await fs.rename(tmp, file);
+            await this.remember(market, report);
+        },
+        // One summary line per run in `history/{MARKET}.jsonl`, so a later run can be compared with it.
+        async remember(market, report) {
+            const dirOf = path.join(dir, 'history');
+            await fs.mkdir(dirOf, { recursive: true });
+            const base = report.validation?.rows?.find(r => r.base);
+            const line = {
+                generated_at: report.generated_at ?? null, config_hash: report.config_hash ?? null, model: report.params?.model ?? null, roles: report.roles,
+                period: report.period, fee_pct: report.params?.fee_pct ?? 0, slippage_pct: report.params?.slippage_pct ?? 0,
+                entry: report.params?.entry ?? null, exit: report.params?.exit ?? null, trail_atr: report.params?.trail_atr ?? null, sweep: Boolean(report.sweep),
+                taken: report.taken?.summary ?? null, ci95: report.taken?.ci95 ?? null, out_of_sample: base?.out_of_sample ?? null,
+                walk_forward: report.walk_forward ? { test: report.walk_forward.test, ci95: report.walk_forward.ci95, positive_folds: report.walk_forward.positive_folds, judged_folds: report.walk_forward.judged_folds } : null,
+            };
+            await fs.appendFile(path.join(dirOf, `${market}.jsonl`), JSON.stringify(line) + '\n');
+        },
+        // Summary lines of the earlier runs, newest first.
+        async history(market) {
+            if (!MARKET_RE.test(market)) throw new Error(`Invalid market name: ${String(market).slice(0, 30)}`);
+            try {
+                const text = await fs.readFile(path.join(dir, 'history', `${market}.jsonl`), 'utf8');
+                return text.split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch (e) { return []; } }).reverse();
+            } catch (e) {
+                return [];
+            }
         },
     };
 }
 
-module.exports = { runBacktest, metrics, breakdown, createReports, BREAKDOWN_DIMENSIONS, VALIDATION_MIN_TRADES, FIXED_KEYS };
+module.exports = { runBacktest, metrics, breakdown, createReports, expectancyInterval, walkForward, evaluateTrailing, BREAKDOWN_DIMENSIONS, VALIDATION_MIN_TRADES, FIXED_KEYS };

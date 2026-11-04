@@ -181,6 +181,9 @@
             backtest: { title: 'Backtest', help: {
                 days: 'History length in days',
                 fee_pct: 'Round-trip fee, % of price',
+                slippage_pct: 'Round-trip slippage, % of price; added to the fee',
+                entry: 'next_open: fill at the open after the signal candle; close: at the signal candle close',
+                folds: 'Walk-forward periods judged with the variant that was best before them',
                 split: 'In-sample share for the out-of-sample check',
             } },
         };

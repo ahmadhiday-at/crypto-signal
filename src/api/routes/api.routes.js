@@ -41,6 +41,7 @@ function createApiRouter(controller, config = {}) {
     router.get('/config', controller.getConfig);
     router.get('/signals/:market', controller.getSignals);
     router.get('/backtest/:market', controller.getBacktest);
+    router.get('/backtest-history/:market', controller.getBacktestHistory);
     router.get('/edge/:market', controller.getEdge);
     router.get('/calc-config', controller.getCalcConfig);
     router.put('/calc-config', action, express.json({ limit: '16kb' }), controller.updateCalcConfig);

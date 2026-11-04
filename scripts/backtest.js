@@ -1,10 +1,12 @@
 // Backtest CLI (docs/roadmap/level-5.md).
 // Usage: npm run backtest -- [SYMBOL] [--days N] [--fee PCT] [--sweep key=v1,v2 ...] [--split 0.7]
-//        [--roles ENTRY,MID,STRUCTURE,HTF]
+//        [--roles ENTRY,MID,STRUCTURE,HTF] [--slippage PCT] [--entry close|next_open] [--folds N|none] [--offline]
 // The base parameters, the role timeframes, the window (engine.candle_limit − 1) and the
 // --days/--fee/--split defaults come from config/calculation.json. --roles replaces the role
 // timeframes for this run only (e.g. --roles 1h,4h,1d,1w).
-// --sweep (Level 6) replays parameter variants on the same history. Keys: `model` (bounce,
+// --offline uses only the cached candles and makes no request to Binance.
+// --sweep (Level 6) replays parameter variants on the same history. Keys: `exit` (fixed, trailing),
+// `trail_atr`, `entry`, `model` (bounce,
 // trend_pullback, breakout), `threshold`, `min_rr`,
 // `stop_atr` (SL buffer in ATR), `target` (tp1, rr_zone, tp2 or a fixed R multiple), `htf_trend`
 // (off, htf, htf+structure: Level 6.5 B1 trend filter), `entry_max_atr` (0–10, 0 = off: Level 6.5
@@ -21,7 +23,8 @@
 // container so requests go through the VPN: docker compose exec app npm run backtest -- BTCUSDT
 const path = require('path');
 const config = require('../src/config/env');
-const { createCalcConfig, validate, applyEngine, LIMITS, LOOKBACK_LIMITS, RESULT_GROUPS } = require('../src/config/calculation');
+const { createCalcConfig, validate, applyEngine, signalConfig, LIMITS, LOOKBACK_LIMITS, RESULT_GROUPS } = require('../src/config/calculation');
+const { configHash } = require('../src/services/signal-log');
 const binance = require('../src/services/binance.service');
 const indicators = require('../src/services/indicator.service');
 const { tfSeconds, TF_SECONDS } = require('../src/services/candles');
@@ -48,6 +51,9 @@ const SWEEP_KEYS = {
     entry_max_atr: [number(0, 10), '0–10 (0 = off)'],
     htf_trend: [(raw) => (HTF_TREND_MODES.includes(raw) ? raw : undefined), HTF_TREND_MODES.join(', ')],
     model: [(raw) => (MODELS.includes(raw) ? raw : undefined), MODELS.join(', ')],
+    entry: [(raw) => (['close', 'next_open'].includes(raw) ? raw : undefined), 'close, next_open'],
+    exit: [(raw) => (['fixed', 'trailing'].includes(raw) ? raw : undefined), 'fixed, trailing'],
+    trail_atr: [number(0.5, 20), '0.5–20'],
     side: [(raw) => (['both', 'buy', 'sell'].includes(raw) ? raw : undefined), 'both, buy or sell'],
     skip_energy: [(raw) => {
         if (raw === 'none') return [];
@@ -103,11 +109,15 @@ function variantsOf(sweeps) {
 
 // `defaults` is the calculation config's `backtest` group.
 function parseArgs(argv, roleTfs, defaults = { days: 365, fee_pct: 0, split: null }) {
-    const args = { market: config.MARKETS[0], days: defaults.days, fee: defaults.fee_pct, sweeps: [], split: defaults.split ?? null };
+    const args = { market: config.MARKETS[0], days: defaults.days, fee: defaults.fee_pct, slippage: defaults.slippage_pct ?? 0, entry: defaults.entry ?? 'close', folds: defaults.folds ?? null, offline: false, sweeps: [], split: defaults.split ?? null };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--days') args.days = Number(argv[++i]);
         else if (a === '--fee') args.fee = Number(argv[++i]);
+        else if (a === '--slippage') args.slippage = Number(argv[++i]);
+        else if (a === '--entry') args.entry = argv[++i];
+        else if (a === '--folds') { const v = argv[++i]; args.folds = v === 'none' ? null : Number(v); }
+        else if (a === '--offline') args.offline = true;
         else if (a === '--sweep') args.sweeps.push(parseSweep(argv[++i], roleTfs));
         else if (a === '--split') {
             const v = argv[++i];
@@ -118,6 +128,9 @@ function parseArgs(argv, roleTfs, defaults = { days: 365, fee_pct: 0, split: nul
     }
     if (!(args.days > 0 && args.days <= 1500)) throw new Error('--days must be 1–1500');
     if (!(args.fee >= 0 && args.fee < 5)) throw new Error('--fee must be a round-trip percent between 0 and 5');
+    if (!(args.slippage >= 0 && args.slippage < 5)) throw new Error('--slippage must be a round-trip percent between 0 and 5');
+    if (!['close', 'next_open'].includes(args.entry)) throw new Error('--entry must be close or next_open');
+    if (args.folds !== null && !(Number.isInteger(args.folds) && args.folds >= 2 && args.folds <= 12)) throw new Error('--folds must be 2–12 or none');
     if (args.split !== null && !(args.split >= 0.5 && args.split <= 0.9)) throw new Error('--split must be between 0.5 and 0.9');
     if (!/^[A-Z0-9]{2,20}$/.test(args.market)) throw new Error(`Invalid symbol ${args.market}`);
     if (new Set(args.sweeps.map(([k]) => k)).size !== args.sweeps.length) throw new Error('--sweep: each key once');
@@ -166,6 +179,18 @@ function printValidation(report, keys) {
     if (v.selected === null) console.log(`No variant has ${v.min_trades}+ in-sample trades.`);
 }
 
+// Each period judged with the variant that was best before it.
+function printWalkForward(wf, keys, report) {
+    const params = report.validation?.rows ?? [];
+    const label = (idx) => (idx === null ? '-' : keys.map(k => `${k}=${valueOf(params[idx]?.params ?? {}, k)}`).join(' ') || 'live');
+    console.log(`\nWalk-forward, ${wf.folds} periods (taken; pick = best earlier exp with ≥ ${wf.min_trades} trades)`);
+    for (const r of wf.rows) {
+        console.log(`  from ${new Date(r.from * 1000).toISOString().slice(0, 10)}  n ${String(r.test.trades).padStart(4)}  exp ${fmt(r.test.expectancy_r, 3).padStart(7)}  PF ${fmt(r.test.profit_factor).padStart(5)}  ${label(r.selected)}`);
+    }
+    const ci = wf.ci95 ? `, 95% interval ${fmt(wf.ci95[0], 3)} to ${fmt(wf.ci95[1], 3)} R` : '';
+    console.log(`  all    n ${wf.test.trades}  exp ${fmt(wf.test.expectancy_r, 3)}  PF ${fmt(wf.test.profit_factor)}  positive ${wf.positive_folds}/${wf.judged_folds} periods${ci}`);
+}
+
 // `--roles entry,mid,structure,htf` (taken out before the other options, which need the role
 // timeframes). Returns the role overrides and the remaining arguments.
 function rolesOption(argv) {
@@ -199,12 +224,21 @@ async function main() {
         const { problems } = validate(v.calc, cfg);
         if (problems.length) throw new Error(`--sweep variant ${JSON.stringify(v.calc)}: ${problems.join('; ')}`);
     }
-    const nowSec = Math.floor(Date.now() / 1000);
+    const history = createHistory({ dir: path.join(DATA, 'history'), binance });
+    // --offline: only the cached candles, no request to Binance. The period ends at the last cached candle.
+    const cachedEntry = args.offline ? await history.read(args.market, roles.entry) : [];
+    if (args.offline && !cachedEntry.length) throw new Error(`--offline: no cached ${args.market}/${roles.entry} candles`);
+    const nowSec = args.offline ? cachedEntry[cachedEntry.length - 1].close_time : Math.floor(Date.now() / 1000);
     const startSec = nowSec - args.days * 86400;
 
-    const history = createHistory({ dir: path.join(DATA, 'history'), binance });
     const candlesByTf = {};
     for (const tf of roleTfs) {
+        if (args.offline) {
+            candlesByTf[tf] = await history.read(args.market, tf);
+            if (!candlesByTf[tf].length) throw new Error(`--offline: no cached ${args.market}/${tf} candles`);
+            console.log(`[History] ${args.market}/${tf} ${candlesByTf[tf].length} cached candles`);
+            continue;
+        }
         // Each timeframe also needs `window` candles before the start for its first snapshot.
         const from = startSec - (window + 10) * tfSeconds(tf);
         process.stdout.write(`[History] ${args.market}/${tf} ...`);
@@ -220,11 +254,12 @@ async function main() {
         threshold: cfg.signal.threshold, minRiskReward: cfg.signal.min_rr, stopAtr: cfg.signal.stop_atr, target: cfg.signal.target, model: cfg.signal.model,
         htfTrend: cfg.filters.htf_trend, entryMaxAtr: cfg.filters.entry_max_atr, calcParams: calc.resultParams(),
         fixed: Object.fromEntries(FIXED_KEYS.map(k => [k, cfg.signal[k] ?? cfg.filters[k]])),
-        startSec, feePct: args.fee, window, variants: args.variants,
+        startSec, feePct: args.fee, slippagePct: args.slippage, entryMode: args.entry, folds: args.folds, window, variants: args.variants,
         splitSec: args.split === null ? null : Math.floor(startSec + args.split * (nowSec - startSec)),
         onProgress: (n) => process.stdout.write(`\r[Backtest] ${n} candles`),
     });
     report.generated_at = Math.floor(Date.now() / 1000);
+    report.config_hash = configHash(signalConfig(cfg, cfg.signal.model, roles));
     process.stdout.write(`\r[Backtest] ${report.steps} candles in ${((Date.now() - started) / 1000).toFixed(0)} s\n`);
 
     await createReports({ dir: path.join(DATA, 'backtest') }).write(args.market, report);
@@ -237,7 +272,9 @@ async function main() {
     console.log(table(rows));
     if (report.sweep) printSweep(report, args.sweeps.map(([k]) => k));
     if (report.validation) printValidation(report, args.sweeps.map(([k]) => k));
-    console.log(`Fee ${args.fee}% round trip. Report: data/backtest/${args.market}.json → /backtest/${args.market}`);
+    if (report.taken.ci95) console.log(`\nTaken expectancy, 95% interval: ${fmt(report.taken.ci95[0], 3)} to ${fmt(report.taken.ci95[1], 3)} R`);
+    if (report.walk_forward) printWalkForward(report.walk_forward, args.sweeps.map(([k]) => k), report);
+    console.log(`Costs ${args.fee}% fee + ${args.slippage}% slippage round trip, entry ${args.entry}. Report: data/backtest/${args.market}.json → /backtest/${args.market}`);
 }
 
 if (require.main === module) {

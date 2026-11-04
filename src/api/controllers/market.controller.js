@@ -160,7 +160,18 @@ function createMarketController({ engine, config, reports = null, calc = null, r
         }
     }
 
-    return { getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getCalcConfig, updateCalcConfig, getBacktestRuns, startBacktestRun, getHealth, resetData };
+    // Summary line of every earlier backtest run of a market, newest first.
+    async function getBacktestHistory(req, res, next) {
+        try {
+            const { market } = req.params;
+            if (!engine.isMarket(market)) return unknown(res);
+            res.json({ market, runs: reports ? await reports.history(market) : [] });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    return { getBacktestHistory, getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getCalcConfig, updateCalcConfig, getBacktestRuns, startBacktestRun, getHealth, resetData };
 }
 
 module.exports = { createMarketController };
