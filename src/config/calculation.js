@@ -18,10 +18,10 @@ const WATCH_INTERVAL_MS = 2000;
 // applyEngine), so a change needs a restart. Seeded from TF_* / CANDLE_LIMIT in .env.
 const ROLE_KEYS = ['htf', 'structure', 'mid', 'entry'];
 const TF_CHOICES = { values: Object.keys(TF_SECONDS) };
-const ENGINE_DEFAULTS = { htf: '1d', structure: '4h', mid: '1h', entry: '15m', candle_limit: 500 };
+const ENGINE_DEFAULTS = { htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 500 };
 // Shadow signal log (group `shadow`): a second model on its own role timeframes, logged next to the
 // live signal without changing it. Its other values (threshold, filters, points) are the live ones.
-const SHADOW_DEFAULTS = { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '4h', entry: '1h', stop_atr: 3, target_r: 2 };
+const SHADOW_DEFAULTS = { enabled: 'on', model: 'bounce', htf: '1d', structure: '4h', mid: '1h', entry: '15m', stop_atr: 3, target_r: 2 };
 
 // S/R lookback candles per timeframe (group `lookback`, was MAPPING_CANDLE); unlisted timeframes use 200.
 const LOOKBACK_LIMITS = [20, 1000, true];
@@ -153,7 +153,7 @@ const GROUPS = ['engine', 'shadow', 'signal', 'filters', 'weights', 'lookback', 
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
 const SNAPSHOT_GROUPS = ['indicators', 'zones', 'lookback'];
 
-const BACKTEST_DEFAULTS = { days: 365, fee_pct: 0.1, split: 0.7 };
+const BACKTEST_DEFAULTS = { days: 1095, fee_pct: 0.1, split: 0.7 };
 
 const copy = (v) => JSON.parse(JSON.stringify(v));
 

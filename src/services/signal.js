@@ -124,12 +124,12 @@ const REASON_CODES = [
 // 'trend_pullback' buys a pullback to the entry MA50 in an HTF up trend (sells the mirror);
 // 'breakout' buys a close above the entry channel high in the trend direction (sells the mirror).
 const MODELS = ['bounce', 'trend_pullback', 'breakout'];
-const MODEL = 'bounce';
+const MODEL = 'trend_pullback';
 
 // Defaults of the calculation config's `trend` group: points, stop and target of the trend models.
 const TREND_DEFAULTS = {
     htf_points: 3, structure_points: 2, entry_points: 1, pullback_points: 2, breakout_points: 3, momentum_points: 1, volume_points: 1,
-    pullback_atr: 1, channel_candles: 20, stop_atr: 1.5, target_r: 2,
+    pullback_atr: 1, channel_candles: 20, stop_atr: 3, target_r: 2,
 };
 
 function strengthOf(score, threshold = THRESHOLD, strongScore = SCORING_DEFAULTS.strong_score) {

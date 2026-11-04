@@ -17,7 +17,7 @@ const summary = (trades, expectancy_r) => ({ trades, wins: 1, win_rate: 0.3, exp
 const report = (over = {}) => ({
     generated_at: 1_800_000_000,
     period: { start: 1, end: 2 },
-    params: { threshold: 5, min_rr: 1.5, stop_atr: 0.5, target: 'tp1', side: 'both', skip_energy: [], weights: { ...testConfig.TF_WEIGHTS }, window: 499, fee_pct: 0.1 },
+    params: { model: 'trend_pullback', threshold: 5, min_rr: 1.5, stop_atr: 0.5, target: 'tp1', side: 'both', skip_energy: [], weights: { ...testConfig.TF_WEIGHTS }, window: 499, fee_pct: 0.1 },
     taken: { summary: summary(40, 0.12) },
     validation: null,
     ...over,
@@ -50,9 +50,10 @@ test('verdict: positive, negative, unproven with reasons', () => {
     const free = edgeSummary('BTCUSDT', report({ params: { ...report().params, fee_pct: 0 } }), null, live);
     assert.deepEqual([free.verdict, free.reasons], ['positive', ['no_fees']]);
 
-    // Reports from before 2.11.0 have no setup fields: treated as the live defaults.
+    // Reports from before 2.11.0 have no setup fields: treated as the bounce model they ran.
     const old = report({ params: { threshold: 5, min_rr: 1.5, weights: { ...testConfig.TF_WEIGHTS }, fee_pct: 0.1 } });
-    assert.equal(edgeSummary('BTCUSDT', old, null, live).backtest.params_match, true);
+    assert.equal(edgeSummary('BTCUSDT', old, null, { ...live, model: 'bounce' }).backtest.params_match, true);
+    assert.equal(edgeSummary('BTCUSDT', old, null, live).backtest.params_match, false, 'a bounce report does not vouch for the trend model');
     // Calculation groups (2.18.0): a report made with other indicator periods is params_differ.
     const rsi7 = report({ params: { ...report().params, calc: { indicators: { rsi_period: 7 } } } });
     assert.deepEqual(edgeSummary('BTCUSDT', rsi7, null, live).reasons, ['params_differ']);

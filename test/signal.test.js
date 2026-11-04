@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { computeSignal } = require('../src/services/signal');
+const { computeSignal: computeWith } = require('../src/services/signal');
+// These rules belong to the bounce model; the default model is covered by its own test.
+const computeSignal = (state, htfTf, opts = {}) => computeWith(state, htfTf, { model: 'bounce', ...opts });
 
 // Zone helper: [low, high] with mid, score and contributing timeframes.
 const lv = (low, high, tfs, score = 10) => ({ low, high, mid: (low + high) / 2, score, tfs });
@@ -249,14 +251,14 @@ test('trend models: pullback to the MA50 and channel breakout in the HTF trend, 
     const pull = computeSignal(state(), '1d', opts);
     assert.deepEqual(codes(pull), ['htf_trend_up', 'structure_trend_up', 'entry_trend_up', 'pullback_to_ma', 'bullish_momentum']);
     assert.deepEqual([pull.action, pull.score], ['BUY', 9]);
-    assert.deepEqual(pull.plan, { side: 'long', entry_zone: [100, 100], stop_loss: 98.5, take_profit_1: 103, take_profit_2: null, risk_reward: 2, trailing_stop: 98.5, entry_distance_atr: 0 });
+    assert.deepEqual(pull.plan, { side: 'long', entry_zone: [100, 100], stop_loss: 97, take_profit_1: 106, take_profit_2: null, risk_reward: 2, trailing_stop: 98.5, entry_distance_atr: 0 });
     assert.ok(!codes(computeSignal(state({ indicators: { atr: 1, ma50: 97, macd: { histogram: 0.2 } } }), '1d', opts)).includes('pullback_to_ma'), 'too far from the MA50');
 
     const down = { '1d': { trend: 'down' }, '4h': { trend: 'down' }, '15m': { trend: 'ranging' } };
     const brk = computeSignal(state({ price: 94, timeframes: down, indicators: { atr: 1, ma50: 99, macd: { histogram: -0.1 } } }), '1d', { ...opts, model: 'breakout' });
     assert.deepEqual([brk.action, brk.score], ['SELL', -9]);
     assert.ok(codes(brk).includes('channel_breakout_down'));
-    assert.equal(brk.plan.stop_loss, 95.5);
+    assert.equal(brk.plan.stop_loss, 97);
     // A breakout against the higher timeframes is not taken.
     assert.ok(!codes(computeSignal(state({ price: 102, timeframes: down }), '1d', { ...opts, model: 'breakout' })).includes('channel_breakout_up'));
     // The bounce model ignores the new fields.

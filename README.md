@@ -1,9 +1,9 @@
 # 📈 Crypto Signal: Market State Engine
 
-[![Version](https://img.shields.io/badge/version-2.23.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.24.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
-A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1D, 4H, 1H and 15m timeframes into a single top-down view:
+A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1W, 1D, 4H and 1H timeframes into a single top-down view:
 
 - **MTF confluence:** support/resistance zones weighted across timeframes.
 - **Compression, energy and pressure:** heuristic reading of squeezes, volume and MACD.

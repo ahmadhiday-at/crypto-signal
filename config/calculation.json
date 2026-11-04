@@ -1,10 +1,18 @@
 {
+  "engine": {
+    "htf": "1w",
+    "structure": "1d",
+    "mid": "4h",
+    "entry": "1h",
+    "candle_limit": 1000
+  },
   "signal": {
     "threshold": 5,
     "min_rr": 1.5,
     "stop_atr": 0.5,
     "trailing_atr": 1.5,
-    "htf_proximity_percent": 1
+    "htf_proximity_percent": 1,
+    "model": "trend_pullback"
   },
   "filters": {
     "no_mans_land_percent": 1,
@@ -20,7 +28,7 @@
     "1m": 1
   },
   "backtest": {
-    "days": 365,
+    "days": 1095,
     "fee_pct": 0.1,
     "split": 0.7
   }

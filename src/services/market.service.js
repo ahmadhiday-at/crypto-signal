@@ -694,15 +694,18 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         const l = source === 'shadow' ? shadowLog : signalLog;
         if (!l) return null;
         const records = await l.records(market);
-        const stats = { total: records.length, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 };
-        for (const r of records) {
+        const so = source === 'shadow' && calc ? calc.shadowOptions() : null;
+        // Stats and Edge cover the current entry timeframe; `records` keeps the whole dataset.
+        const entry_tf = source === 'shadow' ? so?.roles.entry ?? null : config.TF_ROLES.entry;
+        const current = records.filter(r => !entry_tf || r.timeframe === entry_tf);
+        const stats = { total: current.length, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 };
+        for (const r of current) {
             if (r.result === null) stats.open++;
             else stats[r.result] = (stats[r.result] || 0) + 1;
         }
-        if (source !== 'shadow') return { market, stats, records };
-        const so = calc ? calc.shadowOptions() : null;
+        if (source !== 'shadow') return { market, entry_tf, stats, records };
         return {
-            market, source, enabled: Boolean(so), model: so?.signal.model ?? null, roles: so?.roles ?? null,
+            market, source, entry_tf, enabled: Boolean(so), model: so?.signal.model ?? null, roles: so?.roles ?? null,
             latest: shadowLatest.get(market) ?? null, stats, records,
         };
     }

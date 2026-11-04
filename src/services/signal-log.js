@@ -163,7 +163,10 @@ function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = (
         const pending = open.get(market);
 
         for (const r of [...pending.values()]) {
-            const outcome = evaluate(r, candles, expiry());
+            // A record from another entry timeframe (roles changed) cannot be judged on these candles.
+            const outcome = r.timeframe && r.timeframe !== entryOf()
+                ? { result: 'UNKNOWN', rr: null, closed_at: candles[candles.length - 1]?.close_time ?? null, bars: null }
+                : evaluate(r, candles, expiry());
             if (!outcome) continue;
             await append(market, { type: 'outcome', id: r.id, ...outcome });
             pending.delete(r.id);

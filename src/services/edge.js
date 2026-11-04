@@ -51,8 +51,8 @@ function rolesMatch(reportRoles, liveRoles) {
 }
 
 // Taken records of a signal log: open count and the summary of the closed ones (rr before fees).
-function logSummary(records) {
-    const taken = records.filter(r => !r.filtered);
+function logSummary(records, entryTf) {
+    const taken = records.filter(r => !r.filtered && (!entryTf || r.timeframe === entryTf));
     const closed = taken.filter(r => CLOSED.includes(r.result)).map(r => ({ ...r, net_r: r.rr }));
     return { open: taken.filter(r => r.result === null).length, ...pick(metrics(closed).summary) };
 }
@@ -62,7 +62,7 @@ function shadowSummary(body) {
     if (!body || !body.enabled) return null;
     return {
         model: body.model, roles: body.roles, latest: body.latest ? { action: body.latest.signal.action, score: body.latest.signal.score, status: body.latest.status } : null,
-        ...logSummary(body.records),
+        ...logSummary(body.records, body.entry_tf),
     };
 }
 
@@ -83,7 +83,7 @@ function edgeSummary(market, report, log, live) {
         };
     }
 
-    const liveLog = log ? logSummary(log.records) : null;
+    const liveLog = log ? logSummary(log.records, log.entry_tf) : null;
 
     let verdict;
     const taken = backtest?.taken;

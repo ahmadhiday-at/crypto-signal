@@ -13,7 +13,7 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `MARKET_LIST` | `BTCUSDT` | `env.js` | Comma-separated; invalid symbols dropped |
 | `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped |
 | `TIMEFRAME_LABELS` | timeframe codes | `env.js` | Same order as `TIMEFRAME_LIST` |
-| `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1d`, `4h`, `1h`, `15m` | `env.js` | Since 2.21.0 only the defaults of calculation config `engine` (role timeframes); unsupported value aborts startup |
+| `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1w`, `1d`, `4h`, `1h` (since 2.24.0) | `env.js` | Since 2.21.0 only the defaults of calculation config `engine` (role timeframes); unsupported value aborts startup |
 | `WEIGHT_1D`, `WEIGHT_4H`, `WEIGHT_1H`, `WEIGHT_15M`, `WEIGHT_1W`, `WEIGHT_1M` | `3.0`, `2.0`, `1.5`, `1.0`, `1.0`, `1.0` | `env.js` | Since 2.14.0 only the defaults of `weights` in the calculation config (used when the file lacks a key or is created) |
 | `MAPPING_CANDLE` | base 200 | `env.js` | Since 2.21.0 only the defaults of calculation config `lookback`; `tf:candles` pairs, keys case-sensitive |
 | `CANDLE_LIMIT` | `500` | `env.js` | Since 2.21.0 only the default of calculation config `engine.candle_limit`; must be 201–1000, otherwise 500 |
@@ -28,10 +28,10 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 
 | Group | Key | Default | Range | Meaning |
 | :---- | :-- | :------ | :---- | :------ |
-| `engine` | `htf` / `structure` / `mid` / `entry` | `TF_*` env (`1d` / `4h` / `1h` / `15m`) | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
+| `engine` | `htf` / `structure` / `mid` / `entry` | `TF_*` env (`1w` / `1d` / `4h` / `1h`) | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
 | `shadow` | `enabled` | `on` | `off` / `on` | Shadow signal log (since 2.22.0): a second model logged to `data/signals-shadow/` next to the live signal, which it does not change |
-| `shadow` | `model` | `trend_pullback` | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
-| `shadow` | `htf` / `structure` / `mid` / `entry` | `1w` / `1d` / `4h` / `1h` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in TIMEFRAME_LIST or the live roles; applied at once) |
+| `shadow` | `model` | `bounce` (since 2.24.0) | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
+| `shadow` | `htf` / `structure` / `mid` / `entry` | `1d` / `4h` / `1h` / `15m` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in TIMEFRAME_LIST or the live roles; applied at once) |
 | `shadow` | `stop_atr`, `target_r` | 3, 2 | 0.1–20, 0.5–20 | Shadow trend-model stop (× ATR) and target (× risk); other values come from the live groups |
 | `engine` | `candle_limit` | `CANDLE_LIMIT` env (500) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
 | `lookback` | `<tf>` | `MAPPING_CANDLE` env, else 200 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
@@ -49,12 +49,12 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `weights` | `<tf>` | `WEIGHT_*` env | 0.1–20 | Zone weight in the merge; unlisted timeframes weigh 1.0 |
 | `scoring` | `near_zone` / `momentum` / `htf_zone` / `divergence` / `volume` | 2 / 2 / 3 / 2 / 1 | integer 0–10 (volume 0–5) | Points per signal reason (since 2.18.0) |
 | `scoring` | `strong_score` | 7 | integer 1–30 | \|score\| for strength `strong` |
-| `signal` | `model` | `bounce` | `bounce` / `trend_pullback` / `breakout` | Signal model (since 2.20.0), see [market-state.md §4.2](../contract/market-state.md#42-trend-models-added-in-2200) |
+| `signal` | `model` | `trend_pullback` (since 2.24.0) | `bounce` / `trend_pullback` / `breakout` | Signal model (since 2.20.0), see [market-state.md §4.2](../contract/market-state.md#42-trend-models-added-in-2200) |
 | `trend` | `htf_points` / `structure_points` / `entry_points` | 3 / 2 / 1 | integer 0–10 | Trend models: ± points for each role timeframe's `trend` |
 | `trend` | `pullback_points`, `pullback_atr` | 2, 1 | integer 0–10, 0–10 | `trend_pullback`: price within `pullback_atr` × ATR of the entry MA50 |
 | `trend` | `breakout_points`, `channel_candles` | 3, 20 | integer 0–10, integer 2–500 | `breakout`: close beyond the high / low of the previous `channel_candles` entry candles |
 | `trend` | `momentum_points`, `volume_points` | 1, 1 | integer 0–10, 0–5 | MACD histogram in the score direction; high / low volume |
-| `trend` | `stop_atr`, `target_r` | 1.5, 2 | 0.1–20, 0.5–20 | Trend plan: stop at price ∓ `stop_atr` × ATR, TP1 at `target_r` × risk |
+| `trend` | `stop_atr`, `target_r` | 3, 2 (since 2.24.0) | 0.1–20, 0.5–20 | Trend plan: stop at price ∓ `stop_atr` × ATR, TP1 at `target_r` × risk |
 | `scoring` | `breakout_confirmed` | `medium` | `weak` / `medium` / `strong` | Weakest breakout confirmation that lets BUY into resistance / SELL into support pass |
 | `indicators` | `ma_fast` / `ma_mid` / `ma_slow` | 14 / 50 / 200 | integer, fast < mid < slow | SMA periods; the fields stay `ma14` / `ma50` / `ma200` |
 | `indicators` | `rsi_period`, `atr_period` | 14, 14 | integer 2–100 | RSI and ATR periods |
@@ -80,7 +80,7 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `divergence` | `lookback` / `pivot_width` / `max_age` | 60 / 3 / 10 | integers, pivot_width × 2 < lookback | RSI divergence search (entry TF) |
 | `evaluation` | `expiry_candles` | 96 | integer 1–2000 | Entry candles before an open trade is `EXPIRED` (signal log and backtest) |
 | `evaluation` | `min_trades` | 30 | integer 1–1000 | Minimum taken trades for the Edge verdict and the out-of-sample pick |
-| `backtest` | `days` | 365 | integer 1–1500 | History length (CLI `--days` default) |
+| `backtest` | `days` | 1095 (since 2.24.0) | integer 1–1500 | History length (CLI `--days` default) |
 | `backtest` | `fee_pct` | 0.1 | 0–5 | Round-trip fee, % of price (CLI `--fee` default) |
 | `backtest` | `split` | 0.7 | 0.5–0.9 | Out-of-sample split (CLI `--split` default) |
 

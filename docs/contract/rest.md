@@ -8,7 +8,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | :------- | :------- | :----- | :---------- |
 | Data | `/api/market/:symbol` | `GET` | Market State ([market-state.md](./market-state.md)) with freshness `status`. HTTP 503 with diagnostics when unavailable (see below). |
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
-| Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset; `?source=shadow` (since 2.22.0) reads the shadow log. See [Signal log](#signal-log). |
+| Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, entry_tf, stats, records}`; `?format=csv` returns the flattened dataset; `?source=shadow` (since 2.22.0) reads the shadow log. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
 | Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
 | Data | `/api/calc-config` | `GET` / `PUT` | Calculation config (since 2.14.0). See [Calculation config](#calculation-config). |
@@ -49,12 +49,12 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 `GET /api/signals/:symbol` (Roadmap Level 4). Source: `data/signals/{MARKET}.jsonl` (gitignored, append-only).
 
-**Shadow log (since 2.22.0):** `?source=shadow` reads `data/signals-shadow/{MARKET}.jsonl` (gitignored), written after each published Market State by the model of the calculation config `shadow` group on its own role timeframes (default `trend_pullback` on 1h / 4h / 1d / 1w, stop 3 ATR, target 2R; other values from the live config). The live signal and log are unchanged. Response `{market, source: "shadow", enabled, model, roles, latest, stats, records}`; `latest` = `{model, roles, generated_at, status, price, signal: {action, score, filters, plan}}` of the last build or `null`. A shadow role timeframe outside the fetched ones (TIMEFRAME_LIST + roles) pauses the shadow log with one warning.
+**Shadow log (since 2.22.0):** `?source=shadow` reads `data/signals-shadow/{MARKET}.jsonl` (gitignored), written after each published Market State by the model of the calculation config `shadow` group on its own role timeframes (default since 2.24.0: `bounce` on 15m / 1h / 4h / 1d, stop 3 ATR, target 2R; other values from the live config). The live signal and log are unchanged. Response `{market, source: "shadow", enabled, model, roles, latest, stats, records}`; `latest` = `{model, roles, generated_at, status, price, signal: {action, score, filters, plan}}` of the last build or `null`. A shadow role timeframe outside the fetched ones (TIMEFRAME_LIST + roles) pauses the shadow log with one warning.
 
 - **When a record is created:** after a published summary with `status: "ok"`, `|signal.score| ≥ 5` and a plan with `stop_loss` and `take_profit_1`. Filtered candidates are logged too (`filtered: true`, `filters`). At most one open record per market and direction.
 - **Record:** `id`, `timestamp` (summary `generated_at`), `market`, `timeframe` (entry), `candle_time`, `candle_close_time`, `signal` (`BUY`/`SELL`, direction before filters), `filtered`, `filters`, `strength`, `price` (entry = closed entry-candle close), `entry_zone`, `sl`, `tp1`, `tp2`, `risk_reward`, `features` (`context`, `momentum`, `regime`, `volume_state`, `breakout_confirmation`, `divergence`, `volatility_ratio`, `distance_to_support`, `distance_to_resistance`, `rsi`, `atr`, `score`, `strength`, `reasons`), then `result`, `rr`, `closed_at`, `bars` (`null` while open).
 - **Outcome** (checked on each later closed entry candle): SL touched → `LOSS`, `rr` −1; TP1 touched → `WIN`, `rr` = `risk_reward`; both in one candle → `LOSS`; neither within 96 candles → `EXPIRED`, `rr` = (close − price) / risk (sign by side); the candle after the signal no longer in history → `UNKNOWN`.
-- **`stats`:** `total`, `open`, `WIN`, `LOSS`, `EXPIRED`, `UNKNOWN`.
+- **`stats`:** `total`, `open`, `WIN`, `LOSS`, `EXPIRED`, `UNKNOWN`. Since 2.24.0 they and the Edge log cover only records of the current entry timeframe (`entry_tf`); `records` and the CSV keep the whole dataset. A record still open from another entry timeframe closes as `UNKNOWN`.
 - **CSV:** one row per record, features flattened; lists joined with `|`.
 
 ## Backtest report

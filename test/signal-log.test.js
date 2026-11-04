@@ -7,6 +7,7 @@ const http = require('http');
 const { createSignalLog, evaluate, candidateDirection, toCsv, EXPIRY_CANDLES } = require('../src/services/signal-log');
 const { createMarketEngine } = require('../src/services/market.service');
 const { createApp } = require('../src/app');
+const { edgeSummary, liveParams } = require('../src/services/edge');
 const { fakeBinance, tempStorage, testConfig, silentLog } = require('./helpers');
 
 const LEN = 900; // 15m
@@ -129,7 +130,7 @@ test('engine passes each published summary and entry candles to the log; log err
     assert.equal(calls[1][0], 'summary');
     assert.equal(calls[1][2], 'ok');
     assert.ok(calls[1][3] >= 200, 'closed entry candles are passed');
-    assert.deepEqual(await engine.signalRecords('BTCUSDT'), { market: 'BTCUSDT', stats: { total: 0, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 }, records: [] });
+    assert.deepEqual(await engine.signalRecords('BTCUSDT'), { market: 'BTCUSDT', entry_tf: '15m', stats: { total: 0, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 }, records: [] });
 });
 
 test('GET /api/signals/:market serves JSON and CSV', async (t) => {
@@ -156,4 +157,31 @@ test('GET /api/signals/:market serves JSON and CSV', async (t) => {
     assert.equal((await csv.text()).trim().split('\n').length, 2);
 
     assert.equal((await fetch(`${base}/ETHUSDT`)).status, 404);
+});
+
+test('a record from another entry timeframe closes as UNKNOWN instead of being judged on these candles', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-roles-'));
+    const old = { type: 'signal', id: 'BTCUSDT-1000-BUY', market: 'BTCUSDT', timeframe: '15m', candle_time: 1000, candle_close_time: 1900, signal: 'BUY', filtered: false, price: 100, sl: 90, tp1: 101, risk_reward: 0.1 };
+    fs.writeFileSync(path.join(dir, 'BTCUSDT.jsonl'), JSON.stringify(old) + '\n');
+    const log = createSignalLog({ dir, entryTf: '1h', log: silentLog });
+    await log.load(['BTCUSDT']);
+    await log.onSummary('BTCUSDT', { status: 'ok', signal: { score: 0 } }, [{ time: 3600, high: 105, low: 99, close: 104, close_time: 7200 }]);
+    const [r] = await log.records('BTCUSDT');
+    assert.deepEqual([r.result, r.rr, r.closed_at], ['UNKNOWN', null, 7200]);
+});
+
+test('signal stats and Edge cover the current entry timeframe; records keep the whole dataset', async () => {
+    const closed = (timeframe, rr) => ({ id: `${timeframe}-${rr}`, timeframe, filtered: false, result: rr > 0 ? 'WIN' : 'LOSS', rr });
+    const records = [closed('15m', -1), closed('15m', -1), closed('1h', 2)];
+    const engine = createMarketEngine({
+        storage: tempStorage(), binance: fakeBinance({ now: () => Date.now() }), indicators: require('../src/services/indicator.service'),
+        config: { ...testConfig, TF_ROLES: { ...testConfig.TF_ROLES, entry: '1h' } },
+        signalLog: { load: async () => {}, onSummary: async () => {}, records: async () => records }, log: silentLog,
+    });
+    const body = await engine.signalRecords('BTCUSDT');
+    assert.equal(body.entry_tf, '1h');
+    assert.deepEqual([body.stats.total, body.stats.WIN, body.stats.LOSS], [1, 1, 0]);
+    assert.equal(body.records.length, 3);
+    const edge = edgeSummary('BTCUSDT', null, body, liveParams(testConfig, null, 499));
+    assert.equal(edge.live_log.trades, 1);
 });

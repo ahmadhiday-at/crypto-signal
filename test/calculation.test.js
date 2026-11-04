@@ -79,6 +79,7 @@ test('update saves and notifies; invalid hand edits keep the values in use', () 
 
 test('signal options change the score threshold, filters and plan', () => {
     const cfg = defaultsOf(testConfig.TF_WEIGHTS);
+    cfg.signal.model = 'bounce';
     const state = {
         status: 'ok', price: 100, context: 'near_support', momentum: 'bullish', volume_state: 'high', volatility_ratio: 2.5,
         distance_percent: { to_support: 0.5, to_resistance: 5 },

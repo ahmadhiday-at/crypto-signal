@@ -66,8 +66,8 @@ test('score points, strong score and breakout confirmation level', () => {
         price: 100, indicators: { atr: 1 }, distance_percent: { to_support: 0.4, to_resistance: 9 },
         levels: { support: [{ low: 98, high: 99.5, mid: 98.75, score: 10, tfs: ['1h'] }], resistance: [{ low: 109, high: 110, mid: 109.5, score: 10, tfs: ['15m'] }] },
     };
-    assert.equal(computeSignal(state, '1d').score, 4);
-    const sig = computeSignal(state, '1d', { scoring: { near_zone: 3, momentum: 4, strong_score: 6 } });
+    assert.equal(computeSignal(state, '1d', { model: 'bounce' }).score, 4);
+    const sig = computeSignal(state, '1d', { model: 'bounce', scoring: { near_zone: 3, momentum: 4, strong_score: 6 } });
     assert.deepEqual([sig.score, sig.strength, sig.action], [7, 'strong', 'BUY']);
     const intoRes = { context: 'near_resistance', breakout_confirmation: 'weak' };
     assert.deepEqual(tradeFilters(intoRes, 'BUY'), ['buy_into_resistance']);
@@ -121,7 +121,9 @@ test('engine: an indicator change recalculates stored snapshots without fetching
 
 test('trend group and model: defaults, channel field and backtest sweep key', () => {
     const d = defaultsOf({});
-    assert.equal(d.signal.model, 'bounce');
+    assert.equal(d.signal.model, 'trend_pullback');
+    assert.equal(d.trend.stop_atr, 3);
+    assert.equal(d.backtest.days, 1095);
     assert.equal(d.trend.channel_candles, 20);
     assert.deepEqual(validate({ signal: { model: 'scalp' } }, d).problems, ['signal.model must be one of bounce, trend_pullback, breakout']);
     const { mergeSnapshots } = require('../src/services/market.service');
@@ -138,7 +140,7 @@ test('engine and lookback: seeded from .env, validated, applied at startup', () 
     const d = defaultsOf({}, env);
     assert.deepEqual(d.engine, { htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 1000 });
     assert.deepEqual(d.lookback, { '1h': 300, '15m': 250 }, 'unsupported timeframes are dropped');
-    assert.deepEqual(defaultsOf({}).engine, { htf: '1d', structure: '4h', mid: '1h', entry: '15m', candle_limit: 500 });
+    assert.deepEqual(defaultsOf({}).engine, { htf: '1w', structure: '1d', mid: '4h', entry: '1h', candle_limit: 500 });
     const problems = (input) => validate(input, d).problems;
     assert.deepEqual(problems({ engine: { entry: '4h', mid: '1h' } }), ['engine: htf ≥ structure ≥ mid ≥ entry timeframe is required']);
     assert.deepEqual(problems({ engine: { entry: '7m' } }), [`engine.entry must be one of ${Object.keys(require('../src/services/candles').TF_SECONDS).join(', ')}`]);
@@ -171,7 +173,7 @@ test('engine and lookback: seeded from .env, validated, applied at startup', () 
 
 test('shadow log: a second model on its own roles, logged apart from the live signal', async () => {
     const d = defaultsOf({});
-    assert.deepEqual(d.shadow, { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '4h', entry: '1h', stop_atr: 3, target_r: 2 });
+    assert.deepEqual(d.shadow, { enabled: 'on', model: 'bounce', htf: '1d', structure: '4h', mid: '1h', entry: '15m', stop_atr: 3, target_r: 2 });
     assert.deepEqual(validate({ shadow: { entry: '1d', mid: '4h' } }, d).problems, ['shadow: htf ≥ structure ≥ mid ≥ entry timeframe is required']);
 
     const { shadowOptions } = require('../src/config/calculation');

@@ -34,10 +34,10 @@ RAW_TIMEFRAMES.forEach((tf, i) => {
 });
 
 const TF_ROLES = {
-  htf: process.env.TF_HTF || "1d",
-  structure: process.env.TF_STRUCTURE || "4h",
-  mid: process.env.TF_MID || "1h",
-  entry: process.env.TF_ENTRY || "15m",
+  htf: process.env.TF_HTF || "1w",
+  structure: process.env.TF_STRUCTURE || "1d",
+  mid: process.env.TF_MID || "4h",
+  entry: process.env.TF_ENTRY || "1h",
 };
 for (const [role, tf] of Object.entries(TF_ROLES)) {
   if (!TF_SECONDS[tf]) throw new Error(`[Config] TF role ${role} uses unsupported timeframe: ${tf}`);

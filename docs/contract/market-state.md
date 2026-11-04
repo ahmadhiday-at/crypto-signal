@@ -28,8 +28,8 @@ The server validates every Market State against this contract (`src/services/con
 - **Candle close time:** the end of the candle interval, i.e. open time + timeframe length. A candle is **closed** once the current time has reached its close time.
 - **Prices:** quote currency of the pair (USDT for `*USDT`).
 - **Fractions vs percentages:** `distance.*` is a fraction (`0.0069` = 0.69%); `distance_percent.*` is the same value in percent.
-- **Entry timeframe:** the timeframe assigned to the `TF_ENTRY` role (default `15m`). Fields marked *entry TF* are taken from it.
-- **Role timeframes:** `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` (default `1d`, `4h`, `1h`, `15m`). Only these feed the Market State. Other configured timeframes are used for charts only.
+- **Entry timeframe:** the timeframe assigned to the `TF_ENTRY` role (default `1h` since 2.24.0). Fields marked *entry TF* are taken from it.
+- **Role timeframes:** `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` (default `1w`, `1d`, `4h`, `1h` since 2.24.0). Only these feed the Market State. Other configured timeframes are used for charts only.
 - **Closed candles only:** every field below is derived from closed candles. The forming candle and the live ticker price never enter the Market State.
 
 ---
@@ -124,7 +124,7 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 
 ### 4.2 Trend models (added in 2.20.0)
 
-The calculation config `signal.model` picks the model; `bounce` (default) is §4.1. `trend_pullback` and `breakout` score from the role timeframes' `trend` (`timeframes[tf].trend`), with config `trend` points:
+The calculation config `signal.model` picks the model; `bounce` is §4.1; since 2.24.0 the default is `trend_pullback`. `trend_pullback` and `breakout` score from the role timeframes' `trend` (`timeframes[tf].trend`), with config `trend` points:
 
 | Code | Points | When |
 | :--- | :----- | :--- |

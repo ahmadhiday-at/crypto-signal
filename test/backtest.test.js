@@ -141,7 +141,7 @@ test('breakdown: every dimension splits the trades; filtered trades count once p
 });
 
 test('setup variants: fixed target, SL buffer, side and energy skips', () => {
-    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400 };
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400, model: 'bounce' };
     const report = runBacktest({ ...args, variants: [{ target: 2, min_rr: 0 }, { side: 'sell' }, { skip_energy: ['explosive', 'building', 'stable', 'cooling'] }, { stop_atr: 1 }] });
     const [base, fixed, sell, noEnergy, wide] = report.sweep;
     assert.equal(base.params.target, 'tp1');

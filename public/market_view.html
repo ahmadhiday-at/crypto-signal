@@ -279,6 +279,7 @@
             }
             await loadTfSelector();
             const config = (await header) || { markets: [] };
+            updateViewLinks();
             const known = config.markets.map(m => m.code);
             if (!known.includes(state.market)) {
                 const desc = MarketStatus.describeUnknownMarket(state.market, known);
@@ -309,7 +310,11 @@
         async function loadTfSelector() {
             const res = await fetch('/api/config');
             const config = await res.json();
-            if (config.roles && config.roles.entry) state.entryTf = config.roles.entry;
+            if (config.roles && config.roles.entry) {
+                state.entryTf = config.roles.entry;
+                // The chart opens on the timeframe the signal is made on.
+                if (config.timeframes.some(tf => tf.code === state.entryTf)) state.currentTf = state.entryTf;
+            }
             const container = document.getElementById('tf-selector');
             
             config.timeframes.forEach(tf => {

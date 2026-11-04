@@ -153,7 +153,7 @@ const stateKey = (p) => JSON.stringify([snapshotKey(p), p.weights, p.calc.market
 // each distinct indicators/zones set computes its own snapshots, so such sweeps cost more time.
 const FIXED_KEYS = ['trailing_atr', 'htf_proximity_percent', 'no_mans_land_percent', 'volatility_extreme', 'volatility_dead'];
 
-function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, model = 'bounce', target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
+function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec, endSec = Infinity, feePct = 0, window = 499, threshold = THRESHOLD, minRiskReward = MIN_RISK_REWARD, stopAtr = STOP_ATR_BUFFER, model = SIGNAL_DEFAULTS.model, target = 'tp1', htfTrend = 'off', entryMaxAtr = 0, fixed = {}, calcParams = {}, variants = [], splitSec = null, onProgress }) {
     const defaults = { ...SIGNAL_DEFAULTS, ...FILTER_DEFAULTS };
     const fixedParams = Object.fromEntries(FIXED_KEYS.map(k => [k, fixed[k] ?? defaults[k]]));
     const fixedOpts = {
