@@ -95,7 +95,7 @@ test('reset runs for same-origin requests and reports a concurrent reset', async
     const s = await startServer();
     t.after(s.close);
     s.binance.delayMs = 30;
-    const headers = { 'X-Requested-With': 'crypto-signal', Origin: s.base };
+    const headers = { 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': testConfig.ADMIN_TOKEN, Origin: s.base };
     const first = req(s.base, '/api/reset', { method: 'POST', headers });
     await new Promise(r => setTimeout(r, 5));
     const second = await req(s.base, '/api/reset', { method: 'POST', headers });
@@ -112,7 +112,7 @@ test('reset reports failed timeframes with 502 and keeps going', async (t) => {
     const s = await startServer();
     t.after(s.close);
     s.binance.failures['1h'] = Object.assign(new Error('x'), { code: 'binance_451' });
-    const r = await req(s.base, '/api/reset', { method: 'POST', headers: { 'X-Requested-With': 'crypto-signal' } });
+    const r = await req(s.base, '/api/reset', { method: 'POST', headers: { 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': testConfig.ADMIN_TOKEN } });
     assert.equal(r.status, 502);
     assert.equal(r.body.success, false);
     assert.deepEqual(r.body.results.BTCUSDT.failed, [{ timeframe: '1h', error: 'binance_451' }]);
@@ -208,3 +208,38 @@ test('/ redirects to the dashboard of the first configured market', async (t) =>
     const page = await fetch(`${s.base}/`).then(res => res.text());
     assert.match(page, /data-view="dashboard"/, 'lands on the dashboard with the shared header');
 });
+
+test('actions need the admin token; reads do not', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const action = { 'X-Requested-With': 'crypto-signal' };
+    const missing = await req(s.base, '/api/reset', { method: 'POST', headers: action });
+    assert.deepEqual([missing.status, missing.body.error], [401, 'admin_token_invalid']);
+    const wrong = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, 'X-Admin-Token': 'wrong' } });
+    assert.deepEqual([wrong.status, wrong.body.error], [401, 'admin_token_invalid']);
+    assert.equal(s.binance.calls.length, 0, 'nothing ran');
+    // The same-origin check comes first and a cross-site page gets no answer about the token.
+    const cross = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, Origin: 'https://evil.example' } });
+    assert.deepEqual([cross.status, cross.body.error], [403, 'cross_origin_request']);
+    const cfg = await req(s.base, '/api/config');
+    assert.equal(cfg.status, 200);
+    assert.equal(cfg.body.admin_configured, true);
+    assert.ok(!JSON.stringify(cfg.body).includes(testConfig.ADMIN_TOKEN), 'the token is never served');
+    const ok = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, 'X-Admin-Token': testConfig.ADMIN_TOKEN } });
+    assert.equal(ok.status, 200);
+});
+
+test('without a configured token every action is refused', () => {
+    const { requireAdmin } = require('../src/api/routes/api.routes');
+    const call = (token, given) => {
+        const out = {};
+        const res = { status(c) { out.code = c; return this; }, json(b) { out.body = b; return this; } };
+        requireAdmin(token)({ get: () => given }, res, () => { out.next = true; });
+        return out;
+    };
+    assert.deepEqual(call('', 'anything'), { code: 403, body: { error: 'admin_token_not_configured' } });
+    assert.deepEqual(call(undefined, undefined), { code: 403, body: { error: 'admin_token_not_configured' } });
+    assert.deepEqual(call('a-long-enough-token-1234', 'a-long-enough-token-1234'), { next: true });
+    assert.equal(call('a-long-enough-token-1234', 'a-long-enough-token-123').code, 401);
+});
+

@@ -20,7 +20,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
 | System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
 | System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
-| System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
+| System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires the admin token ([Admin token](#admin-token)), header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 
 - Under `/api`, unknown symbols, timeframes or paths return 404.
 - Page routes do not validate: any `/:symbol` or `/:symbol/:tf` returns the page (200). Since 2.10.1 the pages compare the symbol (and timeframe) with `/api/config` and, if it is not configured, show "not in the market list (MARKET_LIST)" with the available markets instead of loading data. `/` redirects (302) to the Market Dashboard of the first `MARKET_LIST` market (since 2.13.0; before: reference chart).
@@ -99,13 +99,23 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 Since 2.14.0. Values in `config/calculation.json` ([config.md](../architecture/config.md#calculation-config)).
 
 - `GET /api/calc-config` → `{file, config, defaults, limits, role_timeframes, running_engine}`. `config` and `defaults` have the groups listed in [config.md](../architecture/config.md#calculation-config) (`engine` and `lookback` since 2.21.0); `running_engine` is the `engine` in use since startup (a saved `engine` that differs waits for a restart); `limits` gives `[min, max, integer]` per numeric key and `{values}` for a choice (`filters.htf_trend` since 2.16.0, `signal.target` since 2.17.0) (`weights`, `lookback`: one triple for every timeframe).
-- `PUT /api/calc-config` with a JSON body (full or partial config; missing keys keep the values in use). Requires header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise). 400 `invalid_config` with `problems` (list of messages) or 400 `invalid_json`; 200 `{config, changed}`. The file is written atomically and the values apply at once: weights rebuild every Market State, the signal values apply on the next read.
+- `PUT /api/calc-config` with a JSON body (full or partial config; missing keys keep the values in use). Requires the admin token, header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise). 400 `invalid_config` with `problems` (list of messages) or 400 `invalid_json`; 200 `{config, changed}`. The file is written atomically and the values apply at once: weights rebuild every Market State, the signal values apply on the next read.
 - A report made with other values gets `params_differ` in [Edge](#edge).
 
 ## Backtest runs
 
 Since 2.14.0. Runs `scripts/backtest.js SYMBOL` (the saved calculation config, no sweep) in a child process, one batch at a time, markets one after another. Stopped after 60 minutes.
 
-- `POST /api/backtest-runs` with `{"market": "BTCUSDT"}` or `{"market": "all"}` (every `MARKET_LIST` market). Same header and same-origin rules as `PUT /api/calc-config`. 202 `{jobs}`, 404 for an unknown market, 409 `backtest_running`.
+- `POST /api/backtest-runs` with `{"market": "BTCUSDT"}` or `{"market": "all"}` (every `MARKET_LIST` market). Same admin token, header and same-origin rules as `PUT /api/calc-config`. 202 `{jobs}`, 404 for an unknown market, 409 `backtest_running`.
 - `GET /api/backtest-runs` → `{running, jobs}`; `jobs` holds the latest job per market: `{market, state (queued/running/done/failed), queued_at, started_at, finished_at, progress (last output line), error, output (last 15 lines)}`. In memory only: lost on restart.
 - Binance HTTP 451 fails the run (`error` holds the CLI message); no workaround.
+
+## Admin token
+
+Since 2.25.0 `PUT /api/calc-config`, `POST /api/backtest-runs` and `POST /api/reset` need header `X-Admin-Token` with the value of env var `ADMIN_TOKEN`. Reads stay open.
+
+- 401 `admin_token_invalid`: header missing or wrong.
+- 403 `admin_token_not_configured`: the server has no valid `ADMIN_TOKEN`; every action is refused.
+- `GET /api/config` has `admin_configured` (boolean); the token is never served.
+- The token travels in plain text over HTTP: on a network use TLS or keep `BIND_ADDR=127.0.0.1`.
+

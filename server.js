@@ -74,6 +74,7 @@ binanceService.connectWebSocket(
 const scheduler = createScheduler(engine);
 
 server.listen(config.PORT, config.HOST, async () => {
+    if (!config.ADMIN_TOKEN) console.warn('[Security] ADMIN_TOKEN is not set: config save, backtest run and reset are refused');
     console.log(`Trading Chart Server running on http://${config.HOST}:${config.PORT}`);
 
     try {

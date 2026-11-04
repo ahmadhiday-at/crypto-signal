@@ -275,6 +275,7 @@ http://localhost:11000
 - Secara default port hanya dipublish di **loopback host** (`127.0.0.1`), sehingga perangkat lain di jaringan (LAN/Wi-Fi) tidak dapat mengakses aplikasi. Aplikasi **tidak memiliki autentikasi**.
 - Untuk sengaja membuka akses ke jaringan, set `BIND_ADDR=0.0.0.0` di `.env`, tambahkan IP/hostname yang dipakai di browser ke `ALLOWED_HOSTS` (mis. `ALLOWED_HOSTS=192.168.1.20`), lalu jalankan `docker compose up -d`. Lakukan hanya di jaringan tepercaya.
 - Aplikasi hanya melayani request dengan header `Host` `localhost`, `127.0.0.1`, `[::1]` atau nama di `ALLOWED_HOSTS` (selain itu `403 host_not_allowed`). Ini mencegah serangan DNS rebinding dari halaman web lain.
+- Simpan config, Run backtest dan Reset butuh `ADMIN_TOKEN` (sejak v2.25.0). Token dikirim tanpa enkripsi lewat HTTP: kalau dibuka ke jaringan, pakai TLS.
 - Di dalam container, Compose men-set `HOST=0.0.0.0` agar Node.js menerima koneksi dari port yang dipublish. Nilai `HOST` di `.env` hanya berlaku untuk menjalankan aplikasi langsung (`npm start`) tanpa Docker.
 
 ---
@@ -312,6 +313,7 @@ Variabel terkait jaringan:
 | `PORT`      | Node.js dan Docker Compose    | `11000`     | Port aplikasi |
 | `HOST`      | Node.js (tanpa Docker)        | `0.0.0.0`   | Disarankan `127.0.0.1`. Di Docker selalu `0.0.0.0` (di-set oleh Compose) |
 | `BIND_ADDR` | Docker Compose (port publish) | `127.0.0.1` | `0.0.0.0` membuka akses dari jaringan |
+| `ADMIN_TOKEN` | Node.js (HTTP) | kosong | Sejak v2.25.0: token minimal 16 karakter untuk simpan config, Run backtest dan Reset; kosong berarti aksi itu ditolak |
 | `ALLOWED_HOSTS` | Node.js (HTTP & WebSocket) | kosong | Hostname/IP tambahan selain `localhost`, `127.0.0.1`, `[::1]` |
 
 ---

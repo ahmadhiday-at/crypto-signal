@@ -9,6 +9,7 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `PORT` | `11000` | `env.js`, `docker-compose.yml` | Both sides of the Compose port mapping |
 | `HOST` | `0.0.0.0` | `env.js` | Listen address; Compose forces `0.0.0.0` in the container |
 | `BIND_ADDR` | `127.0.0.1` | `docker-compose.yml` | Host interface the port is published on |
+| `ADMIN_TOKEN` | empty | `env.js` | Since 2.25.0: token (at least 16 characters) for config save, backtest run and reset; without it those actions are refused. See [rest.md](../contract/rest.md#admin-token) |
 | `ALLOWED_HOSTS` | empty | `env.js` | Extra Host names besides `localhost`, `127.0.0.1`, `[::1]` |
 | `MARKET_LIST` | `BTCUSDT` | `env.js` | Comma-separated; invalid symbols dropped |
 | `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped |

@@ -105,7 +105,7 @@ test('calculation config API, edge params_differ and backtest re-run', async (t)
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     t.after(() => new Promise(r => server.close(r)));
     const base = `http://127.0.0.1:${server.address().port}`;
-    const action = { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' };
+    const action = { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': testConfig.ADMIN_TOKEN };
     const put = (body, headers = action) => fetch(`${base}/api/calc-config`, { method: 'PUT', headers, body });
 
     const got = await fetch(`${base}/api/calc-config`).then(r => r.json());

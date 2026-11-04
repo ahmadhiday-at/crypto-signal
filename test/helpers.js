@@ -56,7 +56,9 @@ function tempStorage() {
     return storage;
 }
 
+const ADMIN_TOKEN = 'test-admin-token-0123456789';
 const testConfig = {
+    ADMIN_TOKEN,
     MARKETS: ['BTCUSDT'],
     TIMEFRAMES: ['15m', '1h', '4h', '1d'],
     TIMEFRAME_LABELS: [],
@@ -66,4 +68,4 @@ const testConfig = {
 
 const silentLog = { log() {}, warn() {}, error() {} };
 
-module.exports = { rawKlines, fakeBinance, tempStorage, testConfig, silentLog };
+module.exports = { rawKlines, fakeBinance, tempStorage, testConfig, silentLog, ADMIN_TOKEN };

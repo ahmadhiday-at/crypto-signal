@@ -11,6 +11,30 @@
         set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private mode */ } },
     };
 
+    // The admin token lives in this tab only and is asked for once.
+    const STORE_ADMIN = 'cs.adminToken';
+    const adminStore = {
+        get() { try { return sessionStorage.getItem(STORE_ADMIN); } catch (e) { return null; } },
+        set(v) { try { sessionStorage.setItem(STORE_ADMIN, v); } catch (e) { /* private mode */ } },
+        clear() { try { sessionStorage.removeItem(STORE_ADMIN); } catch (e) { /* private mode */ } },
+    };
+
+    // fetch for the actions that change something (config save, backtest run, reset).
+    async function adminFetch(url, options = {}) {
+        if (state.config && state.config.admin_configured === false) {
+            throw new Error('ADMIN_TOKEN is not set on the server: add it to .env and restart the app');
+        }
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const token = adminStore.get() || (window.prompt(attempt ? 'Wrong token. Admin token:' : 'Admin token (ADMIN_TOKEN in .env):') || '').trim();
+            if (!token) throw new Error('admin token required');
+            adminStore.set(token);
+            const res = await fetch(url, { ...options, headers: { ...options.headers, 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': token } });
+            if (res.status !== 401) return res;
+            adminStore.clear();
+        }
+        throw new Error('admin token rejected');
+    }
+
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     // Turns a <select> into a select2 dropdown. select2 fires jQuery events only, so a native 'change'
@@ -110,5 +134,5 @@
         return config;
     }
 
-    window.AppHeader = { init, setChartTf, select2 };
+    window.AppHeader = { init, setChartTf, select2, adminFetch };
 })();

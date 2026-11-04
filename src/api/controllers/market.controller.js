@@ -37,6 +37,7 @@ function createMarketController({ engine, config, reports = null, calc = null, r
             timeframes: config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code })),
             roles: config.TF_ROLES,
             version: appVersion(),
+            admin_configured: Boolean(config.ADMIN_TOKEN),
         });
     }
 

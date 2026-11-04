@@ -271,9 +271,9 @@
             if (bad.length) return;
             $('save').disabled = true;
             try {
-                const res = await fetch('/api/calc-config', {
+                const res = await AppHeader.adminFetch('/api/calc-config', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(value),
                 });
                 const data = await res.json().catch(() => ({}));
@@ -352,9 +352,9 @@
 
         async function startRun(market) {
             try {
-                const res = await fetch('/api/backtest-runs', {
+                const res = await AppHeader.adminFetch('/api/backtest-runs', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'crypto-signal' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ market }),
                 });
                 const data = await res.json().catch(() => ({}));

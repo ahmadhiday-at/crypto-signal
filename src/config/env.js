@@ -72,9 +72,19 @@ const ENGINE_ENV = {
 const ALLOWED_HOSTS = [...new Set(["localhost", "127.0.0.1", "[::1]",
   ...parseList("ALLOWED_HOSTS", []).map((h) => h.toLowerCase())])];
 
+// Protects the actions that change something (config save, backtest run, reset). Too short a token
+// counts as none: those actions stay refused.
+const MIN_ADMIN_TOKEN = 16;
+const rawAdminToken = (process.env.ADMIN_TOKEN || "").trim();
+if (rawAdminToken && rawAdminToken.length < MIN_ADMIN_TOKEN) {
+  console.warn(`[Config] ADMIN_TOKEN ignored: it needs at least ${MIN_ADMIN_TOKEN} characters`);
+}
+const ADMIN_TOKEN = rawAdminToken.length >= MIN_ADMIN_TOKEN ? rawAdminToken : "";
+
 module.exports = {
   PORT: process.env.PORT || 11000,
   ALLOWED_HOSTS,
+  ADMIN_TOKEN,
   // Listening interface. Defaults to all interfaces (existing behaviour); set HOST=127.0.0.1 for
   // local runs. Docker Compose sets HOST=0.0.0.0 and restricts the published port instead.
   HOST: process.env.HOST || "0.0.0.0",
