@@ -47,8 +47,7 @@ memory
 # Signal log (Level 4) and shadow signal log: grow per machine
 data/signals/
 data/signals-shadow/
-# Backtest history cache and reports (Level 5)
-data/history/
+# Backtest reports (Level 5); data/history/ is committed
 data/backtest/
 
 

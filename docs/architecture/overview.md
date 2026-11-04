@@ -37,7 +37,8 @@ To avoid hitting API rate limits, the system keeps the latest state in a local f
 - **`data/chart/{MARKET}_{tf}.json`**: Stores the processed indicators for a specific timeframe.
 - **`data/market/{MARKET}.json`**: Stores the final Market State (contract: [market-state.md](../contract/market-state.md)).
 
-- **`data/history/{MARKET}_{tf}.json`, `data/backtest/{MARKET}.json`** (gitignored): backtest candle cache and latest report (Roadmap Level 5).
+- **`data/history/{MARKET}/{tf}/{YYYY}.json`** (committed, since 4.0.0): closed candles per UTC year, one row per line; `meta.json` holds what Binance does not have. `src/jobs/history-sync.js` fills only what is missing for every market and the live and shadow role timeframes: 60 s after start and daily at 00:01 UTC.
+- **`data/backtest/{MARKET}.json`** (gitignored): latest backtest report (Roadmap Level 5).
 - **`data/signals/{MARKET}.jsonl`** (gitignored): append-only signal log with outcomes (Roadmap Level 4; [rest.md → Signal log](../contract/rest.md#signal-log)).
 
 Write and consistency rules are in [Operating Model → O4](./operating-model.md#o4-storage-and-writes).
@@ -171,6 +172,6 @@ Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engi
 
 Backtest: `scripts/backtest.js` (CLI, outside the server) → `src/services/history.js` `createHistory().sync` (paginated `binance.getKlinesFrom`, cache in `data/history/`) → `src/services/backtest.js` `runBacktest` (shares `composeMarketState` from `market.service.js`, `computeSignal`, and `recordFrom`/`evaluate` from `signal-log.js` with the live path; `--sweep` variants reuse each step's snapshots and only re-merge when the weights differ; `breakdown` groups trades per feature) → `createReports().write`. The server reads reports (`createApp({ reports })` → `GET /api/backtest/:symbol`; `src/services/edge.js` `edgeSummary` → `GET /api/edge/:symbol`) and starts the CLI as a child process through `src/services/backtest-runner.js` (`POST /api/backtest-runs`).
 
-Triggers: `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
+Triggers: `historySync` → `history.sync` (startup and 00:01 UTC); `scheduler` → `engine.runBoundary(boundary)`; startup → `engine.initialize()`; ticker stream reconnect → `engine.refreshStale()`; `POST /api/reset` → `engine.reset()`.
 
 Other modules: `src/data/storage.js` is the only persistence layer (strict name regexes, unique temp file + fsync + rename, reads return `{data, reason}`). `src/websocket/ws.manager.js` shares the HTTP server (same-origin, 4 KB max payload, validated subscriptions). Page routes (`src/api/routes/view.routes.js`) are mounted at `/` after static files and `/api`; pages parse the market/timeframe from the last one or two URL segments.

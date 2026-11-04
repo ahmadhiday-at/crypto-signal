@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v4.0.0](docs/changelog/v4.0.0.md) — 2026-11-04 — History is stored per year and kept in git; a daily job at 00:01 UTC fills only what is missing.
 - [v3.3.0](docs/changelog/v3.3.0.md) — 2026-11-04 — Backtest gains slippage, next-open entry, walk-forward, 95% interval, run history, trailing exit option and --offline.
 - [v3.2.0](docs/changelog/v3.2.0.md) — 2026-11-04 — Zones are at most 2% wide (config) and merged levels are sided by the current price.
 - [v3.1.1](docs/changelog/v3.1.1.md) — 2026-11-04 — Backtest fee default becomes 0.2% round trip; a report with a lower fee no longer counts as proof.

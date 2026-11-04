@@ -18,7 +18,7 @@ docker compose restart app      # after .env changes
 
 - Tests: use fakes from `test/helpers.js`; never hit real Binance. E2E: point `BINANCE_REST_URL` at a local fake server, run `server.js` with `HOST=127.0.0.1` and a spare `PORT`.
 - Docker bind-mounts this folder with nodemon: **editing `server.js`/`src/` hot-reloads the user's running app**. For multi-step changes use a separate git worktree and apply the finished diff.
-- `data/` is committed but rewritten by the running app: don't commit it unless asked; its diffs need no version bump or changelog.
+- `data/` is committed but rewritten by the running app: don't commit it unless asked; its diffs need no version bump or changelog. `data/history/` is the exception worth committing: finished years never change, the running app adds to the current year at 00:01 UTC.
 
 ## Architecture
 

@@ -6,6 +6,9 @@ const wsManager = require('./src/websocket/ws.manager');
 const binanceService = require('./src/services/binance.service');
 const { createMarketEngine } = require('./src/services/market.service');
 const { createScheduler } = require('./src/jobs/scheduler');
+const { createHistorySync } = require('./src/jobs/history-sync');
+const { createHistory } = require('./src/services/history');
+const { tfSeconds } = require('./src/services/candles');
 const { createSignalLog } = require('./src/services/signal-log');
 const { createReports } = require('./src/services/backtest');
 const path = require('path');
@@ -84,6 +87,20 @@ binanceService.connectWebSocket(
 
 const scheduler = createScheduler(engine);
 
+// History for the backtest: every timeframe the live and shadow models use, for every market.
+const historySync = createHistorySync({
+    history: createHistory({ dir: path.join(__dirname, 'data/history'), binance: binanceService }),
+    targets: () => {
+        const shadow = calc.shadowOptions();
+        return { markets: config.MARKETS, timeframes: [...new Set([...Object.values(config.TF_ROLES), ...Object.values(shadow?.roles ?? {})])] };
+    },
+    // Same start as a backtest of that length: its period plus the candles of the first snapshot.
+    fromOf: (tf) => {
+        const cfg = calc.get();
+        return Math.floor(Date.now() / 1000) - cfg.backtest.days * 86400 - (cfg.engine.candle_limit + 10) * tfSeconds(tf);
+    },
+});
+
 server.listen(config.PORT, config.HOST, async () => {
     if (!config.ADMIN_TOKEN) console.warn('[Security] ADMIN_TOKEN is not set: config save, backtest run and reset are refused');
     console.log(`Trading Chart Server running on http://${config.HOST}:${config.PORT}`);
@@ -97,4 +114,5 @@ server.listen(config.PORT, config.HOST, async () => {
         console.error('[Init] Initialization failed:', err.message);
     }
     scheduler.start();
+    historySync.start();
 });

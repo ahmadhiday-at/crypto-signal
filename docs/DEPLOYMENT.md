@@ -1258,7 +1258,7 @@ Aplikasi Windows lainnya
 
 ### Backtest (sejak v2.8.0)
 
-Jalankan di dalam container `app` supaya request ke Binance lewat VPN. Data historis di-cache di `data/history/`, report di `data/backtest/` (keduanya gitignored), lalu buka `/backtest/BTCUSDT`.
+Jalankan di dalam container `app` supaya request ke Binance lewat VPN. Data historis ada di `data/history/{SIMBOL}/{timeframe}/{TAHUN}.json` dan masuk git sejak v4.0.0; aplikasi mengisi yang kurang 60 detik setelah start dan setiap 00:01 UTC (07:01 WIB), tanpa commit otomatis. Report di `data/backtest/` (keduanya gitignored), lalu buka `/backtest/BTCUSDT`.
 
 ```bash
 docker compose exec app npm run backtest -- BTCUSDT --days 365

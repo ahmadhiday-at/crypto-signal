@@ -246,7 +246,7 @@ test('history: downloads in pages, then only the missing tail', async () => {
     const second = await h.sync('BTCUSDT', '1h', from);
     assert.equal(requests.length, 1, 'only the new tail is requested');
     assert.equal(second.length, 2405);
-    assert.ok(fs.existsSync(path.join(dir, 'BTCUSDT_1h.json')));
+    assert.ok(fs.readdirSync(path.join(dir, 'BTCUSDT', '1h')).length > 0);
 });
 
 test('Binance client: getKlinesFrom sends startTime and limit 1000', async () => {
