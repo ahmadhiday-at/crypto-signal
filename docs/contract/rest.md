@@ -18,7 +18,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | UI | `/backtest/:symbol` | `GET` | Backtest report page: metrics, equity curve, trades. |
 | UI | `/config` | `GET` | Calculation config editor and backtest re-run (since 2.14.0). |
 | UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
-| System | `/api/config` | `GET` | Markets, timeframes, TF roles and `version` (app version from `package.json`, since 2.6.0). |
+| System | `/api/config` | `GET` | Markets, timeframes (`TIMEFRAME_LIST` plus the role timeframes, since 2.25.2), TF roles and `version` (app version from `package.json`, since 2.6.0). |
 | System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
 | System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires the admin token ([Admin token](#admin-token)), header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 

@@ -12,7 +12,7 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `ADMIN_TOKEN` | empty | `env.js` | Since 2.25.0: token (at least 16 characters) for config save, backtest run and reset; without it those actions are refused. See [rest.md](../contract/rest.md#admin-token) |
 | `ALLOWED_HOSTS` | empty | `env.js` | Extra Host names besides `localhost`, `127.0.0.1`, `[::1]` |
 | `MARKET_LIST` | `BTCUSDT` | `env.js` | Comma-separated; invalid symbols dropped |
-| `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped |
+| `TIMEFRAME_LIST` | `15m` | `env.js` | Comma-separated; unsupported entries dropped. Role timeframes are always fetched and can be charted (since 2.25.2) |
 | `TIMEFRAME_LABELS` | timeframe codes | `env.js` | Same order as `TIMEFRAME_LIST` |
 | `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` | `1w`, `1d`, `4h`, `1h` (since 2.24.0) | `env.js` | Since 2.21.0 only the defaults of calculation config `engine` (role timeframes); unsupported value aborts startup |
 | `WEIGHT_1D`, `WEIGHT_4H`, `WEIGHT_1H`, `WEIGHT_15M`, `WEIGHT_1W`, `WEIGHT_1M` | `3.0`, `2.0`, `1.5`, `1.0`, `1.0`, `1.0` | `env.js` | Since 2.14.0 only the defaults of `weights` in the calculation config (used when the file lacks a key or is created) |

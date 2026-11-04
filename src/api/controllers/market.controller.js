@@ -5,6 +5,16 @@ const path = require('path');
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, shadowSummary, liveParams } = require('../../services/edge');
 const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
+const { tfSeconds } = require('../../services/candles');
+
+// TIMEFRAME_LIST plus the role timeframes, which are always fetched. With additions the list runs
+// from the longest timeframe to the shortest; otherwise it keeps the configured order.
+function chartTimeframes(config) {
+    const listed = config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code }));
+    const added = [...new Set(Object.values(config.TF_ROLES))].filter(tf => !config.TIMEFRAMES.includes(tf));
+    if (!added.length) return listed;
+    return [...listed, ...added.map(code => ({ code, label: code }))].sort((a, b) => tfSeconds(b.code) - tfSeconds(a.code));
+}
 
 // Read on each call so a version bump shows up without restarting the server.
 function appVersion() {
@@ -34,7 +44,7 @@ function createMarketController({ engine, config, reports = null, calc = null, r
     function getConfig(req, res) {
         res.json({
             markets: config.MARKETS.map(code => ({ code, label: code })),
-            timeframes: config.TIMEFRAMES.map((code, i) => ({ code, label: config.TIMEFRAME_LABELS[i] || code })),
+            timeframes: chartTimeframes(config),
             roles: config.TF_ROLES,
             version: appVersion(),
             admin_configured: Boolean(config.ADMIN_TOKEN),
