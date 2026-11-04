@@ -19,7 +19,7 @@ services:
 
     ports:
       # Published on the host's loopback only by default. Set BIND_ADDR=0.0.0.0 to expose it on the
-      # network (the app has no authentication).
+      # network (only actions need ADMIN_TOKEN; reads stay open and HTTP has no encryption).
       - "${BIND_ADDR:-127.0.0.1}:${PORT:-11000}:${PORT:-11000}"
 
     restart: unless-stopped

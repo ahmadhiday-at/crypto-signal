@@ -21,7 +21,7 @@ Environment variables the code reads, their defaults, and configuration behaviou
 | `BINANCE_REST_URL` | `https://api.binance.com` | `binance.service.js` | |
 | `BINANCE_WS_URL` | `wss://stream.binance.com:9443/ws` | `binance.service.js` | |
 
-`DEFAULT_MARKET`, `DEFAULT_TIMEFRAME` and `LOG_LEVEL` appear in `.env.example` but are not read by the code.
+Since 2.25.1 `.env.example` lists deployment settings only. `TF_*`, `WEIGHT_*`, `MAPPING_CANDLE` and `CANDLE_LIMIT` still work as seeds, but `config/calculation.json` holds those values and wins.
 
 ## Calculation config
 

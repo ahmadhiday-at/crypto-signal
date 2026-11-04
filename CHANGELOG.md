@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.25.1](docs/changelog/v2.25.1.md) — 2026-11-04 — `.env.example` keeps deployment settings only; S/R lookback moves to config/calculation.json.
 - [v2.25.0](docs/changelog/v2.25.0.md) — 2026-11-04 — Config save, backtest run and reset need the new ADMIN_TOKEN.
 - [v2.24.0](docs/changelog/v2.24.0.md) — 2026-11-04 — Default model becomes trend_pullback on 1h/4h/1d/1w (stop 3 ATR, target 2R, 3-year backtest), with bounce on 15m in the shadow log; signal stats follow the current entry timeframe.
 - [v2.23.0](docs/changelog/v2.23.0.md) — 2026-11-04 — `market_energy` measures the MACD histogram against ATR, so its label no longer depends on the symbol's price.
