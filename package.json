@@ -1,7 +1,7 @@
 {
-  "name": "trading-chart-app",
-  "version": "4.1.0",
-  "description": "Real-time Trading Chart with S/R and Indicators",
+  "name": "crypto-signal",
+  "version": "4.2.0",
+  "description": "Crypto signal board: long/short signals with trade plans from a multi-timeframe Market State",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

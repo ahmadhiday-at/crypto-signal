@@ -39,6 +39,7 @@ function createApiRouter(controller, config = {}) {
 
     router.get('/market/:market', controller.getMarketAnalysis);
     router.get('/config', controller.getConfig);
+    router.get('/signals', controller.getSignalBoard);
     router.get('/signals/:market', controller.getSignals);
     router.get('/backtest/:market', controller.getBacktest);
     router.get('/backtest-history/:market', controller.getBacktestHistory);

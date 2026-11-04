@@ -2,6 +2,7 @@
 // it reaches storage or Binance.
 const { toCsv } = require('../../services/signal-log');
 const { edgeSummary, shadowSummary, liveParams } = require('../../services/edge');
+const { boardRow, buildBoard } = require('../../services/signal-board');
 const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
 const { tfSeconds, tfLabel } = require('../../services/candles');
 const { appVersion } = require('../../config/version');
@@ -30,6 +31,28 @@ function createMarketController({ engine, config, reports = null, calc = null, r
         }
     }
 
+    // The values a page needs to explain a signal; null without a calculation config.
+    function signalContext() {
+        if (!calc) return null;
+        const c = calc.get();
+        return {
+            model: c.signal.model,
+            threshold: c.signal.threshold,
+            strong_score: c.scoring.strong_score,
+            min_rr: c.signal.min_rr,
+            stop_atr: c.trend.stop_atr,
+            target_r: c.trend.target_r,
+            volatility_extreme: c.filters.volatility_extreme,
+            volatility_dead: c.filters.volatility_dead,
+            no_mans_land_percent: c.filters.no_mans_land_percent,
+            expiry_candles: c.evaluation.expiry_candles,
+            min_trades: c.evaluation.min_trades,
+            fee_pct: c.backtest.fee_pct,
+            slippage_pct: c.backtest.slippage_pct,
+            entry: c.backtest.entry,
+        };
+    }
+
     function getConfig(req, res) {
         res.json({
             markets: config.MARKETS.map(code => ({ code, label: code })),
@@ -37,6 +60,7 @@ function createMarketController({ engine, config, reports = null, calc = null, r
             roles: config.TF_ROLES,
             version: appVersion(),
             admin_configured: Boolean(config.ADMIN_TOKEN),
+            signal: signalContext(),
         });
     }
 
@@ -64,6 +88,30 @@ function createMarketController({ engine, config, reports = null, calc = null, r
                 return res.type('text/csv').set('Content-Disposition', `attachment; filename="${market}_${shadow ? 'shadow_' : ''}signals.csv"`).send(toCsv(body.records));
             }
             res.json(body);
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    // One market's row of the signal board. A market that fails is shown as unavailable, not as an error for all.
+    async function boardRowOf(market) {
+        const [market_state, log, report] = await Promise.all([
+            engine.getMarketState(market).catch(() => null),
+            engine.signalRecords(market).catch(() => null),
+            reports ? reports.read(market) : null,
+        ]);
+        const state = market_state?.httpStatus === 200 ? market_state.body : null;
+        return boardRow({
+            market, state, log, edge: edgeSummary(market, report, log, liveParams(config, calc)),
+            roles: config.TF_ROLES, expiryCandles: calc?.get().evaluation.expiry_candles ?? null,
+        });
+    }
+
+    // Every market's signal, open trades and latest results (docs/contract/rest.md).
+    async function getSignalBoard(req, res, next) {
+        try {
+            const rows = await Promise.all(config.MARKETS.map(boardRowOf));
+            res.json(buildBoard({ rows, model: calc?.get().signal.model ?? null, roles: config.TF_ROLES, now: Math.floor(Date.now() / 1000) }));
         } catch (err) {
             next(err);
         }
@@ -173,7 +221,7 @@ function createMarketController({ engine, config, reports = null, calc = null, r
         }
     }
 
-    return { getBacktestHistory, getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getCalcConfig, updateCalcConfig, getBacktestRuns, startBacktestRun, getHealth, resetData };
+    return { getSignalBoard, getBacktestHistory, getMarketAnalysis, getConfig, getSnapshot, getSignals, getBacktest, getEdge, getCalcConfig, updateCalcConfig, getBacktestRuns, startBacktestRun, getHealth, resetData };
 }
 
 module.exports = { createMarketController };

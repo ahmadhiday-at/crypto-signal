@@ -188,7 +188,7 @@ test('engine and lookback: defaults in the config, validated, applied at startup
 
 test('shadow log: a second model on its own roles, logged apart from the live signal', async () => {
     const d = defaultsOf();
-    assert.deepEqual(d.shadow, { enabled: 'on', model: 'bounce', htf: '1d', structure: '4h', mid: '1h', entry: '15m', stop_atr: 3, target_r: 2 });
+    assert.deepEqual(d.shadow, { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '1d', entry: '4h', stop_atr: 3, target_r: 2 });
     assert.deepEqual(validate({ shadow: { entry: '1d', mid: '4h' } }, d).problems, ['shadow: htf ≥ structure ≥ mid ≥ entry timeframe is required']);
 
     const { shadowOptions } = require('../src/config/calculation');

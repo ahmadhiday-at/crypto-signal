@@ -3,408 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Backtest Report</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
+    <title>Backtest | Crypto Signal</title>
     <link rel="stylesheet" href="/css/app.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
-    <script src="/js/app-header.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-    <style>
-        .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
-        .k { color: #848e9c; }
-        th, td { padding: 4px 8px; white-space: nowrap; }
-        thead th { position: sticky; top: 0; background: #1e222e; }
-    </style>
+    <script src="/js/format.js"></script>
+    <script src="/js/signal-view.js"></script>
+    <script src="/js/app-header.js"></script>
 </head>
-<body class="min-h-screen p-3 flex flex-col gap-3">
-    <!-- Shared header (js/app-header.js) with this report's period -->
+<body>
     <header id="app-header" data-view="backtest">
-        <div data-header-slot="left" class="flex flex-col">
-            <span class="t-label text-gray-500">Report</span>
-            <span id="period" class="t-meta mono text-gray-400">-</span>
-        </div>
+        <div data-header-slot="left"><span id="period" class="t-meta muted"></span></div>
     </header>
 
-    <div class="glass rounded-lg px-3 py-2 t-body text-yellow-200/80 border-l-4 border-l-yellow-500">
-        Hypothetical results, not executed trades: entry at <span id="entry-note">the close of the signal candle</span>, exit at <span id="exit-note">TP1 or SL</span>
-        (both in one candle counts as SL), expiry after <span id="expiry">96</span> entry candles. Results are in R (multiples of the planned risk).
-        <span id="fee-note"></span>
-    </div>
+    <main class="page">
+        <div id="empty" class="card t-body" hidden>
+            No backtest report for this symbol yet. Run it from <a href="/config" style="color:var(--accent)">Config</a>, or:
+            <pre class="mono t-data" id="empty-cmd" style="margin:8px 0 0;color:var(--accent)"></pre>
+        </div>
 
-    <div id="empty" class="hidden glass rounded-lg p-6 t-body text-gray-300">
-        No backtest report for this symbol yet. Run it from <a href="/config" class="text-blue-300 hover:underline">Config</a>, or:
-        <pre class="mono t-data mt-2 text-blue-300" id="empty-cmd"></pre>
-    </div>
+        <div id="report" class="stack" style="gap:12px" hidden>
+            <div id="verdict" class="banner"></div>
+            <div id="assumptions" class="t-meta muted"></div>
 
-    <div id="report" class="hidden flex flex-col gap-3">
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div class="glass rounded-lg p-3">
-                <div class="flex justify-between items-baseline mb-2">
-                    <span class="t-value text-green-400">Taken <span class="k font-normal">(passed every filter)</span></span>
+            <nav class="tabs" role="tablist" aria-label="Report sections">
+                <button type="button" role="tab" data-tab="summary" aria-selected="true">Summary</button>
+                <button type="button" role="tab" data-tab="robustness" aria-selected="false">Robustness</button>
+                <button type="button" role="tab" data-tab="breakdown" aria-selected="false">Breakdown</button>
+                <button type="button" role="tab" data-tab="trades" aria-selected="false">Trades</button>
+            </nav>
+
+            <section data-panel="summary" class="stack" style="gap:12px">
+                <div class="grid grid-2">
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title pos">Taken</h2><span class="card-note">Passed every filter</span></div>
+                        <div id="m-taken" class="metrics"></div>
+                        <div id="s-taken" class="t-meta muted num" style="margin-top:8px"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title warn">Filtered</h2><span class="card-note">Rejected by a filter, for comparison</span></div>
+                        <div id="m-filtered" class="metrics"></div>
+                        <div id="s-filtered" class="t-meta muted num" style="margin-top:8px"></div>
+                    </div>
                 </div>
-                <div id="m-taken" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono t-value"></div>
-                <div id="s-taken" class="mt-2 t-meta mono k"></div>
-            </div>
-            <div class="glass rounded-lg p-3">
-                <div class="flex justify-between items-baseline mb-2">
-                    <span class="t-value text-orange-400">Filtered <span class="k font-normal">(rejected by a filter, for comparison)</span></span>
+                <div class="card">
+                    <div class="card-head">
+                        <h2 class="card-title">Equity curve</h2>
+                        <span class="card-note">Cumulative R · <span class="pos">Taken</span> · <span class="warn">Filtered</span></span>
+                    </div>
+                    <div id="equity" style="height:320px"></div>
                 </div>
-                <div id="m-filtered" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mono t-value"></div>
-                <div id="s-filtered" class="mt-2 t-meta mono k"></div>
-            </div>
+            </section>
+
+            <section data-panel="robustness" class="stack" style="gap:12px" hidden>
+                <div id="validation-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Out-of-sample validation</h2><span id="validation-note" class="card-note"></span></div>
+                    <div class="table-wrap tall">
+                        <table class="tbl"><thead><tr>
+                            <th>Parameters</th><th class="right">In-sample trades</th><th class="right">In-sample R</th>
+                            <th class="right">OOS trades</th><th class="right">OOS win</th><th class="right">OOS R</th><th class="right">OOS total</th><th class="right">OOS PF</th>
+                        </tr></thead><tbody id="validation"></tbody></table>
+                    </div>
+                    <p class="t-body" id="validation-verdict" style="margin-top:8px"></p>
+                </div>
+                <div id="wf-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Walk-forward</h2><span class="card-note">Each period is judged with the variant that was best before it</span></div>
+                    <div class="table-wrap">
+                        <table class="tbl"><thead><tr><th>From</th><th class="right">Trades</th><th class="right">R</th><th class="right">PF</th></tr></thead><tbody id="wf"></tbody></table>
+                    </div>
+                    <p class="t-body" id="wf-verdict" style="margin-top:8px"></p>
+                </div>
+                <div id="sweep-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Parameter sweep</h2><span class="card-note">Taken trades, best first; ★ = live parameters</span></div>
+                    <div class="table-wrap tall">
+                        <table class="tbl"><thead><tr>
+                            <th>Parameters</th><th class="right">Trades</th><th class="right">Win</th><th class="right">R</th>
+                            <th class="right">Total</th><th class="right">PF</th><th class="right">Max DD</th><th class="right">Filtered R</th>
+                        </tr></thead><tbody id="sweep"></tbody></table>
+                    </div>
+                </div>
+                <div id="history-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Earlier runs</h2><span class="card-note">Newest first; the same hash means the same signal settings</span></div>
+                    <div class="table-wrap">
+                        <table class="tbl"><thead><tr>
+                            <th>Run (UTC)</th><th>Config</th><th>Model</th><th>Exit</th><th class="right">Costs %</th><th class="right">Trades</th><th class="right">R</th><th class="right">95% interval</th><th class="right">OOS</th><th class="right">WF</th>
+                        </tr></thead><tbody id="history"></tbody></table>
+                    </div>
+                </div>
+                <div id="robust-empty" class="card empty" hidden>This report has no robustness checks. Run it with <span class="mono">--sweep</span> or <span class="mono">--split</span>.</div>
+            </section>
+
+            <section data-panel="breakdown" class="card" hidden>
+                <div class="card-head">
+                    <div class="row">
+                        <h2 class="card-title">Breakdown</h2>
+                        <select id="breakdown-group" class="field" aria-label="Trades to break down"><option value="taken">Taken</option><option value="filtered">Filtered</option></select>
+                    </div>
+                    <span class="card-note">Condition at the signal candle. Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
+                </div>
+                <div id="breakdown" class="grid grid-3"></div>
+            </section>
+
+            <section data-panel="trades" class="card" hidden>
+                <div class="card-head">
+                    <div class="row">
+                        <h2 class="card-title">Trades</h2>
+                        <select id="trade-filter" class="field" aria-label="Trades to show"><option value="taken">Taken</option><option value="filtered">Filtered</option><option value="all">All</option></select>
+                    </div>
+                    <span class="card-note">Newest first, up to 200</span>
+                </div>
+                <div class="table-wrap tall">
+                    <table class="tbl"><thead><tr>
+                        <th>Signal (UTC)</th><th>Side</th><th class="right">Score</th><th class="right">Entry</th><th class="right">Stop</th><th class="right">TP1</th><th class="right">R:R</th><th>Result</th><th class="right">Net R</th><th class="right">Candles</th><th>Filters</th>
+                    </tr></thead><tbody id="trades"></tbody></table>
+                </div>
+            </section>
         </div>
+    </main>
 
-        <div class="glass rounded-lg p-3">
-            <div class="mb-2"><span class="t-label k">Equity curve</span> <span class="t-meta k">cumulative R</span>
-                <span class="ml-3 t-meta text-green-400">● Taken</span><span class="ml-3 t-meta text-orange-400">● Filtered</span></div>
-            <div id="equity" style="height: 320px;"></div>
-        </div>
-
-        <div id="sweep-card" class="hidden glass rounded-lg p-3">
-            <div class="mb-2"><span class="t-label k">Parameter sweep</span> <span class="t-meta k">taken trades, best expectancy first; ★ = live parameters</span></div>
-            <div class="overflow-auto" style="max-height: 360px;">
-                <table class="w-full t-data mono">
-                    <thead><tr class="k text-left">
-                        <th>Parameters</th><th class="text-right">Trades</th><th class="text-right">Win rate</th><th class="text-right">Expectancy R</th>
-                        <th class="text-right">Total R</th><th class="text-right">PF</th><th class="text-right">Max DD R</th><th class="text-right">Filtered exp R</th>
-                    </tr></thead>
-                    <tbody id="sweep"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div id="validation-card" class="hidden glass rounded-lg p-3">
-            <div class="mb-2"><span class="t-label k">Out-of-sample validation</span> <span class="t-meta k" id="validation-note"></span></div>
-            <div class="overflow-auto" style="max-height: 360px;">
-                <table class="w-full t-data mono">
-                    <thead><tr class="k text-left">
-                        <th>Parameters</th><th class="text-right">In-sample trades</th><th class="text-right">In-sample exp R</th>
-                        <th class="text-right">Out-of-sample trades</th><th class="text-right">OOS win rate</th><th class="text-right">OOS exp R</th><th class="text-right">OOS total R</th><th class="text-right">OOS PF</th>
-                    </tr></thead>
-                    <tbody id="validation"></tbody>
-                </table>
-            </div>
-            <div class="t-body mt-2" id="validation-verdict"></div>
-        </div>
-
-        <div id="wf-card" class="hidden glass rounded-lg p-3">
-            <div class="mb-2"><span class="t-label k">Walk-forward</span> <span class="t-meta k">each period is judged with the variant that was best before it</span></div>
-            <div class="min-w-0 overflow-x-auto">
-                <table class="w-full t-data mono">
-                    <thead><tr class="k text-left"><th>From</th><th class="text-right">Trades</th><th class="text-right">Exp R</th><th class="text-right">PF</th></tr></thead>
-                    <tbody id="wf"></tbody>
-                </table>
-            </div>
-            <div class="t-body mt-2" id="wf-verdict"></div>
-        </div>
-
-        <div id="history-card" class="hidden glass rounded-lg p-3">
-            <div class="mb-2"><span class="t-label k">Earlier runs</span> <span class="t-meta k">newest first; the same config hash means the same signal settings</span></div>
-            <div class="min-w-0 overflow-x-auto">
-                <table class="w-full t-data mono">
-                    <thead><tr class="k text-left"><th>Run</th><th>Config</th><th>Model</th><th>Exit</th><th class="text-right">Costs %</th><th class="text-right">Trades</th><th class="text-right">Exp R</th><th class="text-right">95% interval</th><th class="text-right">OOS exp</th><th class="text-right">WF exp</th></tr></thead>
-                    <tbody id="history"></tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="glass rounded-lg p-3">
-            <div class="flex flex-wrap items-center gap-3 mb-2">
-                <span class="t-label k">Breakdown</span> <span class="t-meta k">condition at the signal candle</span>
-                <select id="breakdown-group" style="width: 7rem">
-                    <option value="taken">Taken</option>
-                    <option value="filtered">Filtered</option>
-                </select>
-                <span class="t-meta k">Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
-            </div>
-            <div id="breakdown" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
-        </div>
-
-        <div class="glass rounded-lg p-3">
-            <div class="flex items-center gap-3 mb-2">
-                <span class="t-label k">Trades</span> <span class="t-meta k">newest first, up to 200</span>
-                <select id="trade-filter" style="width: 7rem">
-                    <option value="taken">Taken</option>
-                    <option value="filtered">Filtered</option>
-                    <option value="all">All</option>
-                </select>
-            </div>
-            <div class="overflow-auto" style="max-height: 420px;">
-                <table class="w-full t-data mono">
-                    <thead><tr class="k text-left">
-                        <th>Signal time</th><th>Side</th><th>Score</th><th class="text-right">Price</th><th class="text-right">SL</th>
-                        <th class="text-right">TP1</th><th class="text-right">Plan RR</th><th>Result</th><th class="text-right">Net R</th><th class="text-right">Bars</th><th>Filters</th>
-                    </tr></thead>
-                    <tbody id="trades"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const NF = {};
-        const nf = (d) => NF[d] || (NF[d] = new Intl.NumberFormat(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
-        const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
-        const fmtNum = (v, d = 2) => isNum(v) ? nf(d).format(v) : '-';
-        const fmtPct = (v) => isNum(v) ? nf(1).format(v * 100) + '%' : '-';
-        const fmtTime = (s) => isNum(s) ? new Date(s * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '-';
-        const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        const tone = (v) => !isNum(v) ? '' : v > 0 ? 'text-green-400' : v < 0 ? 'text-red-400' : '';
-
-        const market = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || 'BTCUSDT').toUpperCase();
-        document.title = `${market} Backtest`;
-        const header = AppHeader.init({ market });
-
-        function cell(label, value, cls = '') {
-            return `<div><div class="t-label k">${esc(label)}</div><div class="${cls}">${esc(value)}</div></div>`;
-        }
-
-        function renderGroup(name, g) {
-            const s = g.summary;
-            document.getElementById(`m-${name}`).innerHTML = [
-                cell('Trades', String(s.trades)),
-                cell('Win rate (TP1)', fmtPct(s.win_rate)),
-                cell('Expectancy', `${fmtNum(s.expectancy_r, 3)} R`, tone(s.expectancy_r)),
-                cell('Total', `${fmtNum(s.total_r)} R`, tone(s.total_r)),
-                cell('Profit factor', fmtNum(s.profit_factor)),
-                cell('Max drawdown', `${fmtNum(s.max_drawdown_r)} R`),
-                cell('Avg win / loss', `${fmtNum(s.avg_win_r)} / ${fmtNum(s.avg_loss_r)}`),
-                cell('W / L / Exp', `${s.wins} / ${s.losses} / ${s.expired}`),
-            ].join('');
-            const side = (k) => {
-                const b = g.by_side[k];
-                return `${k}: ${b.trades} trades, win ${fmtPct(b.win_rate)}, exp ${fmtNum(b.expectancy_r, 3)} R`;
-            };
-            const extra = [];
-            if (s.open) extra.push(`${s.open} still open at the end`);
-            if (s.unknown) extra.push(`${s.unknown} unknown`);
-            document.getElementById(`s-${name}`).textContent = [side('BUY'), side('SELL'), ...extra].join(' · ');
-        }
-
-        // lightweight-charts needs strictly increasing times: keep the last point per second.
-        function curveData(points) {
-            const byTime = new Map();
-            for (const p of points) byTime.set(p.time, p.equity);
-            return [...byTime.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
-        }
-
-        function renderEquity(report) {
-            const el = document.getElementById('equity');
-            const chart = LightweightCharts.createChart(el, {
-                layout: { background: { color: 'transparent' }, textColor: '#848e9c' },
-                grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.04)' } },
-                timeScale: { timeVisible: true, borderColor: 'rgba(255,255,255,0.1)' },
-                rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-                localization: { priceFormatter: (v) => fmtNum(v) },
-                autoSize: true,
-            });
-            chart.addLineSeries({ color: '#0ecb81', lineWidth: 2 }).setData(curveData(report.taken.equity));
-            chart.addLineSeries({ color: '#f0a020', lineWidth: 1 }).setData(curveData(report.filtered.equity));
-            // autoSize applies the container size on the next frame; fit after that.
-            requestAnimationFrame(() => chart.timeScale().fitContent());
-        }
-
-        function renderTrades(report) {
-            const mode = document.getElementById('trade-filter').value;
-            const list = report.trades
-                .filter(t => mode === 'all' || (mode === 'filtered') === t.filtered)
-                .slice(-200).reverse();
-            const resultTone = { WIN: 'text-green-400', LOSS: 'text-red-400', EXPIRED: 'text-gray-400' };
-            document.getElementById('trades').innerHTML = list.map(t => `<tr class="border-t border-gray-800">
-                <td>${esc(fmtTime(t.time))}</td>
-                <td class="${t.signal === 'BUY' ? 'text-green-400' : 'text-red-400'}">${esc(t.signal)}</td>
-                <td>${esc(t.score)}</td>
-                <td class="text-right">${esc(fmtNum(t.price))}</td>
-                <td class="text-right">${esc(fmtNum(t.sl))}</td>
-                <td class="text-right">${esc(fmtNum(t.tp1))}</td>
-                <td class="text-right">${esc(fmtNum(t.risk_reward))}</td>
-                <td class="${resultTone[t.result] || 'k'}">${esc(t.result ?? 'OPEN')}</td>
-                <td class="text-right ${tone(t.net_r)}">${esc(fmtNum(t.net_r))}</td>
-                <td class="text-right">${esc(t.bars ?? '-')}</td>
-                <td class="k">${esc((t.filters || []).join(', '))}</td>
-            </tr>`).join('') || '<tr><td colspan="11" class="k">No trades</td></tr>';
-        }
-
-        const MIN_SAMPLE = 20;
-        const DIM_LABELS = {
-            side: 'Side', score: '|Score|', htf_trend: 'Trend HTF / structure', regime: 'Regime (entry TF)', context: 'Context', momentum: 'Momentum',
-            volume_state: 'Volume', market_energy: 'Market energy', breakout_confirmation: 'Breakout confirmation',
-            fake_breakout_risk: 'Fake breakout risk', divergence: 'Divergence', session_utc: 'Session (UTC hours)', filter: 'Rejected by filter',
-        };
-
-        function paramLabel(p, base) {
-            const parts = [];
-            if (p.model && p.model !== 'bounce') parts.push(p.model);
-            parts.push(`threshold ${p.threshold}`);
-            parts.push(`min RR ${p.min_rr}`);
-            // Setup keys (since 2.11.0) are shown only when they differ from the live parameters.
-            if (p.stop_atr !== undefined && p.stop_atr !== base.stop_atr) parts.push(`SL ${p.stop_atr} ATR`);
-            if (p.target !== undefined && p.target !== base.target) parts.push(`target ${typeof p.target === 'number' ? p.target + 'R' : p.target}`);
-            if (p.entry_max_atr !== undefined && p.entry_max_atr !== (base.entry_max_atr ?? 0)) parts.push(`entry ≤ ${p.entry_max_atr} ATR`);
-            if (p.htf_trend !== undefined && p.htf_trend !== (base.htf_trend ?? 'off')) parts.push(`trend filter ${p.htf_trend}`);
-            if (p.side !== undefined && p.side !== base.side) parts.push(`${p.side} only`);
-            if (p.skip_energy?.length && p.skip_energy.join() !== (base.skip_energy || []).join()) parts.push(`skip ${p.skip_energy.join('+')}`);
-            for (const [tf, w] of Object.entries(p.weights || {})) {
-                if (w !== base.weights?.[tf]) parts.push(`w ${tf} ${w}`);
-            }
-            // Calculation config values (since 2.19.0), e.g. scoring.near_zone 3.
-            for (const [group, values] of Object.entries(p.calc || {})) {
-                for (const [key, v] of Object.entries(values)) {
-                    if (base.calc?.[group] && v !== base.calc[group][key]) parts.push(`${group}.${key} ${v}`);
-                }
-            }
-            return parts.join(' · ');
-        }
-
-        function renderSweep(report) {
-            if (!report.sweep) return;
-            document.getElementById('sweep-card').classList.remove('hidden');
-            const base = report.sweep.find(r => r.base)?.params || report.params;
-            const rows = [...report.sweep].sort((a, b) => (b.taken.expectancy_r ?? -Infinity) - (a.taken.expectancy_r ?? -Infinity));
-            document.getElementById('sweep').innerHTML = rows.map(r => {
-                const s = r.taken;
-                return `<tr class="border-t border-gray-800 ${s.trades < MIN_SAMPLE ? 'opacity-50' : ''}">
-                    <td>${r.base ? '★ ' : ''}${esc(paramLabel(r.params, base))}</td>
-                    <td class="text-right">${esc(s.trades)}</td>
-                    <td class="text-right">${esc(fmtPct(s.win_rate))}</td>
-                    <td class="text-right ${tone(s.expectancy_r)}">${esc(fmtNum(s.expectancy_r, 3))}</td>
-                    <td class="text-right ${tone(s.total_r)}">${esc(fmtNum(s.total_r))}</td>
-                    <td class="text-right">${esc(fmtNum(s.profit_factor))}</td>
-                    <td class="text-right">${esc(fmtNum(s.max_drawdown_r))}</td>
-                    <td class="text-right ${tone(r.filtered.expectancy_r)}">${esc(fmtNum(r.filtered.expectancy_r, 3))}</td>
-                </tr>`;
-            }).join('');
-        }
-
-        // Parameters chosen on the first part of the period, judged on the unseen rest.
-        function renderValidation(report) {
-            const v = report.validation;
-            if (!v) return;
-            document.getElementById('validation-card').classList.remove('hidden');
-            document.getElementById('validation-note').textContent =
-                `Taken trades. In-sample: signals before ${fmtTime(v.split_at)}; out-of-sample: after. ` +
-                `▶ = best in-sample expectancy with at least ${v.min_trades} in-sample trades; ★ = live parameters.`;
-            const base = v.rows.find(r => r.base)?.params || report.params;
-            document.getElementById('validation').innerHTML = v.rows.map((r, idx) => {
-                const a = r.in_sample;
-                const b = r.out_of_sample;
-                return `<tr class="border-t border-gray-800 ${idx === v.selected ? 'bg-blue-500/10' : ''}">
-                    <td>${idx === v.selected ? '▶ ' : ''}${r.base ? '★ ' : ''}${esc(paramLabel(r.params, base))}</td>
-                    <td class="text-right">${esc(a.trades)}</td>
-                    <td class="text-right ${tone(a.expectancy_r)}">${esc(fmtNum(a.expectancy_r, 3))}</td>
-                    <td class="text-right">${esc(b.trades)}</td>
-                    <td class="text-right">${esc(fmtPct(b.win_rate))}</td>
-                    <td class="text-right ${tone(b.expectancy_r)}">${esc(fmtNum(b.expectancy_r, 3))}</td>
-                    <td class="text-right ${tone(b.total_r)}">${esc(fmtNum(b.total_r))}</td>
-                    <td class="text-right">${esc(fmtNum(b.profit_factor))}</td>
-                </tr>`;
-            }).join('');
-            const pick = v.rows[v.selected];
-            const verdict = document.getElementById('validation-verdict');
-            if (!pick) {
-                verdict.textContent = `No variant has ${v.min_trades}+ in-sample trades: nothing to validate.`;
-            } else {
-                const oos = pick.out_of_sample.expectancy_r;
-                verdict.className = `t-body mt-2 ${tone(oos)}`;
-                verdict.textContent = `Pick: ${paramLabel(pick.params, base)} → out-of-sample ${fmtNum(oos, 3)} R over ${pick.out_of_sample.trades} trades` +
-                    (pick.out_of_sample.trades < MIN_SAMPLE ? ' (too few trades to judge).'
-                        : isNum(oos) && oos > 0 ? ' (edge held on unseen data).' : ' (edge did not hold on unseen data).');
-            }
-        }
-
-        function renderWalkForward(report) {
-            const w = report.walk_forward;
-            if (!w) return;
-            document.getElementById('wf-card').classList.remove('hidden');
-            const day = (s) => new Date(s * 1000).toISOString().slice(0, 10);
-            document.getElementById('wf').innerHTML = w.rows.map(r => `<tr><td>${day(r.from)}</td><td class="text-right">${r.test.trades}</td><td class="text-right ${tone(r.test.expectancy_r)}">${fmtNum(r.test.expectancy_r, 3)}</td><td class="text-right">${fmtNum(r.test.profit_factor, 2)}</td></tr>`).join('');
-            const verdict = document.getElementById('wf-verdict');
-            const interval = w.ci95 ? `, 95% interval ${fmtNum(w.ci95[0], 3)} to ${fmtNum(w.ci95[1], 3)} R` : '';
-            verdict.className = `t-body mt-2 ${tone(w.test.expectancy_r)}`;
-            verdict.textContent = `All periods: ${fmtNum(w.test.expectancy_r, 3)} R over ${w.test.trades} trades, positive in ${w.positive_folds} of ${w.judged_folds}${interval}.`;
-        }
-
-        async function renderHistory(market) {
-            const body = await fetch(`/api/backtest-history/${encodeURIComponent(market)}`).then(r => (r.ok ? r.json() : null)).catch(() => null);
-            if (!body || !body.runs.length) return;
-            document.getElementById('history-card').classList.remove('hidden');
-            const when = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-');
-            const safe = (v) => String(v ?? '-').replace(/[&<>"']/g, '');
-            document.getElementById('history').innerHTML = body.runs.slice(0, 20).map(r => `<tr><td>${when(r.generated_at)}</td><td>${safe(r.config_hash)}</td><td>${safe(r.model)}</td><td>${safe(r.exit)}</td>
-                <td class="text-right">${fmtNum((r.fee_pct || 0) + (r.slippage_pct || 0), 2)}</td><td class="text-right">${r.taken?.trades ?? '-'}</td>
-                <td class="text-right ${tone(r.taken?.expectancy_r)}">${fmtNum(r.taken?.expectancy_r, 3)}</td>
-                <td class="text-right">${r.ci95 ? `${fmtNum(r.ci95[0], 3)} … ${fmtNum(r.ci95[1], 3)}` : '-'}</td>
-                <td class="text-right ${tone(r.out_of_sample?.expectancy_r)}">${fmtNum(r.out_of_sample?.expectancy_r, 3)}</td>
-                <td class="text-right ${tone(r.walk_forward?.test?.expectancy_r)}">${fmtNum(r.walk_forward?.test?.expectancy_r, 3)}</td></tr>`).join('');
-        }
-
-        function renderBreakdown(report) {
-            const group = report[document.getElementById('breakdown-group').value];
-            const dims = group.breakdown || {};
-            document.getElementById('breakdown').innerHTML = Object.entries(dims).map(([dim, rows]) => `
-                <div class="min-w-0 overflow-x-auto">
-                    <div class="t-label text-gray-300 mb-1">${esc(DIM_LABELS[dim] || dim)}</div>
-                    <table class="w-full t-data mono">
-                        <thead><tr class="k text-left"><th>Value</th><th class="text-right">Trades</th><th class="text-right">Win</th><th class="text-right">Exp R</th><th class="text-right">Total R</th></tr></thead>
-                        <tbody>${rows.map(r => `<tr class="border-t border-gray-800 ${r.trades < MIN_SAMPLE ? 'opacity-50' : ''}">
-                            <td>${esc(r.value)}</td>
-                            <td class="text-right">${esc(r.trades)}</td>
-                            <td class="text-right">${esc(fmtPct(r.win_rate))}</td>
-                            <td class="text-right ${tone(r.expectancy_r)}">${esc(fmtNum(r.expectancy_r, 3))}</td>
-                            <td class="text-right ${tone(r.total_r)}">${esc(fmtNum(r.total_r))}</td>
-                        </tr>`).join('')}</tbody>
-                    </table>
-                </div>`).join('') || '<div class="t-body k">No breakdown in this report (generated before v2.9.0).</div>';
-        }
-
-        async function load() {
-            for (const id of ['breakdown-group', 'trade-filter']) AppHeader.select2(document.getElementById(id), { width: 'style' });
-
-            const res = await fetch(`/api/backtest/${encodeURIComponent(market)}?states=0`);
-            const err = res.ok ? null : await res.json().catch(() => ({}));
-            if (err?.error === 'unknown_market_or_timeframe') {
-                const config = (await header) || { markets: [] };
-                const empty = document.getElementById('empty');
-                empty.classList.remove('hidden');
-                empty.textContent = `${market} is not in the market list (engine.markets). Available: ${config.markets.map(m => m.code).join(', ') || 'none'}.`;
-                return;
-            }
-            if (!res.ok) {
-                document.getElementById('empty').classList.remove('hidden');
-                document.getElementById('empty-cmd').textContent = `docker compose exec app npm run backtest -- ${market}`;
-                return;
-            }
-            const report = await res.json();
-            document.getElementById('report').classList.remove('hidden');
-            document.getElementById('period').textContent =
-                `${fmtTime(report.period.start)} → ${fmtTime(report.period.end)} · entry ${report.entry_tf} · generated ${fmtTime(report.generated_at)}`;
-            document.getElementById('expiry').textContent = report.params.expiry_candles;
-            if (report.params.entry === 'next_open') document.getElementById('entry-note').textContent = 'the open after the signal candle';
-            if (report.params.exit === 'trailing') document.getElementById('exit-note').textContent = `a stop trailing ${report.params.trail_atr} × ATR behind the best price`;
-            if (isNum(report.params.min_rr)) {
-                document.getElementById('period').textContent += ` · threshold ${report.params.threshold} · min RR ${report.params.min_rr}`;
-            }
-            document.getElementById('fee-note').textContent = report.params.fee_pct
-                ? `Fee ${fmtNum(report.params.fee_pct)}% and slippage ${fmtNum(report.params.slippage_pct ?? 0)}% round trip included.`
-                : 'No fees or slippage included.';
-            renderGroup('taken', report.taken);
-            renderGroup('filtered', report.filtered);
-            if (report.taken.ci95) document.getElementById('s-taken').insertAdjacentText('beforeend', ` · 95% interval ${fmtNum(report.taken.ci95[0], 3)} to ${fmtNum(report.taken.ci95[1], 3)} R`);
-            renderEquity(report);
-            renderSweep(report);
-            renderValidation(report);
-            renderWalkForward(report);
-            renderHistory(report.market);
-            document.getElementById('min-sample').textContent = MIN_SAMPLE;
-            renderBreakdown(report);
-            document.getElementById('breakdown-group').addEventListener('change', () => renderBreakdown(report));
-            renderTrades(report);
-            document.getElementById('trade-filter').addEventListener('change', () => renderTrades(report));
-        }
-
-        load();
-    </script>
+    <script src="/js/pages/backtest.js"></script>
 </body>
 </html>

@@ -192,21 +192,50 @@ test('view routes serve the dashboard at /:market and the chart at /:market/:tim
         const r = await fetch(s.base + path);
         return { status: r.status, title: (/<title>([^<]*)/.exec(await r.text()) || [])[1] };
     };
-    assert.deepEqual(await page('/BTCUSDT'), { status: 200, title: 'Market State Engine | Dashboard' });
-    assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Real-time Trading Chart' });
+    assert.deepEqual(await page('/BTCUSDT'), { status: 200, title: 'Market | Crypto Signal' });
+    assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Chart | Crypto Signal' });
     assert.equal((await page('/js/market-status.js')).status, 200, 'static files still win over view routes');
     assert.equal((await req(s.base, '/api/config')).status, 200, 'api routes still win over view routes');
     assert.equal((await req(s.base, '/api/config')).body.version, require('../package.json').version);
 });
 
-test('/ redirects to the dashboard of the first configured market', async (t) => {
+test('/ redirects to the signal board', async (t) => {
     const s = await startServer();
     t.after(s.close);
     const r = await fetch(`${s.base}/`, { redirect: 'manual' });
     assert.equal(r.status, 302);
-    assert.equal(r.headers.get('location'), `/${testConfig.MARKETS[0]}`);
+    assert.equal(r.headers.get('location'), '/signals');
     const page = await fetch(`${s.base}/`).then(res => res.text());
-    assert.match(page, /data-view="dashboard"/, 'lands on the dashboard with the shared header');
+    assert.match(page, /data-view="signals"/, 'lands on the signal board with the shared header');
+});
+
+test('signal board: one row per market, with what a trader needs', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    await s.engine.runBoundary(MIDNIGHT);
+    const r = await req(s.base, '/api/signals');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.markets.map(m => m.market), testConfig.MARKETS);
+    const row = r.body.markets[0];
+    assert.equal(row.status, 'ok');
+    assert.ok(['BUY', 'SELL', 'WAIT'].includes(row.signal.action));
+    assert.deepEqual(Object.keys(row.trends), Object.keys(testConfig.TF_ROLES));
+    assert.equal(row.edge.verdict, 'unproven');
+    assert.deepEqual(r.body.recent, []);
+    assert.equal(r.body.totals.long + r.body.totals.short + r.body.totals.wait, testConfig.MARKETS.length);
+    const page = await fetch(`${s.base}/signals`).then(res => res.text());
+    assert.match(page, /<title>Signals \| Crypto Signal<\/title>/);
+});
+
+test('signal board: a market that cannot be read is a row, not an error for all', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const original = s.engine.getMarketState;
+    s.engine.getMarketState = (market) => (market === testConfig.MARKETS[0] ? Promise.reject(new Error('boom')) : original(market));
+    const r = await req(s.base, '/api/signals');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.markets[0].status, 'unavailable');
+    assert.equal(r.body.markets[0].signal, null);
 });
 
 test('actions need the admin token; reads do not', async (t) => {

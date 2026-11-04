@@ -51,10 +51,12 @@ This is the "brain" of the application. It takes snapshots from all timeframes a
 
 The system assigns weights to different timeframes:
 
-- **HTF (1D):** Global bias and major structural levels. (Highest Weight)
-- **Structure (4H):** Intermediate trend and key swing points.
-- **Mid (1H):** Local trend and area of value.
-- **Entry (15M):** Precise timing and immediate liquidity zones. (Lowest Weight)
+The role timeframes come from `engine` in the calculation config (default 1W, 1D, 4H, 1H) and the zone weights from `weights`:
+
+- **HTF:** Long-term trend and major structural levels.
+- **Structure:** Intermediate trend and key swing points.
+- **Mid:** Local trend and area of value.
+- **Entry:** The timeframe signals and plans are made on.
 
 **Confluence Logic:** Each level's score is multiplied by its timeframe weight. A level whose centre falls inside an already-merged zone adds its weighted score to that zone and its timeframe to `tfs`. The top 3 zones per side are kept. Zones are not labelled by confluence; `tfs` shows which timeframes contributed.
 
@@ -66,11 +68,11 @@ Compression (`zone_state = compression`) is flagged when the top-scored support 
 
 #### C. Energy State Analysis
 
-Combines the volume state of the latest closed entry candle (vs the 20-candle average, which includes that candle) with the absolute MACD histogram. The histogram thresholds are absolute values, not scaled to price:
+Combines the volume state of the latest closed entry candle (vs the 20-candle average, which includes that candle) with |MACD histogram| / ATR, so the thresholds hold on any price (values in `market`):
 
-- **Explosive:** volume > 1.5× average and |histogram| > 0.1.
-- **Building:** volume > 1.2× average and |histogram| > 0.05.
-- **Cooling:** volume < 0.8× average, or |histogram| < 0.02.
+- **Explosive:** high volume and a ratio above `energy_explosive`.
+- **Building:** increasing volume and a ratio above `energy_building`.
+- **Cooling:** low volume, or a ratio below `energy_cooling`.
 - **Stable:** everything else.
 
 #### D. Breakout Score & Risk (heuristic)
@@ -98,59 +100,48 @@ Calculates a `breakout_score` (0.0 to 1.0) from:
 
 ## 💻 Frontend Layer
 
-The system provides two distinct interfaces for interacting with the Market State:
+Plain HTML, CSS and scripts with no build step and no framework. The only external scripts are lightweight-charts (pinned, from unpkg) and the fonts. Since 4.2.0 Tailwind, jQuery, select2 and lucide are gone.
 
-Page routes (`src/api/routes/view.routes.js`, mounted at `/` after the static files and `/api`; the `/` redirect is in `src/app.js` before the static files):
+| URL | Page | Script (`public/js/pages/`) | Holds |
+| :-- | :--- | :-- | :-- |
+| `/` | 302 to `/signals` | | |
+| `/signals` | `public/signals.html` | `signals.js` | Every market: long, short or wait with plan, trends, verdict and freshness; open trades; recent results; optional browser alert |
+| `/:market` | `public/market_view.html` | `market.js` | One market: signal, trade plan, position size, open trades, reasons, context, levels, track record; chart with the plan drawn |
+| `/:market/:timeframe` | `public/index.html` | `chart.js` | Full chart of one timeframe |
+| `/backtest/:market` | `public/backtest.html` | `backtest.js` | Verdict, then tabs Summary, Robustness, Breakdown, Trades |
+| `/config` | `public/config.html` | `config.js` | Tabs per subject; backtest runs under Backtest; data refetch and health under Operations |
 
-| URL | Page |
-| :-- | :--- |
-| `/` | 302 to `/{first engine.markets market}` (since 2.13.0) |
-| `/:market` (e.g. `/BTCUSDT`) | Market Dashboard (main view; Signal log CSV link) |
-| `/backtest/:market` | Backtest report (`public/backtest.html`) |
-| `/config` | Calculation config and backtest re-run (`public/config.html`, since 2.14.0) |
-| `/:market/:timeframe` (e.g. `/BTCUSDT/1h`) | Reference View |
+Page routes are in `src/api/routes/view.routes.js`, mounted after the static files and `/api`. They accept any path segment; the pages read the market and timeframe from the URL and, when one is not in `/api/config`, show a "not configured" notice listing what is available.
 
-The page routes accept any path segment; the pages read the market and timeframe from the URL and, when the symbol or timeframe is not in `/api/config`, show a "not configured" notice listing the available markets (since 2.10.1).
+**Shared modules (`public/js/`):**
 
-**Shared header (since 2.15.0, `public/js/app-header.js`):** Dashboard, Chart and Backtest show the same header: market picker, tabs Dashboard / Chart / Backtest for the same market, Config link and app version; each page adds its own items (price, actions, timeframe). Changing the market keeps the current view; the Chart tab opens the last chosen timeframe (Dashboard or Chart, kept in `localStorage`, else the entry timeframe). The Config page only has "← Dashboard" (last viewed market). Dropdowns use select2 (jQuery 3.7.1, select2 4.1.0-rc.0 from cdnjs); `AppHeader.select2(el)` also fires a native `change`.
+- `format.js` (`Fmt`): one number and time format. Times are UTC, like the candles.
+- `signal-view.js` (`SignalView`): words and arithmetic of a signal: `BUY`/`SELL` read as LONG/SHORT, labels of every reason, filter and verdict, plan distances, position size, open R. The API keeps `BUY`/`SELL`. Tested in `test/signal-view.test.js`.
+- `market-status.js` (`MarketStatus`): freshness verdict of a Market State response.
+- `app-header.js` (`AppHeader`): top bar, toast, clipboard, admin requests (`adminFetch`), live stream (`live`).
+- `pane-chart.js` (`PaneChart`): candles, volume, MACD and RSI in four synced panes, with zones and the plan. Used by the Market and Chart pages.
+
+**Display rules:**
+
+- The server decides the signal; pages only display it. Live prices are display-only and only move the forming candle.
+- Anything not `ok` is marked: the freshness banner and data column show it, and on the Market page the side panel dims. With no Market State, values are blanked.
+- A signal is never shown without its backtest verdict. A filtered setup reads as WAIT with its reason, and its plan as not active.
+- A setup that persists over several candles is one open trade in the log, so the Market page says the trade is already open instead of asking for a new entry.
+- Position size is computed in the browser; account size and risk stay in `localStorage`.
+- Below 1100 px the Market page stacks signal and plan, then the chart, then the rest. No page scrolls sideways; wide tables scroll inside their card.
 
 **UI type scale (`public/css/app.css`):** Inter for text, JetBrains Mono for numbers and data. Sizes by kind of information:
 
 | Class | Size | Used for |
 | :-- | :-- | :-- |
-| `t-title` | 18px | page identity: market symbol, page title |
-| `t-headline` | 16px | the number to read first: live price, signal action |
-| `t-value` | 14px | card and metric values, card titles |
+| `t-display` | 28px | the signal itself: LONG, SHORT, WAIT |
+| `t-title` | 18px | page identity, stat values |
+| `t-headline` | 16px | the number to read first: live price |
+| `t-value` | 14px | card and metric values |
 | `t-body` | 13px | prose: notes, explanations, empty states |
-| `t-control` | 12px | buttons, tabs, dropdowns |
-| `t-data` | 12px | tables, lists, indicator bars, inputs |
+| `t-data` | 12px | tables, lists, controls |
 | `t-meta` | 11px | timestamps, hints, version, chart legends and axes |
 | `t-label` | 10px | uppercase captions above a value or section |
-
-### 1. Reference View (`public/index.html`)
-
-A standard trading view focused on accurate technical display and historical data review. Closed candles are drawn normally; the forming candle is drawn in grey and is the only bar that live prices update.
-
-### 2. Market Dashboard (`public/market_view.html`)
-
-A high-performance "command center" designed for rapid state assessment.
-
-- **Glassmorphism UI:** Built with Tailwind CSS for high readability.
-- **Freshness banner:** Shows `status` (`ok` / `degraded` / `stale`), the entry-candle close time and age, and any error codes. Anything not `ok` is dimmed; when no Market State exists, all values are blanked. The verdict is re-read from the server every minute.
-- **Live vs closed:** The header shows the live ticker price (display-only) with its change and change % versus the close of the last closed candle of the selected timeframe. The banner shows the closed entry-candle price the analysis is based on.
-- **Layout:** fills the viewport (no page scroll at 1440×900 and up); chart panes split the height ~55/15/15/15 (candles, volume, MACD, RSI) and resize via `ResizeObserver`; the sidebar scrolls internally.
-- **Synced panes:** every pane uses the same bar times (indicator warm-up and the forming candle are whitespace), so logical indices match. Visible range and crosshair are synced from the pane under the mouse (the main pane otherwise); price scales share one width; only the bottom pane shows the time axis.
-- **Legends (Binance style):** follow the crosshair and default to the last closed candle. Main: date, O/H/L/C, Change and Change % vs Open, Range % = (H−L)/L, MA(14/50/200). Panes: Vol, MACD/Signal/Hist, RSI(14). One browser-locale number format is used across the dashboard and the price axes. The breakout score and distances always come from the server and are not recalculated on hover.
-- **Edge (since 2.12.0):** the Signal card shows the `/api/edge/:symbol` verdict (POSITIVE / NEGATIVE / UNPROVEN), backtest and out-of-sample expectancy, run date and fee, live signal-log result and the reasons, with a link to the backtest report; refreshed every 5 minutes.
-- **Actionable Insights:** Direct display of confluence zones with integrated price-copying functionality.
-
-### 3. Backtest report (`public/backtest.html`)
-
-Shows the latest `npm run backtest` report: metrics for taken vs filtered trades, a cumulative-R equity curve, the parameter sweep table (when `--sweep` was used), the out-of-sample validation table with the in-sample pick and its verdict (when `--split` was used), win rate/expectancy per condition at the signal candle (breakdown, taken or filtered; values with fewer than 20 trades greyed) and the last 200 trades, with a note that results are hypothetical. Shows the command to run when no report exists.
-
-### 4. Calculation config (`public/config.html`)
-
-Since 2.14.0. A form per group of `config/calculation.json` (signal, trade filters, zone weights, backtest) with defaults and ranges; Save applies at once (`PUT /api/calc-config`). Below it, one row per market: report date and fee, whether the report matches the saved config (`current` / `params_differ`), taken and out-of-sample expectancy, edge verdict, and the run state; Run / Run all markets start `POST /api/backtest-runs` (disabled while a run is going or the form has unsaved changes) and the page polls until it ends.
 
 ## 🚀 Design Goals
 
@@ -167,6 +158,8 @@ Wiring is in `server.js`: `createCalcConfig` (`src/config/calculation.js`) loads
 3. **Serving** — `engine.getMarketState` recomputes `inputs` ages, `status` and `errors` at request time (`src/services/freshness.js`), or returns the 503 diagnostic body.
 
 Signal: `src/services/signal.js` `computeSignal(state, htfTf, opts)` (pure; `opts` = `calc.signalOptions()`) runs in `buildSummary` and again in `getMarketState` after the status is recomputed. `src/services/divergence.js` `detectDivergence(candles, rsi)` feeds the `divergence` field in `mergeSnapshots`.
+
+Signal board: `src/services/signal-board.js` (pure) builds `GET /api/signals` from the Market State, signal log and Edge of each market.
 
 Signal log: `src/services/signal-log.js` `createSignalLog` is passed to the engine as `signalLog`. After each published summary, `onSummary(market, summary, entryCandles)` first closes open records (WIN/LOSS/EXPIRED/UNKNOWN), then appends a new candidate. Errors are logged and never block publishing. `engine.initialize()` reloads open records; `engine.signalRecords(market)` serves `GET /api/signals/:symbol`.
 

@@ -25,7 +25,7 @@ function createApp({ engine, config, reports = null, calc = null, runner = null,
   const app = express();
 
   app.disable("x-powered-by");
-  // The app uses no query strings; the simple parser avoids qs (moderate advisory pinned by express 4).
+  // Query strings here are flat (?format=csv); the simple parser avoids qs (moderate advisory pinned by express 4).
   app.set("query parser", "simple");
 
   // A page on another domain that re-points its DNS to this machine still sends its own Host
@@ -48,8 +48,8 @@ function createApp({ engine, config, reports = null, calc = null, runner = null,
     next();
   });
 
-  // The Market Dashboard of the first configured market is the main view.
-  app.get("/", (req, res) => res.redirect(302, `/${encodeURIComponent(config.MARKETS[0])}`));
+  // The signal board is the main view.
+  app.get("/", (req, res) => res.redirect(302, "/signals"));
   app.use(express.static(path.join(__dirname, "../public")));
   app.use("/api", createApiRouter(createMarketController({ engine, config, reports, calc, runner }), config));
   app.use("/", viewRoutes);

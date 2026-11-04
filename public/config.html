@@ -3,435 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculation Config</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/css/select2.min.css">
+    <title>Config | Crypto Signal</title>
     <link rel="stylesheet" href="/css/app.css">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.1.0-rc.0/js/select2.min.js"></script>
+    <script src="/js/format.js"></script>
+    <script src="/js/signal-view.js"></script>
     <script src="/js/app-header.js"></script>
-    <style>
-        .glass { background: rgba(30, 34, 46, 0.8); border: 1px solid rgba(255,255,255,0.1); }
-        .k { color: #848e9c; }
-        th, td { padding: 4px 8px; white-space: nowrap; }
-        input[type=number], input[type=text] { background: #131722; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 2px 6px; width: 6.5rem; }
-        input[type=number].dirty, input[type=text].dirty, select.dirty + .select2-container .select2-selection { border-color: #eab308; }
-        input[type=number].bad, input[type=text].bad { border-color: #ef4444; }
-        button:disabled { opacity: 0.4; cursor: not-allowed; }
-    </style>
 </head>
-<body class="min-h-screen p-3 flex flex-col gap-3">
-    <!-- Shared header (js/app-header.js), short variant: back to the Dashboard only -->
+<body>
     <header id="app-header" data-view="config"></header>
 
-    <div class="glass rounded-lg px-3 py-2 t-body text-gray-300 border-l-4 border-l-blue-500">
-        Values used by the signal, its trade filters, the zone merge and the backtest. Saved to
-        <span id="file" class="mono text-blue-300">config/calculation.json</span> (editable by hand too) and applied to the live
-        signal at once, no restart. A backtest report made with other values is marked <span class="mono">params_differ</span>
-        until it is re-run below. The <span class="mono">engine</span> group (markets, timeframes, role timeframes, candle limit) applies after a restart. Server settings (port, host, admin token, Binance URLs) stay in <span class="mono">.env</span>.
-    </div>
-
-    <div id="load-error" class="hidden glass rounded-lg p-4 t-body text-red-300"></div>
-
-    <div id="restart-note" class="hidden glass rounded-lg px-3 py-2 t-body text-yellow-200/90 border-l-4 border-l-yellow-500"></div>
-
-    <form id="form" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-3" autocomplete="off"></form>
-
-    <div id="actions" class="hidden flex flex-wrap items-center gap-2">
-        <button id="save" type="button" class="px-3 py-1 rounded-md t-control bg-blue-600 text-white hover:bg-blue-500">Save</button>
-        <button id="revert" type="button" class="px-3 py-1 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600">Discard changes</button>
-        <button id="defaults" type="button" class="px-3 py-1 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
-        <span id="save-status" class="t-data"></span>
-    </div>
-
-    <div id="runs-card" class="hidden glass rounded-lg p-3">
-        <div class="flex flex-wrap justify-between items-baseline gap-2 mb-2">
-            <span class="t-value text-white">Recalculate backtest <span class="k t-meta font-normal">(uses the saved config; downloads missing history from Binance)</span></span>
-            <button id="run-all" type="button" class="px-3 py-1 rounded-md t-control bg-green-700 text-white hover:bg-green-600">Run all markets</button>
+    <main class="page">
+        <div class="banner info">
+            <span>Saved to <span id="file" class="mono">config/calculation.json</span> and applied at once, except <strong>Markets</strong>, which needs a restart. Server settings (port, host, admin token, Binance URLs) stay in <span class="mono">.env</span>.</span>
         </div>
-        <div class="min-w-0 overflow-x-auto">
-            <table class="w-full t-data mono">
-                <thead><tr class="k text-left">
-                    <th>Market</th><th>Report</th><th>Config</th><th class="text-right">Trades</th><th class="text-right">Exp R</th>
-                    <th class="text-right">OOS exp R</th><th>Verdict</th><th>Run</th><th></th>
-                </tr></thead>
-                <tbody id="runs"></tbody>
-            </table>
+        <div id="load-error" class="banner neg" hidden></div>
+        <div id="restart-note" class="banner warn" hidden></div>
+
+        <nav id="tabs" class="tabs" role="tablist" aria-label="Config sections"></nav>
+
+        <form id="form" autocomplete="off" hidden></form>
+
+        <section id="runs-card" class="card" hidden>
+            <div class="card-head">
+                <div>
+                    <h2 class="card-title">Recalculate backtest</h2>
+                    <span class="card-note">Uses the saved config; downloads missing history from Binance</span>
+                </div>
+                <button id="run-all" type="button" class="btn primary">Run all markets</button>
+            </div>
+            <div class="table-wrap">
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Market</th><th>Report (UTC)</th><th>Config</th><th class="right">Trades</th><th class="right">R</th><th class="right">OOS R</th><th>Verdict</th><th>Run</th><th></th>
+                    </tr></thead>
+                    <tbody id="runs"></tbody>
+                </table>
+            </div>
+            <div id="run-note" class="t-meta muted" style="margin-top:8px"></div>
+        </section>
+
+        <section id="ops-card" class="stack" style="gap:12px" hidden>
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h2 class="card-title">Market data</h2>
+                        <span class="card-note">Refetch every timeframe from Binance and rebuild the Market State. Existing data is kept if a fetch fails.</span>
+                    </div>
+                    <button id="reset" type="button" class="btn danger">Refetch all data</button>
+                </div>
+                <div id="reset-note" class="t-data muted"></div>
+            </div>
+            <div class="card">
+                <div class="card-head"><h2 class="card-title">Health</h2><span id="health-note" class="card-note"></span></div>
+                <div class="table-wrap"><table class="tbl"><thead id="health-head"></thead><tbody id="health"></tbody></table></div>
+            </div>
+        </section>
+
+        <div id="save-bar" class="save-bar" hidden>
+            <button id="save" type="button" class="btn primary">Save</button>
+            <button id="revert" type="button" class="btn">Discard</button>
+            <button id="defaults" type="button" class="btn" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
+            <span id="save-status" class="t-data"></span>
         </div>
-        <div id="run-note" class="mt-2 t-meta k"></div>
-    </div>
+    </main>
 
-    <script>
-        // Field descriptions per group; the keys and ranges come from GET /api/calc-config.
-        const GROUPS = {
-            engine: { title: 'Engine (markets, timeframes, roles, candle limit; restart required)', help: {
-                markets: 'Markets to track, comma separated, e.g. BTCUSDT, SOLUSDT',
-                timeframes: 'Timeframes fetched and shown on the charts, comma separated; the roles below are always added',
-                htf: 'Highest role: HTF zones and trend',
-                structure: 'Structure timeframe',
-                mid: 'Mid timeframe',
-                entry: 'Entry timeframe: signals, plans and the signal log',
-                candle_limit: 'Candles fetched per timeframe; snapshots see this − 1 closed candles',
-            } },
-            shadow: { title: 'Shadow signal log (second model, logged apart; live signal unchanged)', help: {
-                enabled: 'on: log the shadow model to data/signals-shadow/ after each Market State build',
-                model: 'Signal model of the shadow log',
-                htf: 'Shadow HTF timeframe (must be in engine.timeframes or the roles)',
-                structure: 'Shadow structure timeframe',
-                mid: 'Shadow mid timeframe',
-                entry: 'Shadow entry timeframe: its candles judge the shadow trades',
-                stop_atr: 'Trend models: stop distance, × ATR',
-                target_r: 'Trend models: TP1 at this multiple of the risk',
-            } },
-            signal: { title: 'Signal', help: {
-                threshold: 'Minimum |score| for BUY/SELL',
-                min_rr: 'Minimum plan risk/reward (else filter low_rr)',
-                stop_atr: 'Stop loss buffer beyond the entry zone, × ATR',
-                trailing_atr: 'Trailing stop distance, × ATR',
-                htf_proximity_percent: 'Max distance (%) to an HTF zone for ±3 points',
-                target: 'TP1: tp1 nearest zone, rr_zone first zone with RR ≥ min_rr, tp2 major HTF zone (bounce model)',
-                model: 'bounce: S/R score; trend_pullback: pullback to the entry MA50 in the HTF trend; breakout: close beyond the entry channel in the trend',
-            } },
-            filters: { title: 'Trade filters', help: {
-                no_mans_land_percent: 'mid_range farther than this % from any zone → no_mans_land',
-                volatility_extreme: 'volatility_ratio above this → volatility_extreme',
-                volatility_dead: 'volatility_ratio below this → volatility_dead',
-                htf_trend: 'Reject BUY when the HTF (or structure) timeframe trends down, SELL when up → against_htf_trend',
-                entry_max_atr: 'Price farther than this × ATR from the entry zone → far_from_entry (0 = off)',
-            } },
-            weights: { title: 'Zone weights per timeframe', help: {} },
-            lookback: { title: 'S/R lookback candles per timeframe (changes recalculate every snapshot)', help: {} },
-            scoring: { title: 'Score points', help: {
-                near_zone: 'Price inside the top support / resistance zone, ± points',
-                momentum: 'Bullish / bearish momentum, ± points',
-                htf_zone: 'Top zone is an HTF zone within htf_proximity_percent, ± points',
-                divergence: 'RSI divergence, ± points',
-                volume: 'High volume adds, low volume removes conviction (points)',
-                strong_score: 'Minimum |score| for strength strong',
-                breakout_confirmed: 'Weakest breakout confirmation that lets BUY into resistance / SELL into support pass',
-            } },
-            trend: { title: 'Trend models (signal.model trend_pullback / breakout)', help: {
-                htf_points: 'HTF timeframe trend up / down, ± points',
-                structure_points: 'Structure timeframe trend, ± points',
-                entry_points: 'Entry timeframe trend, ± points',
-                pullback_points: 'trend_pullback: price within pullback_atr × ATR of the entry MA50, points in the trend direction',
-                breakout_points: 'breakout: close beyond the channel high / low, ± points',
-                momentum_points: 'MACD histogram in the score direction, points',
-                volume_points: 'High volume adds, low volume removes (points)',
-                pullback_atr: 'Pullback distance to the entry MA50, × ATR',
-                channel_candles: 'Entry candles in the breakout channel (before the signal candle)',
-                stop_atr: 'Stop loss distance from price, × ATR',
-                target_r: 'TP1 at this multiple of the risk',
-            } },
-            indicators: { title: 'Indicators (per timeframe; changes recalculate every snapshot)', help: {
-                ma_fast: 'Fast SMA period (field name stays ma14)',
-                ma_mid: 'Mid SMA period (field ma50)',
-                ma_slow: 'Slow SMA period (field ma200)',
-                rsi_period: 'RSI period',
-                macd_fast: 'MACD fast EMA period',
-                macd_slow: 'MACD slow EMA period',
-                macd_signal: 'MACD signal period',
-                atr_period: 'ATR period',
-                min_candles: 'Closed candles needed before a timeframe is calculated',
-                rsi_bullish: 'Momentum bullish: RSI above this and MACD histogram > 0',
-                rsi_bearish: 'Momentum bearish: RSI below this and MACD histogram < 0',
-                regime_ma_percent: 'Regime ranging when fast and mid SMA are within this % of price',
-            } },
-            zones: { title: 'Support / resistance zones (changes recalculate every snapshot)', help: {
-                cluster_percent: 'Swings within this % of each other form one zone',
-                width_atr: 'Zone half-width, × ATR',
-                max_width_percent: 'Maximum total zone width, % of its price',
-                touch_points: 'Score per swing in the zone',
-                recency_candles: 'Recency bonus: this many points minus candles since the last touch',
-                distance_penalty: 'Score minus distance from price (fraction) × this',
-                ma_bonus: 'Score bonus when the zone is near the mid or slow SMA',
-                ma_proximity_percent: 'Distance (%) to the SMA for that bonus',
-                fallback_candles: 'Candles for the high/low fallback level when a side has no zone',
-                lookback_volatility_band: 'Lookback widens / narrows when volatility is beyond ± this share of its mean',
-                lookback_scale: 'By this share (lookback × (1 ± scale))',
-            } },
-            market: { title: 'Market state thresholds', help: {
-                volume_candles: 'Candles in the volume average',
-                volume_high: 'Volume above average × this → high',
-                volume_increasing: 'Above average × this → increasing',
-                volume_low: 'Below average × this → low',
-                energy_explosive: '|MACD histogram| / ATR above this with high volume → explosive',
-                energy_building: '|MACD histogram| / ATR above this with increasing volume → building',
-                energy_cooling: '|MACD histogram| / ATR below this (or low volume) → cooling',
-                breakout_distance_percent: 'Breakout score distance factor reaches 0 at this % from the nearest zone',
-                breakout_volume_high: 'Breakout score volume factor, high volume',
-                breakout_volume_increasing: 'Volume factor, increasing',
-                breakout_volume_normal: 'Volume factor, normal',
-                breakout_volume_low: 'Volume factor, low',
-                compression_bonus: 'Breakout score bonus in a compression zone',
-                breakout_strong: 'Breakout score above this → confirmation strong / medium / weak by volume',
-                breakout_weak: 'Above this → weak (noise with high volume)',
-                dominant_percent: 'Dominant side when the top zone scores differ by more than this %',
-                volatility_candles: 'Candles in the ATR mean of volatility_ratio',
-            } },
-            divergence: { title: 'RSI divergence', help: {
-                lookback: 'Closed entry candles searched for swings',
-                pivot_width: 'Bars on each side a swing must exceed',
-                max_age: 'The latest swing must be at most this many bars old',
-            } },
-            evaluation: { title: 'Trade evaluation (signal log, backtest, edge)', help: {
-                expiry_candles: 'Entry candles before an open trade is closed as EXPIRED',
-                min_trades: 'Minimum taken trades for the edge verdict and the out-of-sample pick',
-            } },
-            backtest: { title: 'Backtest', help: {
-                days: 'History length in days',
-                fee_pct: 'Round-trip fee, % of price',
-                slippage_pct: 'Round-trip slippage, % of price; added to the fee',
-                entry: 'next_open: fill at the open after the signal candle; close: at the signal candle close',
-                folds: 'Walk-forward periods judged with the variant that was best before them',
-                split: 'In-sample share for the out-of-sample check',
-            } },
-        };
-
-        const state = { saved: null, defaults: null, limits: null, roles: {}, markets: [], runs: null, edges: {} };
-        const $ = (id) => document.getElementById(id);
-        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        const fmt = (v, d = 3) => (v === null || v === undefined ? '-' : Number(v).toFixed(d));
-        const date = (s) => (s ? new Date(s * 1000).toISOString().slice(0, 16).replace('T', ' ') : '-');
-
-        function limitsOf(group, key) {
-            return group === 'weights' || group === 'lookback' ? state.limits[group] : state.limits[group][key];
-        }
-
-        // A key is a choice when its limits list the allowed values instead of [min, max, integer].
-        const isList = (group, key) => Boolean(limitsOf(group, key).list);
-        const choicesOf = (group, key) => (isList(group, key) || Array.isArray(limitsOf(group, key)) ? null : limitsOf(group, key).values);
-        const fieldValue = (el) => {
-            if (el.dataset.list) return el.value.split(',').map(s => s.trim()).filter(Boolean);
-            return el.tagName === 'SELECT' ? el.value : el.value === '' ? NaN : Number(el.value);
-        };
-        const sameValue = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-        // Same rule as the server: at least min_items, no duplicates, every item allowed.
-        function listOk(v, l) {
-            if (v.length < l.min_items || v.length > (l.max_items ?? Infinity) || new Set(v).size !== v.length) return false;
-            return v.every(item => (l.values ? l.values.includes(item) : new RegExp(l.pattern).test(item)));
-        }
-
-        function renderForm() {
-            const roleOf = Object.fromEntries(Object.entries(state.roles).map(([role, tf]) => [tf, role]));
-            $('form').innerHTML = Object.entries(GROUPS).map(([group, g]) => {
-                const rows = Object.keys(state.saved[group]).map((key) => {
-                    const help = group === 'weights' || group === 'lookback' ? (roleOf[key] ? `Role ${roleOf[key]}` : 'Not a role timeframe') : g.help[key] || '';
-                    const choices = choicesOf(group, key);
-                    const list = isList(group, key);
-                    const [min, max, int] = choices || list ? [] : limitsOf(group, key);
-                    const field = list
-                        ? `<input id="f-${group}-${key}" data-group="${group}" data-key="${key}" data-list="1" type="text" spellcheck="false" autocomplete="off" style="width: 15rem" class="mono t-data text-white shrink-0">`
-                        : choices
-                        ? `<select id="f-${group}-${key}" data-group="${group}" data-key="${key}" style="width: 8.5rem">${choices.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>`
-                        : `<input id="f-${group}-${key}" data-group="${group}" data-key="${key}" type="number" min="${min}" max="${max}" step="${int ? 1 : 'any'}" class="mono t-data text-right text-white shrink-0">`;
-                    return `<div class="flex items-center justify-between gap-3 py-1 border-b border-white/5">
-                        <label for="f-${group}-${key}" class="min-w-0">
-                            <div class="mono t-data text-white">${esc(key)}</div>
-                            <div class="t-meta k">${esc(help)} · default <span class="mono">${esc(state.defaults[group][key] ?? '-')}</span> · ${list ? `at least ${limitsOf(group, key).min_items}` : choices ? esc(choices.join(' / ')) : `${min}–${max}`}</div>
-                        </label>
-                        <div class="shrink-0">${field}</div>
-                    </div>`;
-                }).join('');
-                return `<div class="glass rounded-lg p-3"><div class="t-value text-white mb-1">${esc(g.title)}</div>${rows}</div>`;
-            }).join('');
-            for (const el of $('form').querySelectorAll('select[data-group]')) AppHeader.select2(el, { width: 'style' });
-            fillForm(state.saved);
-            $('form').addEventListener('input', markDirty);
-            $('form').addEventListener('change', markDirty);
-        }
-
-        function inputs() {
-            return [...$('form').querySelectorAll('[data-group]')];
-        }
-
-        function fillForm(cfg) {
-            for (const el of inputs()) {
-                const v = cfg[el.dataset.group][el.dataset.key] ?? state.saved[el.dataset.group][el.dataset.key];
-                el.value = Array.isArray(v) ? v.join(', ') : v;
-                if (el.tagName === 'SELECT') jQuery(el).trigger('change.select2');
-            }
-            markDirty();
-        }
-
-        // Reads the form; returns { value, bad } where bad lists invalid fields.
-        function readForm() {
-            const value = Object.fromEntries(Object.keys(GROUPS).map(g => [g, {}]));
-            const bad = [];
-            for (const el of inputs()) {
-                const { group, key } = el.dataset;
-                const v = fieldValue(el);
-                const choices = choicesOf(group, key);
-                const list = isList(group, key);
-                const [min, max, int] = choices || list ? [] : limitsOf(group, key);
-                const ok = list ? listOk(v, limitsOf(group, key)) : choices ? choices.includes(v) : Number.isFinite(v) && v >= min && v <= max && (!int || Number.isInteger(v));
-                el.classList.toggle('bad', !ok);
-                if (!ok) bad.push(`${group}.${key}`);
-                value[group][key] = v;
-            }
-            return { value, bad };
-        }
-
-        function isDirty() {
-            return inputs().some(el => !sameValue(fieldValue(el), state.saved[el.dataset.group][el.dataset.key]));
-        }
-
-        function markDirty() {
-            for (const el of inputs()) el.classList.toggle('dirty', !sameValue(fieldValue(el), state.saved[el.dataset.group][el.dataset.key]));
-            const { bad } = readForm();
-            const dirty = isDirty();
-            $('save').disabled = !dirty || bad.length > 0;
-            $('revert').disabled = !dirty;
-            $('save-status').className = 't-data ' + (bad.length ? 'text-red-400' : 'text-yellow-400');
-            $('save-status').textContent = bad.length ? `Out of range: ${bad.join(', ')}` : dirty ? 'Unsaved changes' : '';
-            renderRuns();
-        }
-
-        async function save() {
-            const { value, bad } = readForm();
-            if (bad.length) return;
-            $('save').disabled = true;
-            try {
-                const res = await AppHeader.adminFetch('/api/calc-config', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(value),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.problems ? data.problems.join('; ') : data.error || `HTTP ${res.status}`);
-                state.saved = data.config;
-                fillForm(state.saved);
-                renderRestartNote();
-                $('save-status').className = 't-data text-green-400';
-                $('save-status').textContent = 'Saved and applied. Re-run the backtest to measure it.';
-                await loadEdges();
-            } catch (err) {
-                $('save-status').className = 't-data text-red-400';
-                $('save-status').textContent = `Save failed: ${err.message}`;
-                markDirty();
-            }
-        }
-
-        async function loadEdges() {
-            await Promise.all(state.markets.map(async (m) => {
-                try {
-                    const res = await fetch(`/api/edge/${encodeURIComponent(m)}`);
-                    state.edges[m] = res.ok ? await res.json() : null;
-                } catch (e) {
-                    state.edges[m] = null;
-                }
-            }));
-            renderRuns();
-        }
-
-        const JOB_COLORS = { queued: 'text-gray-400', running: 'text-blue-300', done: 'text-green-400', failed: 'text-red-400' };
-        const VERDICT_COLORS = { positive: 'text-green-400', negative: 'text-red-400', unproven: 'text-yellow-400' };
-
-        function renderRuns() {
-            if (!state.markets.length) return;
-            const busy = state.runs?.running;
-            const dirty = state.saved && isDirty();
-            $('run-all').disabled = busy || dirty;
-            $('run-all').title = dirty ? 'Save the config first' : busy ? 'A backtest is running' : '';
-            $('runs').innerHTML = state.markets.map((m) => {
-                const e = state.edges[m];
-                const b = e?.backtest;
-                const job = state.runs?.jobs?.[m];
-                const match = !b ? '<span class="k">no report</span>'
-                    : b.params_match ? '<span class="text-green-400">current</span>' : '<span class="text-yellow-400">params_differ</span>';
-                const jobCell = job ? `<span class="${JOB_COLORS[job.state] || ''}" title="${esc(job.output.join('\n'))}">${esc(job.state)}</span> <span class="k">${esc((job.state === 'failed' ? job.error : job.progress) || '')}</span>` : '';
-                return `<tr class="border-t border-white/5">
-                    <td><a class="text-blue-300 hover:underline" href="/backtest/${encodeURIComponent(m)}">${esc(m)}</a></td>
-                    <td class="k">${b ? `${date(b.generated_at)} · fee ${esc(b.fee_pct)}%` : '-'}</td>
-                    <td>${match}</td>
-                    <td class="text-right">${b?.taken ? esc(b.taken.trades) : '-'}</td>
-                    <td class="text-right">${fmt(b?.taken?.expectancy_r)}</td>
-                    <td class="text-right">${b?.out_of_sample ? `${fmt(b.out_of_sample.expectancy_r)} <span class="k">(${esc(b.out_of_sample.trades)})</span>` : '-'}</td>
-                    <td class="${VERDICT_COLORS[e?.verdict] || ''}">${esc(e?.verdict || '-')}</td>
-                    <td class="max-w-[22rem] truncate">${jobCell}</td>
-                    <td><button type="button" data-run="${esc(m)}" class="px-2 py-0.5 rounded-md t-control bg-gray-700 text-white hover:bg-gray-600" ${busy || dirty ? 'disabled' : ''}>Run</button></td>
-                </tr>`;
-            }).join('');
-            $('run-note').textContent = busy ? 'Running… markets run one after another; this page refreshes by itself.' : '';
-        }
-
-        let pollTimer = null;
-
-        async function loadRuns() {
-            try {
-                const res = await fetch('/api/backtest-runs');
-                if (!res.ok) return;
-                const prev = state.runs;
-                state.runs = await res.json();
-                const finished = Object.entries(state.runs.jobs).some(([m, j]) => j.state === 'done' && prev?.jobs?.[m]?.state !== 'done' && prev?.jobs?.[m]);
-                if (finished) await loadEdges();
-                renderRuns();
-                clearTimeout(pollTimer);
-                if (state.runs.running) pollTimer = setTimeout(loadRuns, 2000);
-            } catch (e) { /* keep the last state */ }
-        }
-
-        async function startRun(market) {
-            try {
-                const res = await AppHeader.adminFetch('/api/backtest-runs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ market }),
-                });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-                $('run-note').textContent = '';
-            } catch (err) {
-                $('run-note').textContent = `Could not start: ${err.message}`;
-            }
-            await loadRuns();
-        }
-
-        // The engine group applies at startup only: say which saved values wait for a restart.
-        function renderRestartNote() {
-            const note = $('restart-note');
-            const saved = state.saved.engine || {};
-            const diff = state.running ? Object.keys(saved).filter(k => !sameValue(saved[k], state.running[k])) : [];
-            note.classList.toggle('hidden', diff.length === 0);
-            note.textContent = diff.length
-                ? `Restart the app to apply: ${diff.map(k => `engine.${k} ${state.running[k]} → ${saved[k]}`).join(', ')}. Until then the running values stay in use (and backtest reports made with the new ones show params_differ).`
-                : '';
-        }
-
-        async function init() {
-            AppHeader.init();
-            try {
-                const [cfgRes, appRes] = await Promise.all([fetch('/api/calc-config'), fetch('/api/config')]);
-                if (!cfgRes.ok) throw new Error(`GET /api/calc-config: HTTP ${cfgRes.status}`);
-                const data = await cfgRes.json();
-                const app = appRes.ok ? await appRes.json() : {};
-                state.saved = data.config;
-                state.defaults = data.defaults;
-                state.limits = data.limits;
-                state.roles = data.role_timeframes || {};
-                state.running = data.running_engine;
-                state.markets = (app.markets || []).map(m => m.code);
-                $('file').textContent = data.file;
-            } catch (err) {
-                $('load-error').textContent = `Config unavailable: ${err.message}`;
-                $('load-error').classList.remove('hidden');
-                return;
-            }
-            for (const id of ['form', 'actions', 'runs-card']) $(id).classList.remove('hidden');
-            renderForm();
-            renderRestartNote();
-            $('save').addEventListener('click', save);
-            $('revert').addEventListener('click', () => { fillForm(state.saved); $('save-status').textContent = ''; });
-            $('defaults').addEventListener('click', () => fillForm(state.defaults));
-            $('run-all').addEventListener('click', () => startRun('all'));
-            $('runs').addEventListener('click', (ev) => {
-                const m = ev.target.closest('button[data-run]')?.dataset.run;
-                if (m) startRun(m);
-            });
-            await Promise.all([loadEdges(), loadRuns()]);
-        }
-
-        init();
-    </script>
+    <script src="/js/pages/config.js"></script>
 </body>
 </html>

@@ -36,7 +36,7 @@ The server validates every Market State against this contract (`src/services/con
 
 ## 3. Fields (version 2)
 
-Consumers: **D** = dashboard, **P** = AI prompts.
+Consumers: **D** = dashboard, **P** = AI prompts. Since 4.2.0 the dashboard no longer shows `breakout_score` and `setup_state`: the signal and its plan replace them; both fields stay in the contract.
 
 | Field | Type | Values / unit | Source | Used by |
 | :---- | :--- | :------------ | :----- | :------ |
@@ -60,9 +60,9 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `market_pressure` | enum | see §4 | derived | D, P |
 | `market_energy` | enum | `explosive` \| `building` \| `cooling` \| `stable` | derived | D, P |
 | `volume_state` | enum | `high` \| `increasing` \| `normal` \| `low` — latest closed volume vs the average of the last 20 closed candles (including that one) | entry TF | P |
-| `breakout_score` | number | 0.0–1.0, **heuristic, uncalibrated** (see §5) | derived | D, P |
+| `breakout_score` | number | 0.0–1.0, **heuristic, uncalibrated** (see §5) | derived | P |
 | `breakout_confirmation` | enum | `strong` \| `medium` \| `weak` \| `noise` \| `none` | derived | — |
-| `setup_state` | enum | see §4 | derived | D, P |
+| `setup_state` | enum | see §4 | derived | P |
 | `fake_breakout_risk` | enum | `low` \| `medium` \| `high` | derived | D, P |
 | `regime_global` | enum | see §4 | all role TFs | D, P |
 | `channel` | object \| null | `{high, low, candles}`: high / low of the `candles` closed entry candles before the latest one (config `trend.channel_candles`, default 20); `null` with fewer candles. Added in 2.20.0, absent in older states | entry TF | — |

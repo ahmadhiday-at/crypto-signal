@@ -8,18 +8,20 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | :------- | :------- | :----- | :---------- |
 | Data | `/api/market/:symbol` | `GET` | Market State ([market-state.md](./market-state.md)) with freshness `status`. HTTP 503 with diagnostics when unavailable (see below). |
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
+| Data | `/api/signals` | `GET` | Signal board (since 4.2.0): every market's signal, plan, verdict and open trades, plus the latest results. See [Signal board](#signal-board). |
 | Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, entry_tf, model, stats, records}`; `?format=csv` returns the flattened dataset; `?source=shadow` (since 2.22.0) reads the shadow log. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
 | Data | `/api/backtest-history/:symbol` | `GET` | Summary of every earlier backtest run, newest first (since 3.3.0): `{market, runs}`. Stored in `data/backtest/history/{MARKET}.jsonl`. |
 | Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
 | Data | `/api/calc-config` | `GET` / `PUT` | Calculation config (since 2.14.0). See [Calculation config](#calculation-config). |
 | Data | `/api/backtest-runs` | `GET` / `POST` | Re-run the backtest from the server (since 2.14.0). See [Backtest runs](#backtest-runs). |
-| UI | `/` | `GET` | 302 to `/{first engine.markets market}` (since 2.13.0). |
-| UI | `/:symbol` | `GET` | Market Dashboard (e.g. `/BTCUSDT`), the main view. Links to Chart, Backtest and the signal log CSV. |
+| UI | `/` | `GET` | 302 to `/signals` (since 4.2.0). |
+| UI | `/signals` | `GET` | Signal board, the main view (since 4.2.0). |
+| UI | `/:symbol` | `GET` | Market page (e.g. `/BTCUSDT`): signal, trade plan, position size, reasons, chart and track record. |
 | UI | `/backtest/:symbol` | `GET` | Backtest report page: metrics, equity curve, trades. |
 | UI | `/config` | `GET` | Calculation config editor and backtest re-run (since 2.14.0). |
-| UI | `/:symbol/:tf` | `GET` | Reference multi-pane chart (e.g. `/BTCUSDT/1h`). |
-| System | `/api/config` | `GET` | Markets, timeframes (`engine.timeframes` plus the role timeframes, since 2.25.2), TF roles and `version` (app version from `package.json`, since 2.6.0). |
+| UI | `/:symbol/:tf` | `GET` | Full multi-pane chart (e.g. `/BTCUSDT/1h`). |
+| System | `/api/config` | `GET` | Markets, timeframes (`engine.timeframes` plus the role timeframes, since 2.25.2), TF roles, `version` (app version from `package.json`, since 2.6.0) and `signal` (since 4.2.0: model, threshold, minimum R:R, filter limits, expiry and costs a page needs to explain a signal; `null` without a calculation config). |
 | System | `/api/health` | `GET` | Per-timeframe fetch diagnostics, Binance pauses and stream state. |
 | System | `/api/reset` | `POST` | Re-fetches every timeframe and rebuilds the Market State. Requires the admin token ([Admin token](#admin-token)), header `X-Requested-With: crypto-signal` and a same-origin request (403 otherwise; `GET` returns 405). 502 if any timeframe fails (existing data kept), 409 if a reset is running, 429 within 60 s of the previous reset. |
 
@@ -46,11 +48,21 @@ When no valid summary exists and none can be built, `GET /api/market/:symbol` re
 
 Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
+## Signal board
+
+`GET /api/signals` (since 4.2.0). Built on each request; a market that cannot be read is a row with `status: "unavailable"` and `signal: null`, not an error.
+
+- **Top level:** `generated_at`, `model`, `roles`, `totals` `{long, short, wait, open}`, `markets`, `recent` (latest 20 closed trades of all markets, newest first).
+- **`markets[]`:** `market`, `status`, `errors`, `price` (latest closed entry candle), `generated_at`, `signal`, `trends`, `edge`, `open`, `older_records`.
+- **`signal`:** `action` (`BUY`/`SELL`/`WAIT`), `direction` (`long`/`short`, `null` on `WAIT`), `setup` (the plan's side when a filter or stale data holds it back), `score`, `strength`, `filtered`, `filters`, `plan`; `null` when unavailable.
+- **`trends`:** per role `{timeframe, trend}`. **`edge`:** `verdict`, `reasons`, `expectancy_r`, `out_of_sample_r`, `trades` from [Edge](#edge).
+- **`open` / `recent` trades:** taken records of the current entry timeframe and model: `id`, `market`, `timeframe`, `side`, `strength`, `score`, `entry`, `stop_loss`, `take_profit_1`, `take_profit_2`, `risk_reward`, `opened_at`, `expires_at`, `result`, `rr`, `closed_at`, `bars`. `older_records` counts the log records left out.
+
 ## Signal log
 
 `GET /api/signals/:symbol` (Roadmap Level 4). Source: `data/signals/{MARKET}.jsonl` (gitignored, append-only).
 
-**Shadow log (since 2.22.0):** `?source=shadow` reads `data/signals-shadow/{MARKET}.jsonl` (gitignored), written after each published Market State by the model of the calculation config `shadow` group on its own role timeframes (default since 2.24.0: `bounce` on 15m / 1h / 4h / 1d, stop 3 ATR, target 2R; other values from the live config). The live signal and log are unchanged. Response `{market, source: "shadow", enabled, model, roles, latest, stats, records}`; `latest` = `{model, roles, generated_at, status, price, signal: {action, score, filters, plan}}` of the last build or `null`. A shadow role timeframe outside the fetched ones (engine.timeframes + roles) pauses the shadow log with one warning.
+**Shadow log (since 2.22.0):** `?source=shadow` reads `data/signals-shadow/{MARKET}.jsonl` (gitignored), written after each published Market State by the model of the calculation config `shadow` group on its own role timeframes (default since 4.2.0: `trend_pullback` on 4h / 1d / 1d / 1w). The live signal and log are unchanged. Response `{market, source: "shadow", enabled, model, roles, latest, stats, records}`; `latest` = `{model, roles, generated_at, status, price, signal: {action, score, filters, plan}}` of the last build or `null`. A shadow role timeframe outside the fetched ones (engine.timeframes + roles) pauses the shadow log with one warning.
 
 - **When a record is created:** after a published summary with `status: "ok"`, `|signal.score| ≥ 5` and a plan with `stop_loss` and `take_profit_1`. Filtered candidates are logged too (`filtered: true`, `filters`). At most one open record per market and direction.
 - **Record:** `id`, `timestamp` (summary `generated_at`), `market`, `timeframe` (entry), `candle_time`, `candle_close_time`, `signal` (`BUY`/`SELL`, direction before filters), `filtered`, `filters`, `strength`, `price` (entry = closed entry-candle close), `entry_zone`, `sl`, `tp1`, `tp2`, `risk_reward`, `features` (`context`, `momentum`, `regime`, `volume_state`, `breakout_confirmation`, `divergence`, `volatility_ratio`, `distance_to_support`, `distance_to_resistance`, `rsi`, `atr`, `score`, `strength`, `reasons`), then `result`, `rr`, `closed_at`, `bars` (`null` while open). Since 3.1.0 new records also carry `model`, `config_hash` (12 hex characters; the same values give the same hash) and `app_version`; older records lack them. The config behind a hash is kept in `configs/{hash}.json` next to the log.
@@ -79,7 +91,7 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 ## Edge
 
-`GET /api/edge/:symbol` (Roadmap Level 6.5 A). Built on each request from `data/backtest/{MARKET}.json` and the signal log; shown in the dashboard Signal card.
+`GET /api/edge/:symbol` (Roadmap Level 6.5 A). Built on each request from `data/backtest/{MARKET}.json` and the signal log; shown on the Market page (Track record) and, as a summary, on the signal board.
 
 ```json
 {

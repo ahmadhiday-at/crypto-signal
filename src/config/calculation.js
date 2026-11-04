@@ -26,7 +26,7 @@ const WEIGHT_DEFAULTS = { '1w': 1, '1d': 3, '4h': 2, '1h': 1.5, '15m': 1, '1m': 
 const LOOKBACK_DEFAULTS = { '1w': 200, '1d': 200, '4h': 200, '1h': 200, '30m': 300, '15m': 300, '1m': 500 };
 // Shadow signal log (group `shadow`): a second model on its own role timeframes, logged next to the
 // live signal without changing it. Its other values (threshold, filters, points) are the live ones.
-const SHADOW_DEFAULTS = { enabled: 'on', model: 'bounce', htf: '1d', structure: '4h', mid: '1h', entry: '15m', stop_atr: 3, target_r: 2 };
+const SHADOW_DEFAULTS = { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '1d', entry: '4h', stop_atr: 3, target_r: 2 };
 
 // S/R lookback candles per timeframe (group `lookback`); unlisted timeframes use 200.
 const LOOKBACK_LIMITS = [20, 1000, true];

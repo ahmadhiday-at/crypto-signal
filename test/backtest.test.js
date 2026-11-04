@@ -272,7 +272,7 @@ test('GET /api/backtest/:market and the /backtest/:market page', async (t) => {
     assert.equal((await fetch(`${base}/api/backtest/ETHUSDT`)).status, 404);
 
     const page = await fetch(`${base}/backtest/BTCUSDT`).then(r => r.text());
-    assert.match(page, /<title>Backtest Report<\/title>/);
+    assert.match(page, /<title>Backtest \| Crypto Signal<\/title>/);
 });
 
 test('CLI --roles: entry, mid, structure, htf for one run', () => {

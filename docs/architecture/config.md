@@ -26,8 +26,8 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | `engine` | `timeframes` | `1w`, `1d`, `4h`, `1h`, `30m`, `15m`, `1m` | supported timeframes, at least 1, no duplicates | Timeframes fetched and charted, role timeframes always added (since 3.0.0). Restart needed |
 | `engine` | `htf` / `structure` / `mid` / `entry` | `1w` / `1d` / `4h` / `1h` | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
 | `shadow` | `enabled` | `on` | `off` / `on` | Shadow signal log (since 2.22.0): a second model logged to `data/signals-shadow/` next to the live signal, which it does not change |
-| `shadow` | `model` | `bounce` (since 2.24.0) | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
-| `shadow` | `htf` / `structure` / `mid` / `entry` | `1d` / `4h` / `1h` / `15m` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in engine.timeframes or the live roles; applied at once) |
+| `shadow` | `model` | `trend_pullback` (since 4.2.0) | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
+| `shadow` | `htf` / `structure` / `mid` / `entry` | `1w` / `1d` / `1d` / `4h` (since 4.2.0) | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in engine.timeframes or the live roles; applied at once) |
 | `shadow` | `stop_atr`, `target_r` | 3, 2 | 0.1–20, 0.5–20 | Shadow trend-model stop (× ATR) and target (× risk); other values come from the live groups |
 | `engine` | `candle_limit` | 1000 (since 3.0.0) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
 | `lookback` | `<tf>` | 200; `30m`, `15m` 300; `1m` 500 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
