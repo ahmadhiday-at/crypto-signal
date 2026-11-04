@@ -9,6 +9,8 @@ Node.js ≥22 (Docker: Node 24). No linter/build step.
 ```bash
 npm run dev    # nodemon: server.js + src/, ignores data/
 npm test       # node:test, no network
+npm run backtest -- BTCUSDT --days 365   # hits Binance; in Docker: docker compose exec app npm run backtest -- …
+npm run backtest -- BTCUSDT --sweep threshold=4,5,6 --sweep min_rr=1,1.5 --split 0.7   # sweep + out-of-sample check; keys in docs/contract/rest.md
 node --test --test-name-pattern="reset" "test/**/*.test.js"
 docker compose up -d            # add --build if package*.json or Dockerfile changed
 docker compose restart app      # after .env changes
@@ -16,7 +18,7 @@ docker compose restart app      # after .env changes
 
 - Tests: use fakes from `test/helpers.js`; never hit real Binance. E2E: point `BINANCE_REST_URL` at a local fake server, run `server.js` with `HOST=127.0.0.1` and a spare `PORT`.
 - Docker bind-mounts this folder with nodemon: **editing `server.js`/`src/` hot-reloads the user's running app**. For multi-step changes use a separate git worktree and apply the finished diff.
-- `data/` is committed but rewritten by the running app: don't commit it unless asked; its diffs need no version bump or changelog.
+- `data/` is committed but rewritten by the running app: don't commit it unless asked; its diffs need no version bump or changelog. `data/history/` is the exception worth committing: finished years never change, the running app adds to the current year at 00:01 UTC.
 
 ## Architecture
 
@@ -31,9 +33,10 @@ Binance HTTP 451 = access restriction; open policy question; never add automatic
 - WS message shapes → `docs/contract/websocket.md`
 - Code map, components → `docs/architecture/overview.md`
 - Update/freshness/failure behaviour → `docs/architecture/operating-model.md`
-- Env vars, config → `docs/architecture/config.md`, `.env.example`
+- Env vars, calculation config (`config/calculation.json`) → `docs/architecture/config.md`, `.env.example`
 - Docker/VPN → `docs/DEPLOYMENT.md` (Indonesian)
-- Planned work → `docs/roadmap/level-2.5b.md` (active); other levels in `docs/roadmap/`
+- Backtest report fields → `docs/contract/rest.md` (Backtest report)
+- Planned work → `docs/roadmap/level-6.5.md` (active: signal quality); other levels in `docs/roadmap/`
 
 ## When a task is done
 

@@ -21,11 +21,11 @@ function createHostCheck(allowedHosts) {
   return (hostHeader) => allowed.has(hostnameOf(hostHeader));
 }
 
-function createApp({ engine, config, log = console }) {
+function createApp({ engine, config, reports = null, calc = null, runner = null, log = console }) {
   const app = express();
 
   app.disable("x-powered-by");
-  // The app uses no query strings; the simple parser avoids qs (moderate advisory pinned by express 4).
+  // Query strings here are flat (?format=csv); the simple parser avoids qs (moderate advisory pinned by express 4).
   app.set("query parser", "simple");
 
   // A page on another domain that re-points its DNS to this machine still sends its own Host
@@ -48,12 +48,18 @@ function createApp({ engine, config, log = console }) {
     next();
   });
 
+  // The signal board is the main view.
+  app.get("/", (req, res) => res.redirect(302, "/signals"));
   app.use(express.static(path.join(__dirname, "../public")));
-  app.use("/api", createApiRouter(createMarketController({ engine, config })));
+  app.use("/api", createApiRouter(createMarketController({ engine, config, reports, calc, runner }), config));
   app.use("/", viewRoutes);
 
   // Never leak internal error details to clients.
   app.use((err, req, res, next) => {
+    // Body parser errors (malformed JSON, body too large) are the client's.
+    if (err.type === "entity.parse.failed" || err.type === "entity.too.large") {
+      return res.status(err.status || 400).json({ error: err.type === "entity.too.large" ? "body_too_large" : "invalid_json" });
+    }
     log.error(`[API] ${req.method} ${req.path} failed: ${err.message}`);
     if (res.headersSent) return next(err);
     res.status(500).json({ error: "internal_error" });

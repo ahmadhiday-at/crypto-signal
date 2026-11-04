@@ -17,7 +17,8 @@ const valid = () => ({
     inputs: Object.fromEntries(['1d', '4h', '1h', '15m'].map(tf => [tf, { candle_close_time: 1, age_seconds: 9, status: 'ok' }])),
     status: 'ok', errors: [],
     volatility_ratio: 1.1,
-    signal: { action: 'WAIT', score: 2, strength: 'weak', reasons: [{ code: 'near_support', points: 2 }], filtered: false, filters: [] },
+    divergence: 'none',
+    signal: { action: 'WAIT', score: 2, strength: 'weak', reasons: [{ code: 'near_support', points: 2 }], filtered: false, filters: [], plan: null },
 });
 
 test('a complete v2 market state is valid', () => {
@@ -37,12 +38,20 @@ test('rejects missing fields, wrong versions, invalid enums and non-finite numbe
     assert.ok(mutate(s => { delete s.inputs['1h']; }).some(e => e.includes('inputs.1h')));
     assert.ok(mutate(s => { s.errors = [1]; }).some(e => e.includes('errors')));
     assert.ok(mutate(s => { delete s.signal; }).some(e => e.includes('signal')));
+    assert.ok(mutate(s => { s.timeframes['15m'].trend = 'sideways'; }).some(e => e.includes('timeframes.15m')));
+    assert.deepEqual(mutate(s => { s.timeframes['15m'].trend = 'down'; }), [], 'trend is optional (states before 2.16.0)');
     assert.ok(mutate(s => { s.signal.action = 'HOLD'; }).some(e => e.includes('signal.action')));
     assert.ok(mutate(s => { s.signal.reasons = [{ code: 'gut_feeling', points: 1 }]; }).some(e => e.includes('signal.reasons')));
     assert.ok(mutate(s => { s.signal.filters = ['vibes']; s.signal.filtered = true; }).some(e => e.includes('signal.filters')));
     assert.ok(mutate(s => { s.signal.filtered = true; }).some(e => e.includes('signal.filtered')));
     assert.ok(mutate(s => { delete s.volatility_ratio; }).some(e => e.includes('volatility_ratio')));
     assert.deepEqual(mutate(s => { s.volatility_ratio = null; }), [], 'null ratio is allowed');
+    assert.ok(mutate(s => { s.divergence = 'hidden'; }).some(e => e.includes('divergence')));
+    const plan = { side: 'long', entry_zone: [1, 2], stop_loss: 0.5, take_profit_1: 3, take_profit_2: null, risk_reward: 2, trailing_stop: 1 };
+    assert.deepEqual(mutate(s => { s.signal.plan = plan; }), [], 'valid plan');
+    assert.ok(mutate(s => { s.signal.plan = { ...plan, entry_zone: [2, 1] }; }).some(e => e.includes('entry_zone')));
+    assert.ok(mutate(s => { s.signal.plan = { ...plan, side: 'up' }; }).some(e => e.includes('plan')));
+    assert.ok(mutate(s => { delete s.signal.plan; }).some(e => e.includes('plan')), 'plan must be present (null allowed)');
     assert.deepEqual(validateMarketState(null), ['market state is not an object']);
 });
 

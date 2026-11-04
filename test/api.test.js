@@ -95,7 +95,7 @@ test('reset runs for same-origin requests and reports a concurrent reset', async
     const s = await startServer();
     t.after(s.close);
     s.binance.delayMs = 30;
-    const headers = { 'X-Requested-With': 'crypto-signal', Origin: s.base };
+    const headers = { 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': testConfig.ADMIN_TOKEN, Origin: s.base };
     const first = req(s.base, '/api/reset', { method: 'POST', headers });
     await new Promise(r => setTimeout(r, 5));
     const second = await req(s.base, '/api/reset', { method: 'POST', headers });
@@ -112,7 +112,7 @@ test('reset reports failed timeframes with 502 and keeps going', async (t) => {
     const s = await startServer();
     t.after(s.close);
     s.binance.failures['1h'] = Object.assign(new Error('x'), { code: 'binance_451' });
-    const r = await req(s.base, '/api/reset', { method: 'POST', headers: { 'X-Requested-With': 'crypto-signal' } });
+    const r = await req(s.base, '/api/reset', { method: 'POST', headers: { 'X-Requested-With': 'crypto-signal', 'X-Admin-Token': testConfig.ADMIN_TOKEN } });
     assert.equal(r.status, 502);
     assert.equal(r.body.success, false);
     assert.deepEqual(r.body.results.BTCUSDT.failed, [{ timeframe: '1h', error: 'binance_451' }]);
@@ -192,8 +192,105 @@ test('view routes serve the dashboard at /:market and the chart at /:market/:tim
         const r = await fetch(s.base + path);
         return { status: r.status, title: (/<title>([^<]*)/.exec(await r.text()) || [])[1] };
     };
-    assert.deepEqual(await page('/BTCUSDT'), { status: 200, title: 'Market State Engine | Dashboard' });
-    assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Real-time Trading Chart' });
+    assert.deepEqual(await page('/BTCUSDT'), { status: 200, title: 'Market | Crypto Signal' });
+    assert.deepEqual(await page('/BTCUSDT/1h'), { status: 200, title: 'Chart | Crypto Signal' });
     assert.equal((await page('/js/market-status.js')).status, 200, 'static files still win over view routes');
     assert.equal((await req(s.base, '/api/config')).status, 200, 'api routes still win over view routes');
+    assert.equal((await req(s.base, '/api/config')).body.version, require('../package.json').version);
 });
+
+test('/ redirects to the signal board', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const r = await fetch(`${s.base}/`, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), '/signals');
+    const page = await fetch(`${s.base}/`).then(res => res.text());
+    assert.match(page, /data-view="signals"/, 'lands on the signal board with the shared header');
+});
+
+test('signal board: one row per market, with what a trader needs', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    await s.engine.runBoundary(MIDNIGHT);
+    const r = await req(s.base, '/api/signals');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.markets.map(m => m.market), testConfig.MARKETS);
+    const row = r.body.markets[0];
+    assert.equal(row.status, 'ok');
+    assert.ok(['BUY', 'SELL', 'WAIT'].includes(row.signal.action));
+    assert.deepEqual(Object.keys(row.trends), Object.keys(testConfig.TF_ROLES));
+    assert.equal(row.edge.verdict, 'unproven');
+    assert.deepEqual(r.body.recent, []);
+    assert.equal(r.body.totals.long + r.body.totals.short + r.body.totals.wait, testConfig.MARKETS.length);
+    const page = await fetch(`${s.base}/signals`).then(res => res.text());
+    assert.match(page, /<title>Signals \| Crypto Signal<\/title>/);
+});
+
+test('signal board: a market that cannot be read is a row, not an error for all', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const original = s.engine.getMarketState;
+    s.engine.getMarketState = (market) => (market === testConfig.MARKETS[0] ? Promise.reject(new Error('boom')) : original(market));
+    const r = await req(s.base, '/api/signals');
+    assert.equal(r.status, 200);
+    assert.equal(r.body.markets[0].status, 'unavailable');
+    assert.equal(r.body.markets[0].signal, null);
+});
+
+test('actions need the admin token; reads do not', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const action = { 'X-Requested-With': 'crypto-signal' };
+    const missing = await req(s.base, '/api/reset', { method: 'POST', headers: action });
+    assert.deepEqual([missing.status, missing.body.error], [401, 'admin_token_invalid']);
+    const wrong = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, 'X-Admin-Token': 'wrong' } });
+    assert.deepEqual([wrong.status, wrong.body.error], [401, 'admin_token_invalid']);
+    assert.equal(s.binance.calls.length, 0, 'nothing ran');
+    // The same-origin check comes first and a cross-site page gets no answer about the token.
+    const cross = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, Origin: 'https://evil.example' } });
+    assert.deepEqual([cross.status, cross.body.error], [403, 'cross_origin_request']);
+    const cfg = await req(s.base, '/api/config');
+    assert.equal(cfg.status, 200);
+    assert.equal(cfg.body.admin_configured, true);
+    assert.ok(!JSON.stringify(cfg.body).includes(testConfig.ADMIN_TOKEN), 'the token is never served');
+    const ok = await req(s.base, '/api/reset', { method: 'POST', headers: { ...action, 'X-Admin-Token': testConfig.ADMIN_TOKEN } });
+    assert.equal(ok.status, 200);
+});
+
+test('without a configured token every action is refused', () => {
+    const { requireAdmin } = require('../src/api/routes/api.routes');
+    const call = (token, given) => {
+        const out = {};
+        const res = { status(c) { out.code = c; return this; }, json(b) { out.body = b; return this; } };
+        requireAdmin(token)({ get: () => given }, res, () => { out.next = true; });
+        return out;
+    };
+    assert.deepEqual(call('', 'anything'), { code: 403, body: { error: 'admin_token_not_configured' } });
+    assert.deepEqual(call(undefined, undefined), { code: 403, body: { error: 'admin_token_not_configured' } });
+    assert.deepEqual(call('a-long-enough-token-1234', 'a-long-enough-token-1234'), { next: true });
+    assert.equal(call('a-long-enough-token-1234', 'a-long-enough-token-123').code, 401);
+});
+
+test('role timeframes can be charted even when engine.timeframes omits them', async (t) => {
+    const config = { ...testConfig, TIMEFRAMES: ['15m'], TF_ROLES: { htf: '1d', structure: '4h', mid: '1h', entry: '1h' }, ALLOWED_HOSTS: ['127.0.0.1'] };
+    const now = (MIDNIGHT + 5) * 1000;
+    const engine = createMarketEngine({ storage: tempStorage(), binance: fakeBinance({ now: () => now }), indicators: require('../src/services/indicator.service'), config, now: () => now, log: silentLog });
+    await engine.initialize();
+    const server = http.createServer(createApp({ engine, config, log: silentLog }));
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    t.after(() => new Promise(r => server.close(r)));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const body = await fetch(`${base}/api/config`).then(r => r.json());
+    assert.deepEqual(body.timeframes, [{ code: '1d', label: '1 Day' }, { code: '4h', label: '4 Hour' }, { code: '1h', label: '1 Hour' }, { code: '15m', label: '15 Minute' }]);
+    assert.equal((await fetch(`${base}/api/BTCUSDT/1h`)).status, 200, 'every listed timeframe has data');
+    assert.equal((await fetch(`${base}/api/BTCUSDT/30m`)).status, 404, 'a timeframe that is not fetched stays unknown');
+});
+
+test('a timeframe list that holds the roles keeps its order', async (t) => {
+    const s = await startServer();
+    t.after(s.close);
+    const { timeframes } = (await req(s.base, '/api/config')).body;
+    assert.deepEqual(timeframes.map(tf => tf.code), testConfig.TIMEFRAMES);
+});
+

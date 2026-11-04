@@ -2,6 +2,41 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v4.2.0](docs/changelog/v4.2.0.md) — 2026-11-04 — Signal board with long/short plans, position sizing and a dependency-free design system on every page.
+- [v4.1.0](docs/changelog/v4.1.0.md) — 2026-11-04 — Each backtest trade keeps its full Market State in the live format.
+- [v4.0.1](docs/changelog/v4.0.1.md) — 2026-11-04 — Shadow log moves to trend_pullback with 4h entry; the 4h and random-entry results are recorded.
+- [v4.0.0](docs/changelog/v4.0.0.md) — 2026-11-04 — History is stored per year and kept in git; a daily job at 00:01 UTC fills only what is missing.
+- [v3.3.0](docs/changelog/v3.3.0.md) — 2026-11-04 — Backtest gains slippage, next-open entry, walk-forward, 95% interval, run history, trailing exit option and --offline.
+- [v3.2.0](docs/changelog/v3.2.0.md) — 2026-11-04 — Zones are at most 2% wide (config) and merged levels are sided by the current price.
+- [v3.1.1](docs/changelog/v3.1.1.md) — 2026-11-04 — Backtest fee default becomes 0.2% round trip; a report with a lower fee no longer counts as proof.
+- [v3.1.0](docs/changelog/v3.1.0.md) — 2026-11-04 — Signal records name their model, config hash and app version; stats keep models apart.
+- [v3.0.0](docs/changelog/v3.0.0.md) — 2026-11-04 — Markets and timeframes move to /config; `.env` holds server settings and secrets only.
+- [v2.25.2](docs/changelog/v2.25.2.md) — 2026-11-04 — Role timeframes can always be charted, even when TIMEFRAME_LIST omits them.
+- [v2.25.1](docs/changelog/v2.25.1.md) — 2026-11-04 — `.env.example` keeps deployment settings only; S/R lookback moves to config/calculation.json.
+- [v2.25.0](docs/changelog/v2.25.0.md) — 2026-11-04 — Config save, backtest run and reset need the new ADMIN_TOKEN.
+- [v2.24.0](docs/changelog/v2.24.0.md) — 2026-11-04 — Default model becomes trend_pullback on 1h/4h/1d/1w (stop 3 ATR, target 2R, 3-year backtest), with bounce on 15m in the shadow log; signal stats follow the current entry timeframe.
+- [v2.23.0](docs/changelog/v2.23.0.md) — 2026-11-04 — `market_energy` measures the MACD histogram against ATR, so its label no longer depends on the symbol's price.
+- [v2.22.0](docs/changelog/v2.22.0.md) — 2026-11-03 — Shadow signal log: a second model (trend_pullback on 1h/4h/1d/1w) logged live next to the unchanged live signal, shown on the dashboard.
+- [v2.21.0](docs/changelog/v2.21.0.md) — 2026-11-03 — Role timeframes, CANDLE_LIMIT and MAPPING_CANDLE move from .env to config/calculation.json (engine, lookback); .env values become seeds.
+- [v2.20.0](docs/changelog/v2.20.0.md) — 2026-11-02 — New signal models trend_pullback and breakout (signal.model, trend config group); default stays bounce; 3-year validation recorded in the roadmap.
+- [v2.19.0](docs/changelog/v2.19.0.md) — 2026-11-02 — Backtest sweep for every calculation config key (<group>.<key>); first score-point and expiry sweeps found no edge.
+- [v2.18.0](docs/changelog/v2.18.0.md) — 2026-11-02 — Every calculation value (score points, indicators, S/R zones, market thresholds, divergence, trade expiry) moved to config/calculation.json; defaults unchanged.
+- [v2.17.0](docs/changelog/v2.17.0.md) — 2026-11-02 — Level 6.5 B2: TP1 choice (rr_zone) and an entry-distance filter (far_from_entry) as config options; defaults unchanged.
+- [v2.16.0](docs/changelog/v2.16.0.md) — 2026-11-02 — Level 6.5 B1: per-timeframe trend and an optional HTF trend filter (against_htf_trend), off by default after backtests showed no edge.
+- [v2.15.0](docs/changelog/v2.15.0.md) — 2026-11-02 — Dashboard, Chart and Backtest share one header (market picker, view tabs), select2 dropdowns and one font scale by kind of information.
+- [v2.14.0](docs/changelog/v2.14.0.md) — 2026-11-01 — Calculation config moved from .env to config/calculation.json, editable by hand or from /config, with a backtest re-run button.
+- [v2.13.1](docs/changelog/v2.13.1.md) — 2026-11-01 — A timeframe with too little Binance history (e.g. XAUTUSDT 1w) warns once and waits for its next candle instead of failing every 5 minutes.
+- [v2.13.0](docs/changelog/v2.13.0.md) — 2026-11-01 — `/` opens the dashboard of the default market; the dashboard links to Chart, Backtest and the signal log.
+- [v2.12.0](docs/changelog/v2.12.0.md) — 2026-11-01 — Dashboard shows how proven the signal is (backtest + live log verdict) via `/api/edge/:symbol`.
+- [v2.11.0](docs/changelog/v2.11.0.md) — 2026-11-01 — Backtest sweep of the setup (SL buffer, target, side, market energy); no variant holds out-of-sample on all of BTC/SOL/BNB.
+- [v2.10.1](docs/changelog/v2.10.1.md) — 2026-11-01 — Pages explain when a symbol is not in `MARKET_LIST` and list the available markets.
+- [v2.10.0](docs/changelog/v2.10.0.md) — 2026-11-01 — Backtest out-of-sample validation (`--split`); BTC/SOL/BNB run shows no robust edge from threshold/min RR tuning.
+- [v2.9.0](docs/changelog/v2.9.0.md) — 2026-10-31 — Level 6 tools: backtest breakdown per market condition and `--sweep` parameter comparison; Level 5 real-run result documented.
+- [v2.8.0](docs/changelog/v2.8.0.md) — 2026-10-31 — Level 5 backtest: `npm run backtest` CLI, cached history, report API and `/backtest/:symbol` page.
+- [v2.7.0](docs/changelog/v2.7.0.md) — 2026-10-31 — Level 4 signal log: candidates, WIN/LOSS/EXPIRED outcomes and a CSV dataset at `/api/signals/:symbol`.
+- [v2.6.0](docs/changelog/v2.6.0.md) — 2026-10-30 — App version in `/api/config` and shown in both views.
+- [v2.5.0](docs/changelog/v2.5.0.md) — 2026-10-30 — Trade plan (entry zone, SL, TP1/TP2, RR, trailing) and low_rr filter; roadmap Levels 2.5B and 3 complete.
+- [v2.4.0](docs/changelog/v2.4.0.md) — 2026-10-30 — RSI/price divergence field and ±2 signal trigger; roadmap Level 2 complete.
 - [v2.3.0](docs/changelog/v2.3.0.md) — 2026-10-30 — Level 2.5B trade filter (no-man's land, volatility, buy-into-resistance) turns weak setups into WAIT.
 - [v2.2.0](docs/changelog/v2.2.0.md) — 2026-10-30 — Level 2 heuristic `signal` (BUY/SELL/WAIT, strength, reasons) in the Market State and dashboard.
 - [v2.1.0](docs/changelog/v2.1.0.md) — 2026-10-30 — Dashboard fits the viewport, panes aligned and synced (range + crosshair), Binance-style legends.

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backtest | Crypto Signal</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="/js/format.js"></script>
+    <script src="/js/signal-view.js"></script>
+    <script src="/js/app-header.js"></script>
+</head>
+<body>
+    <header id="app-header" data-view="backtest">
+        <div data-header-slot="left"><span id="period" class="t-meta muted"></span></div>
+    </header>
+
+    <main class="page">
+        <div id="empty" class="card t-body" hidden>
+            No backtest report for this symbol yet. Run it from <a href="/config" style="color:var(--accent)">Config</a>, or:
+            <pre class="mono t-data" id="empty-cmd" style="margin:8px 0 0;color:var(--accent)"></pre>
+        </div>
+
+        <div id="report" class="stack" style="gap:12px" hidden>
+            <div id="verdict" class="banner"></div>
+            <div id="assumptions" class="t-meta muted"></div>
+
+            <nav class="tabs" role="tablist" aria-label="Report sections">
+                <button type="button" role="tab" data-tab="summary" aria-selected="true">Summary</button>
+                <button type="button" role="tab" data-tab="robustness" aria-selected="false">Robustness</button>
+                <button type="button" role="tab" data-tab="breakdown" aria-selected="false">Breakdown</button>
+                <button type="button" role="tab" data-tab="trades" aria-selected="false">Trades</button>
+            </nav>
+
+            <section data-panel="summary" class="stack" style="gap:12px">
+                <div class="grid grid-2">
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title pos">Taken</h2><span class="card-note">Passed every filter</span></div>
+                        <div id="m-taken" class="metrics"></div>
+                        <div id="s-taken" class="t-meta muted num" style="margin-top:8px"></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-head"><h2 class="card-title warn">Filtered</h2><span class="card-note">Rejected by a filter, for comparison</span></div>
+                        <div id="m-filtered" class="metrics"></div>
+                        <div id="s-filtered" class="t-meta muted num" style="margin-top:8px"></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-head">
+                        <h2 class="card-title">Equity curve</h2>
+                        <span class="card-note">Cumulative R · <span class="pos">Taken</span> · <span class="warn">Filtered</span></span>
+                    </div>
+                    <div id="equity" style="height:320px"></div>
+                </div>
+            </section>
+
+            <section data-panel="robustness" class="stack" style="gap:12px" hidden>
+                <div id="validation-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Out-of-sample validation</h2><span id="validation-note" class="card-note"></span></div>
+                    <div class="table-wrap tall">
+                        <table class="tbl"><thead><tr>
+                            <th>Parameters</th><th class="right">In-sample trades</th><th class="right">In-sample R</th>
+                            <th class="right">OOS trades</th><th class="right">OOS win</th><th class="right">OOS R</th><th class="right">OOS total</th><th class="right">OOS PF</th>
+                        </tr></thead><tbody id="validation"></tbody></table>
+                    </div>
+                    <p class="t-body" id="validation-verdict" style="margin-top:8px"></p>
+                </div>
+                <div id="wf-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Walk-forward</h2><span class="card-note">Each period is judged with the variant that was best before it</span></div>
+                    <div class="table-wrap">
+                        <table class="tbl"><thead><tr><th>From</th><th class="right">Trades</th><th class="right">R</th><th class="right">PF</th></tr></thead><tbody id="wf"></tbody></table>
+                    </div>
+                    <p class="t-body" id="wf-verdict" style="margin-top:8px"></p>
+                </div>
+                <div id="sweep-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Parameter sweep</h2><span class="card-note">Taken trades, best first; ★ = live parameters</span></div>
+                    <div class="table-wrap tall">
+                        <table class="tbl"><thead><tr>
+                            <th>Parameters</th><th class="right">Trades</th><th class="right">Win</th><th class="right">R</th>
+                            <th class="right">Total</th><th class="right">PF</th><th class="right">Max DD</th><th class="right">Filtered R</th>
+                        </tr></thead><tbody id="sweep"></tbody></table>
+                    </div>
+                </div>
+                <div id="history-card" class="card" hidden>
+                    <div class="card-head"><h2 class="card-title">Earlier runs</h2><span class="card-note">Newest first; the same hash means the same signal settings</span></div>
+                    <div class="table-wrap">
+                        <table class="tbl"><thead><tr>
+                            <th>Run (UTC)</th><th>Config</th><th>Model</th><th>Exit</th><th class="right">Costs %</th><th class="right">Trades</th><th class="right">R</th><th class="right">95% interval</th><th class="right">OOS</th><th class="right">WF</th>
+                        </tr></thead><tbody id="history"></tbody></table>
+                    </div>
+                </div>
+                <div id="robust-empty" class="card empty" hidden>This report has no robustness checks. Run it with <span class="mono">--sweep</span> or <span class="mono">--split</span>.</div>
+            </section>
+
+            <section data-panel="breakdown" class="card" hidden>
+                <div class="card-head">
+                    <div class="row">
+                        <h2 class="card-title">Breakdown</h2>
+                        <select id="breakdown-group" class="field" aria-label="Trades to break down"><option value="taken">Taken</option><option value="filtered">Filtered</option></select>
+                    </div>
+                    <span class="card-note">Condition at the signal candle. Grey rows: fewer than <span id="min-sample"></span> trades, too few to trust.</span>
+                </div>
+                <div id="breakdown" class="grid grid-3"></div>
+            </section>
+
+            <section data-panel="trades" class="card" hidden>
+                <div class="card-head">
+                    <div class="row">
+                        <h2 class="card-title">Trades</h2>
+                        <select id="trade-filter" class="field" aria-label="Trades to show"><option value="taken">Taken</option><option value="filtered">Filtered</option><option value="all">All</option></select>
+                    </div>
+                    <span class="card-note">Newest first, up to 200</span>
+                </div>
+                <div class="table-wrap tall">
+                    <table class="tbl"><thead><tr>
+                        <th>Signal (UTC)</th><th>Side</th><th class="right">Score</th><th class="right">Entry</th><th class="right">Stop</th><th class="right">TP1</th><th class="right">R:R</th><th>Result</th><th class="right">Net R</th><th class="right">Candles</th><th>Filters</th>
+                    </tr></thead><tbody id="trades"></tbody></table>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="/js/pages/backtest.js"></script>
+</body>
+</html>

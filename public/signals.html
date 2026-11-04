@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signals | Crypto Signal</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <script src="/js/format.js"></script>
+    <script src="/js/signal-view.js"></script>
+    <script src="/js/app-header.js"></script>
+</head>
+<body>
+    <header id="app-header" data-view="signals">
+        <div data-header-slot="right" class="row">
+            <span id="conn" class="conn">Connecting</span>
+            <button id="alerts" type="button" class="btn small" aria-pressed="false" title="Show a notification when a market turns long or short while this page is open">Alerts off</button>
+        </div>
+    </header>
+
+    <main class="page">
+        <div id="load-error" class="banner neg" hidden></div>
+        <div id="edge-note" class="banner warn" hidden></div>
+
+        <section class="stats" aria-label="Summary">
+            <div class="stat"><div class="t-label">Long now</div><div id="n-long" class="stat-value long">-</div></div>
+            <div class="stat"><div class="t-label">Short now</div><div id="n-short" class="stat-value short">-</div></div>
+            <div class="stat"><div class="t-label">Waiting</div><div id="n-wait" class="stat-value">-</div></div>
+            <div class="stat"><div class="t-label">Open trades</div><div id="n-open" class="stat-value">-</div></div>
+            <div class="stat"><div class="t-label">Model</div><div id="model" class="stat-value small">-</div></div>
+            <div class="stat"><div class="t-label">Signal timeframe</div><div id="entry-tf" class="stat-value">-</div></div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Signals now</h2>
+                <span id="updated" class="card-note"></span>
+            </div>
+            <div class="table-wrap">
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Market</th><th class="right">Price</th><th>Signal</th><th>Score</th><th>Trend</th>
+                        <th class="right">Entry</th><th class="right">Stop</th><th class="right">Target</th><th class="right">R:R</th><th>Backtest</th><th>Data</th>
+                    </tr></thead>
+                    <tbody id="markets"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Open trades</h2>
+                <span class="card-note">From the signal log. A trade stays open until stop, target or expiry, even after the signal goes back to wait.</span>
+            </div>
+            <div class="table-wrap">
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Market</th><th>Side</th><th>Opened (UTC)</th><th class="right">Entry</th><th class="right">Now</th><th class="right">Open R</th><th class="right">Stop</th><th class="right">Target</th><th>Expires (UTC)</th>
+                    </tr></thead>
+                    <tbody id="open"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="card-head">
+                <h2 class="card-title">Recent results</h2>
+                <span id="recent-note" class="card-note">Current model and timeframe, before costs.</span>
+            </div>
+            <div class="table-wrap">
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Closed (UTC)</th><th>Market</th><th>Side</th><th class="right">Entry</th><th class="right">Stop</th><th class="right">Target</th><th>Result</th><th class="right">R</th><th class="right">Candles</th>
+                    </tr></thead>
+                    <tbody id="recent"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <p class="t-meta faint">Signals are rule-based and heuristic, for research. They are not financial advice.</p>
+    </main>
+
+    <script src="/js/pages/signals.js"></script>
+</body>
+</html>

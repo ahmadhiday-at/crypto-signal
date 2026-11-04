@@ -28,15 +28,15 @@ The server validates every Market State against this contract (`src/services/con
 - **Candle close time:** the end of the candle interval, i.e. open time + timeframe length. A candle is **closed** once the current time has reached its close time.
 - **Prices:** quote currency of the pair (USDT for `*USDT`).
 - **Fractions vs percentages:** `distance.*` is a fraction (`0.0069` = 0.69%); `distance_percent.*` is the same value in percent.
-- **Entry timeframe:** the timeframe assigned to the `TF_ENTRY` role (default `15m`). Fields marked *entry TF* are taken from it.
-- **Role timeframes:** `TF_HTF`, `TF_STRUCTURE`, `TF_MID`, `TF_ENTRY` (default `1d`, `4h`, `1h`, `15m`). Only these feed the Market State. Other configured timeframes are used for charts only.
+- **Entry timeframe:** the timeframe assigned to the `engine.entry` role (default `1h` since 2.24.0). Fields marked *entry TF* are taken from it.
+- **Role timeframes:** config `engine.htf`, `structure`, `mid`, `entry` (default `1w`, `1d`, `4h`, `1h` since 2.24.0). Only these feed the Market State. Other configured timeframes are used for charts only.
 - **Closed candles only:** every field below is derived from closed candles. The forming candle and the live ticker price never enter the Market State.
 
 ---
 
 ## 3. Fields (version 2)
 
-Consumers: **D** = dashboard, **P** = AI prompts.
+Consumers: **D** = dashboard, **P** = AI prompts. Since 4.2.0 the dashboard no longer shows `breakout_score` and `setup_state`: the signal and its plan replace them; both fields stay in the contract.
 
 | Field | Type | Values / unit | Source | Used by |
 | :---- | :--- | :------------ | :----- | :------ |
@@ -53,18 +53,19 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `indicators` | object | latest closed-candle values: `ma14`, `ma50`, `ma200`, `rsi`, `atr`, `volume`, `macd{MACD, signal, histogram}` | entry TF | D, P |
 | `levels.support` | Level[] | 1–3 levels, sorted by `score` descending (see §3.1) | merged MTF | D, P |
 | `levels.resistance` | Level[] | 1–3 levels, sorted by `score` descending | merged MTF | D, P |
-| `timeframes` | object | `{ [tf]: {price, context, momentum, regime, timestamp} }` per role TF; `timestamp` = open time of that TF's latest closed candle. Per-TF `context` is `near_support` \| `near_resistance` \| `mid_range` \| `unknown` (no `compression_zone`). | each role TF | D |
+| `timeframes` | object | `{ [tf]: {price, context, momentum, regime, trend, timestamp} }` per role TF; `timestamp` = open time of that TF's latest closed candle. `trend` (added in 2.16.0, absent in older states): `ranging` when `regime` is `ranging`, otherwise `up` / `down` by MA14 vs MA50 of that TF, `unknown` without data. Per-TF `context` is `near_support` \| `near_resistance` \| `mid_range` \| `unknown` (no `compression_zone`). | each role TF | D |
 | `position` | enum | `closer_to_support` \| `closer_to_resistance` \| `mid_range` | derived | P |
 | `zone_state` | enum | `normal` \| `compression` | derived | — |
 | `dominant_side` | enum | `support` \| `resistance` \| `equilibrium` — the side whose top level has the higher raw score, or `equilibrium` when the gap is at most 20% of the larger score | derived | P |
 | `market_pressure` | enum | see §4 | derived | D, P |
 | `market_energy` | enum | `explosive` \| `building` \| `cooling` \| `stable` | derived | D, P |
 | `volume_state` | enum | `high` \| `increasing` \| `normal` \| `low` — latest closed volume vs the average of the last 20 closed candles (including that one) | entry TF | P |
-| `breakout_score` | number | 0.0–1.0, **heuristic, uncalibrated** (see §5) | derived | D, P |
+| `breakout_score` | number | 0.0–1.0, **heuristic, uncalibrated** (see §5) | derived | P |
 | `breakout_confirmation` | enum | `strong` \| `medium` \| `weak` \| `noise` \| `none` | derived | — |
-| `setup_state` | enum | see §4 | derived | D, P |
+| `setup_state` | enum | see §4 | derived | P |
 | `fake_breakout_risk` | enum | `low` \| `medium` \| `high` | derived | D, P |
 | `regime_global` | enum | see §4 | all role TFs | D, P |
+| `channel` | object \| null | `{high, low, candles}`: high / low of the `candles` closed entry candles before the latest one (config `trend.channel_candles`, default 20); `null` with fewer candles. Added in 2.20.0, absent in older states | entry TF | — |
 | `distance.to_support` | number | fraction, distance from `price` to `levels.support[0].mid` | derived | P |
 | `distance.to_resistance` | number | fraction, distance from `price` to `levels.resistance[0].mid` | derived | P |
 | `distance_percent.*` | number | same as `distance.*`, in percent | derived | D, P |
@@ -72,8 +73,9 @@ Consumers: **D** = dashboard, **P** = AI prompts.
 | `inputs` | object | `{ [tf]: {candle_close_time, age_seconds, status} }` for every role TF (see §6) | each role TF | D |
 | `status` | enum | `ok` \| `degraded` \| `stale` (see §6) | derived | D |
 | `errors` | string[] | unresolved error codes (see §6.3); empty when healthy | — | D |
+| `divergence` | enum | `bullish` \| `bearish` \| `none` — RSI/price divergence on the last two swing points of the entry TF (see §4.1) | entry TF | D, P |
 | `volatility_ratio` | number \| null | latest closed ATR ÷ mean ATR of the last 100 closed candles (1.0 = typical); `null` if ATR is unavailable | entry TF | D |
-| `signal` | object | `{action, score, strength, reasons, filtered, filters}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
+| `signal` | object | `{action, score, strength, reasons, filtered, filters, plan}` — heuristic Level 2 signal with the Level 2.5B trade filter (see §4.1); recomputed on every read | derived | D, P |
 
 ### 3.1 Level object
 
@@ -103,20 +105,38 @@ Any value not listed here is a contract violation and is rejected before publish
 
 ### 4.1 Signal (added in 2.2.0)
 
-Weighted points over fields of the same object; `score` is the sum of `reasons[].points`.
+Weighted points over fields of the same object; `score` is the sum of `reasons[].points`. The points below are the defaults; since 2.18.0 they come from the calculation config `scoring` group (integers), like every threshold in this document ([config.md](../architecture/config.md#calculation-config)).
 
 | Code | Points | When |
 | :--- | :----- | :--- |
 | `near_support` / `near_resistance` | +2 / −2 | `context` is `near_support` / `near_resistance` |
 | `bullish_momentum` / `bearish_momentum` | +2 / −2 | `momentum` is `bullish` / `bearish` |
-| `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `TF_HTF` timeframe in `tfs` and is ≤ 1% from `price` |
+| `strong_htf_support` / `strong_htf_resistance` | +3 / −3 | top zone on that side includes the `engine.htf` timeframe in `tfs` and is ≤ 1% from `price` |
+| `bullish_divergence` / `bearish_divergence` | +2 / −2 | `divergence` is `bullish` / `bearish` (added in 2.4.0) |
 | `volume_surge` / `weak_volume` | ±1 | only when score ≠ 0: `volume_state` `high` adds 1 toward the current direction, `low` moves 1 toward zero |
 | `data_not_current` | 0 | `status` is not `ok`; forces `action` = `WAIT` |
 
 - `action`: `BUY` if score ≥ +5, `SELL` if score ≤ −5, otherwise `WAIT`; always `WAIT` when `status` ≠ `ok`.
 - `strength`: `strong` if |score| ≥ 7, `medium` if ≥ 5, otherwise `weak`.
-- `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above.
+- `reasons[]`: `{code, points}` in evaluation order; codes are exactly those above (and those of §4.2).
+- `divergence`: within the last 60 closed entry candles, swing lows/highs must exceed 3 bars on each side and the latest swing must be ≤ 10 bars old. Bullish = price lower low + RSI higher low; bearish = price higher high + RSI lower high. Starting values, to be reviewed.
 - Heuristic and uncalibrated (calibration is Level 5); not a trade instruction.
+
+### 4.2 Trend models (added in 2.20.0)
+
+The calculation config `signal.model` picks the model; `bounce` is §4.1; since 2.24.0 the default is `trend_pullback`. `trend_pullback` and `breakout` score from the role timeframes' `trend` (`timeframes[tf].trend`), with config `trend` points:
+
+| Code | Points | When |
+| :--- | :----- | :--- |
+| `htf_trend_up` / `htf_trend_down` | ± `htf_points` (3) | `engine.htf` trend |
+| `structure_trend_up` / `_down` | ± `structure_points` (2) | `engine.structure` trend (skipped when it equals `engine.htf`) |
+| `entry_trend_up` / `_down` | ± `entry_points` (1) | `engine.entry` trend (skipped when it equals a higher role) |
+| `pullback_to_ma` | `pullback_points` (2) in the direction of the trend points | `trend_pullback`: \|price − `indicators.ma50`\| ≤ `pullback_atr` × ATR |
+| `channel_breakout_up` / `_down` | ± `breakout_points` (3) | `breakout`: `price` > `channel.high` (< `channel.low`), not against the trend points |
+| `bullish_momentum` / `bearish_momentum` | ± `momentum_points` (1) | MACD histogram has the sign of the score |
+| `volume_surge` / `weak_volume` | ± `volume_points` (1) | as §4.1 |
+
+BUY / SELL at \|score\| ≥ `signal.threshold`. Filters: `volatility_extreme`, `volatility_dead`, `against_htf_trend` (when `filters.htf_trend` is on) and `low_rr`; the S/R filters (`no_mans_land`, `buy_into_resistance`, `sell_into_support`, `far_from_entry`) do not apply. Plan: `entry_zone` = [price, price], `stop_loss` = price ∓ `trend.stop_atr` × ATR, `take_profit_1` = price ± `trend.target_r` × risk, `take_profit_2` = highest-scored TF_HTF zone beyond TP1 or `null`, `risk_reward` = `target_r`, `trailing_stop` as §4.1, `entry_distance_atr` 0.
 
 **Trade filter (added in 2.3.0).** Evaluated only when the score gives BUY or SELL. Any failing filter turns `action` into `WAIT`, sets `filtered: true` and lists the codes in `filters[]` (score and reasons are kept). Thresholds are starting values to be reviewed.
 
@@ -126,6 +146,24 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 | `volatility_extreme` / `volatility_dead` | `volatility_ratio` > 2.0 / < 0.5 (ignored when `null`) |
 | `buy_into_resistance` | BUY while `context` is `near_resistance` and `breakout_confirmation` is not `medium`/`strong` |
 | `sell_into_support` | SELL while `context` is `near_support` and `breakout_confirmation` is not `medium`/`strong` |
+| `low_rr` | `plan.risk_reward` is `null` or < 1.5 (added in 2.5.0) |
+| `far_from_entry` | `plan.entry_distance_atr` > config `filters.entry_max_atr` (added in 2.17.0; 0 = off, the default) |
+| `against_htf_trend` | BUY while a checked timeframe's `trend` is `down`, SELL while `up` (added in 2.16.0). Checked timeframes by calculation config `filters.htf_trend`: `off` (default, none), `htf` (TF_HTF), `htf+structure` (TF_HTF and TF_STRUCTURE) |
+
+**Trade plan (added in 2.5.0).** `plan` is `null` when the score gives `WAIT`, or when price, ATR or the zone is missing. Otherwise it is built for the raw BUY (long) / SELL (short) and kept even when the setup is filtered. `atr` = `indicators.atr` (entry TF); starting values, to be reviewed.
+
+| Field | Long (BUY) | Short (SELL) |
+| :---- | :--------- | :----------- |
+| `side` | `long` | `short` |
+| `entry_zone` | `[low, high]` of `levels.support[0]` | `[low, high]` of `levels.resistance[0]` |
+| `stop_loss` | zone low − 0.5 × ATR | zone high + 0.5 × ATR |
+| `take_profit_1` | nearest resistance `mid` above `price`, or `null`; with config `signal.target` = `rr_zone` (2.17.0) the first one giving RR ≥ `min_rr` (nearest if none); `tp2` = TP2 | mirror (support below `price`) |
+| `take_profit_2` | highest-scored `engine.htf` resistance beyond TP1, or `null` | highest-scored `engine.htf` support beyond TP1, or `null` |
+| `risk_reward` | (TP1 − price) ÷ (price − stop), 2 decimals; `null` if not computable | (price − TP1) ÷ (stop − price) |
+| `trailing_stop` | price − 1.5 × ATR | price + 1.5 × ATR |
+| `entry_distance_atr` | distance from `price` to the entry zone ÷ ATR, 0 inside the zone, 2 decimals (added in 2.17.0) | same |
+
+Targets come only from the top 3 levels per side in `levels`.
 
 ## 5. Known semantics
 
@@ -134,6 +172,8 @@ Weighted points over fields of the same object; `score` is the sum of `reasons[]
 3. **Fallback levels.** When a timeframe has no pivot-based zone on one side, a zero-width level at the 100-candle high/low with `score: 1` and no `touches` is used.
 4. **`price` lags the market by up to one entry candle.** It is the last closed close, by design. The live ticker price is available separately (WebSocket `price` messages) and is display-only.
 5. **Volume comparison (changed in 2.0.0).** `volume_state`, `market_energy`, `breakout_score` and `fake_breakout_risk` now compare the latest closed volume with the average of the last 20 closed candles, as documented. Before 2.0.0 the volume history was not passed through, so `volume_state` was always `normal`.
+6. **Zone width and side (changed in 3.2.0).** A zone is at most `zones.max_width_percent` of its price wide. In the merged `levels`, a level is support or resistance by its `mid` against the current `price`, whatever side its timeframe gave it. A side left empty gets a zero-width level at the entry timeframe's recent low / high, `score: 1`.
+7. **`market_energy` is scale-free (changed in 2.23.0).** It compares \|MACD histogram\| / ATR of the entry timeframe with the `market.energy_*` thresholds. Before 2.23.0 the raw histogram (price units) was compared, so the label depended on the symbol's price.
 
 ---
 

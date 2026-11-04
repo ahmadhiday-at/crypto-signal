@@ -275,6 +275,7 @@ http://localhost:11000
 - Secara default port hanya dipublish di **loopback host** (`127.0.0.1`), sehingga perangkat lain di jaringan (LAN/Wi-Fi) tidak dapat mengakses aplikasi. Aplikasi **tidak memiliki autentikasi**.
 - Untuk sengaja membuka akses ke jaringan, set `BIND_ADDR=0.0.0.0` di `.env`, tambahkan IP/hostname yang dipakai di browser ke `ALLOWED_HOSTS` (mis. `ALLOWED_HOSTS=192.168.1.20`), lalu jalankan `docker compose up -d`. Lakukan hanya di jaringan tepercaya.
 - Aplikasi hanya melayani request dengan header `Host` `localhost`, `127.0.0.1`, `[::1]` atau nama di `ALLOWED_HOSTS` (selain itu `403 host_not_allowed`). Ini mencegah serangan DNS rebinding dari halaman web lain.
+- Simpan config, Run backtest dan Reset butuh `ADMIN_TOKEN` (sejak v2.25.0). Token dikirim tanpa enkripsi lewat HTTP: kalau dibuka ke jaringan, pakai TLS.
 - Di dalam container, Compose men-set `HOST=0.0.0.0` agar Node.js menerima koneksi dari port yang dipublish. Nilai `HOST` di `.env` hanya berlaku untuk menjalankan aplikasi langsung (`npm start`) tanpa Docker.
 
 ---
@@ -287,10 +288,11 @@ Contoh:
 
 ```env
 PORT=11000
-
-MARKET_LIST=BTCUSDT,SOLUSDT
-TIMEFRAME_LIST=1m,15m,1h,4h,1d
+HOST=127.0.0.1
+ADMIN_TOKEN=isi_hasil_openssl_rand_hex_32
 ```
+
+Sejak v3.0.0 market dan timeframe diatur di `/config` (`config/calculation.json`, grup `engine`), bukan di `.env`.
 
 `PORT` digunakan oleh:
 
@@ -312,6 +314,7 @@ Variabel terkait jaringan:
 | `PORT`      | Node.js dan Docker Compose    | `11000`     | Port aplikasi |
 | `HOST`      | Node.js (tanpa Docker)        | `0.0.0.0`   | Disarankan `127.0.0.1`. Di Docker selalu `0.0.0.0` (di-set oleh Compose) |
 | `BIND_ADDR` | Docker Compose (port publish) | `127.0.0.1` | `0.0.0.0` membuka akses dari jaringan |
+| `ADMIN_TOKEN` | Node.js (HTTP) | kosong | Sejak v2.25.0: token minimal 16 karakter untuk simpan config, Run backtest dan Reset; kosong berarti aksi itu ditolak |
 | `ALLOWED_HOSTS` | Node.js (HTTP & WebSocket) | kosong | Hostname/IP tambahan selain `localhost`, `127.0.0.1`, `[::1]` |
 
 ---
@@ -1252,6 +1255,32 @@ Aplikasi Windows lainnya
 ---
 
 # 32. Quick Commands
+
+### Backtest (sejak v2.8.0)
+
+Jalankan di dalam container `app` supaya request ke Binance lewat VPN. Data historis ada di `data/history/{SIMBOL}/{timeframe}/{TAHUN}.json` dan masuk git sejak v4.0.0; aplikasi mengisi yang kurang 60 detik setelah start dan setiap 00:01 UTC (07:01 WIB), tanpa commit otomatis. Report di `data/backtest/` (keduanya gitignored), lalu buka `/backtest/BTCUSDT`.
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365
+```
+
+Jika Binance membalas HTTP 451, CLI berhenti dengan pesan error (lihat bagian 20); tidak ada workaround otomatis.
+
+Sejak v3.3.0 `--offline` hanya memakai candle di `data/history/`, tanpa request ke Binance; biaya memakai `--fee` dan `--slippage`, entry `--entry`, walk-forward `--folds`. Riwayat ringkas tiap run ada di `data/backtest/history/` dan `/backtest/SIMBOL`.
+
+Sejak v2.14.0 parameter dasar dan default `--days`/`--fee`/`--split` dibaca dari `config/calculation.json`. Market, timeframe, role timeframe, candle limit dan lookback juga ada di file itu (grup `engine` dan `lookback`). Ubah `engine` di `/config` lalu `docker compose restart app`; untuk satu backtest saja: `npm run backtest -- BTCUSDT --roles 1h,4h,1d,1w`. Config bisa diubah dan backtest dijalankan ulang dari halaman `/config` (proses anak di container `app`, jadi juga lewat VPN).
+
+Sweep parameter (sejak v2.9.0): bandingkan beberapa nilai sekaligus pada history yang sama (maks 144 kombinasi). Kunci: `threshold`, `min_rr`, `w_<tf>` (bobot zona TF role); sejak v2.11.0 juga `stop_atr`, `target` (`tp1`/`tp2`/angka R), `side` (`both`/`buy`/`sell`), `skip_energy` (mis. `explosive+building`).
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365 --sweep threshold=4,5,6,7 --sweep min_rr=1,1.5,2
+```
+
+Validasi out-of-sample (sejak v2.10.0): `--split 0.7` memilih varian terbaik di 70% periode awal (min 30 trade), lalu menilainya di 30% sisanya. Pakai fee realistis, mis. `--fee 0.1`.
+
+```bash
+docker compose exec app npm run backtest -- BTCUSDT --days 365 --fee 0.1 --split 0.7 --sweep threshold=4,5,6,7 --sweep min_rr=1,1.5,2
+```
 
 ### Start
 

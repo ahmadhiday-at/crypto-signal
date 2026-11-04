@@ -8,15 +8,15 @@ const lvl = (low, high, score, tfs) => ({ low, high, mid: (low + high) / 2, touc
 
 const cases = {
     compression: {
-        input: { price: 100, levels: { support: [lvl(98, 101, 40, ['1d', '4h']), lvl(90, 92, 10, ['1h'])], resistance: [lvl(99.5, 102, 20, ['15m'])] }, indicators: { volume: [...Array(19).fill(10), 30], macd: { histogram: 0.5 } }, timeframes: { '1d': { regime: 'trending' }, '4h': { regime: 'ranging' } } },
+        input: { price: 100, levels: { support: [lvl(98, 101, 40, ['1d', '4h']), lvl(90, 92, 10, ['1h'])], resistance: [lvl(99.5, 102, 20, ['15m'])] }, indicators: { volume: [...Array(19).fill(10), 30], macd: { histogram: 0.5 }, atr: 1 }, timeframes: { '1d': { regime: 'trending' }, '4h': { regime: 'ranging' } } },
         expected: { context: 'compression_zone', position: 'closer_to_support', zone_state: 'compression', dominant_side: 'support', market_pressure: 'bullish_compression', market_energy: 'explosive', breakout_score: 0.7, breakout_confirmation: 'noise', volume_state: 'high', setup_state: 'waiting_breakout', fake_breakout_risk: 'low', regime_global: 'weak_trend', distance_percent: { to_support: 0.5, to_resistance: 0.75 } },
     },
     nearSupport: {
-        input: { price: 100, levels: { support: [lvl(99, 100.5, 30, ['1d'])], resistance: [lvl(105, 106, 10, ['4h'])] }, indicators: { volume: [...Array(20).fill(10)], macd: { histogram: 0.01 } }, timeframes: { '1d': { regime: 'ranging' }, '15m': { regime: 'ranging' } } },
+        input: { price: 100, levels: { support: [lvl(99, 100.5, 30, ['1d'])], resistance: [lvl(105, 106, 10, ['4h'])] }, indicators: { volume: [...Array(20).fill(10)], macd: { histogram: 0.01 }, atr: 1 }, timeframes: { '1d': { regime: 'ranging' }, '15m': { regime: 'ranging' } } },
         expected: { context: 'near_support', position: 'closer_to_support', zone_state: 'normal', dominant_side: 'support', market_pressure: 'bullish_lean', market_energy: 'cooling', breakout_score: 0.38, breakout_confirmation: 'none', volume_state: 'normal', setup_state: 'watching_support', fake_breakout_risk: 'medium', regime_global: 'ranging', distance_percent: { to_support: 0.25, to_resistance: 5.5 } },
     },
     midRange: {
-        input: { price: 100, levels: { support: [lvl(95, 96, 10, ['1h'])], resistance: [lvl(104, 105, 11, ['1h'])] }, indicators: { volume: [...Array(19).fill(10), 13], macd: { histogram: 0.07 } }, timeframes: {} },
+        input: { price: 100, levels: { support: [lvl(95, 96, 10, ['1h'])], resistance: [lvl(104, 105, 11, ['1h'])] }, indicators: { volume: [...Array(19).fill(10), 13], macd: { histogram: 0.07 }, atr: 0.5 }, timeframes: {} },
         expected: { context: 'mid_range', position: 'mid_range', zone_state: 'normal', dominant_side: 'equilibrium', market_pressure: 'balanced', market_energy: 'building', breakout_score: 0, breakout_confirmation: 'none', volume_state: 'increasing', setup_state: 'no_trade', fake_breakout_risk: 'low', regime_global: 'mixed', distance_percent: { to_support: 4.5, to_resistance: 4.5 } },
     },
 };
@@ -28,12 +28,31 @@ for (const [name, { input, expected }] of Object.entries(cases)) {
     });
 }
 
+const energyOf = (price, histogram, atr, volume = [...Array(19).fill(10), 30]) => enhanceMarketState({
+    price, levels: { support: [lvl(price * 0.9, price * 0.91, 10)], resistance: [lvl(price * 1.09, price * 1.1, 10)] },
+    indicators: { volume, macd: { histogram }, atr }, timeframes: {},
+}).market_energy;
+
+test('market_energy measures the MACD histogram against ATR, so it does not depend on the price scale', () => {
+    for (const price of [100000, 700, 0.01]) {
+        assert.equal(energyOf(price, price * 0.002, price * 0.01), 'explosive', `ratio 0.2 at price ${price}`);
+        assert.equal(energyOf(price, price * 0.001, price * 0.01), 'stable', `ratio 0.1 at price ${price}`);
+        assert.equal(energyOf(price, price * 0.0002, price * 0.01), 'cooling', `ratio 0.02 at price ${price}`);
+    }
+});
+
+test('market_energy uses the sign-free histogram and treats a zero or missing ATR as no energy', () => {
+    assert.equal(energyOf(100, -0.2, 1), 'explosive');
+    assert.equal(energyOf(100, 0.2, 0), 'cooling');
+    assert.equal(energyOf(100, 0.2, undefined), 'cooling');
+});
+
 test('mergeSnapshots passes the last 20 closed volumes to the volume comparison', () => {
     const volumes = [...Array(30).fill(10), 40];
     const snap = (tf) => ({
         price: 100, context: 'mid_range', momentum: 'neutral', regime: 'ranging', timestamp: 0,
         support: [lvl(95, 96, 10, undefined)], resistance: [lvl(104, 105, 10, undefined)],
-        indicators: { volume: volumes, ma14: [1], macd: [{ MACD: 1, signal: 1, histogram: 0.5 }] },
+        indicators: { volume: volumes, ma14: [1], macd: [{ MACD: 1, signal: 1, histogram: 0.5 }], atr: [2] },
         candles: [{ time: 0, open: 1, high: 2, low: 0.5, close: 1.5, volume: 40, close_time: 900 }],
     });
     const roles = { htf: '1d', structure: '4h', mid: '1h', entry: '15m' };
@@ -43,5 +62,54 @@ test('mergeSnapshots passes the last 20 closed volumes to the volume comparison'
     assert.equal(raw.indicators.volume, 40, 'contract keeps the latest volume as a number');
     const out = enhanceMarketState({ ...raw, indicators: { ...raw.indicators, volume: volumeHistory } });
     assert.equal(out.volume_state, 'high');
+    assert.equal(out.market_energy, 'explosive', 'the merged state carries the latest ATR (0.5 / 2 = 0.25)');
     assert.deepEqual(Object.keys(raw.ohlcv), ['time', 'open', 'high', 'low', 'close', 'volume']);
 });
+
+const snapOf = (price, support, resistance, candles = [{ time: 0, open: 90, high: 130, low: 70, close: price, volume: 1, close_time: 900 }]) => ({
+    price, context: 'mid_range', momentum: 'neutral', regime: 'ranging', timestamp: 0, support, resistance,
+    indicators: { volume: [1], ma14: [1], macd: [{ MACD: 1, signal: 1, histogram: 0 }], atr: [1] }, candles,
+});
+const ROLES = { htf: '1w', structure: '1d', mid: '4h', entry: '1h' };
+const WEIGHTS = { DEFAULT: 1 };
+
+test('merged levels are sided by the current price, not by the close of their own timeframe', () => {
+    // The weekly close was 110, so the weekly level at 105 is its support, but the price is now 100.
+    const snaps = {
+        '1w': snapOf(110, [lvl(104, 106, 50)], [lvl(119, 121, 50)]),
+        '1d': snapOf(100, [lvl(89, 91, 10)], [lvl(109, 111, 10)]),
+        '4h': snapOf(100, [lvl(89, 91, 10)], [lvl(109, 111, 10)]),
+        '1h': snapOf(100, [lvl(94, 96, 10)], [lvl(102, 103, 10)]),
+    };
+    const { raw } = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS);
+    assert.ok(raw.levels.support.every(l => l.mid < 100), 'support below the price');
+    assert.ok(raw.levels.resistance.every(l => l.mid > 100), 'resistance above the price');
+    assert.ok(raw.levels.resistance.some(l => l.mid === 105 && l.tfs.includes('1w')), 'the old weekly support is resistance now');
+});
+
+test('a side left without levels gets the entry timeframe extreme, inside the fallback window', () => {
+    const candles = [
+        { time: 0, open: 50, high: 60, low: 40, close: 50, volume: 1, close_time: 900 },
+        { time: 900, open: 90, high: 130, low: 70, close: 100, volume: 1, close_time: 1800 },
+    ];
+    const above = () => snapOf(100, [], [lvl(109, 111, 10)], candles);
+    const snaps = { '1w': above(), '1d': above(), '4h': above(), '1h': above() };
+    const { raw } = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS, { zones: { fallback_candles: 1 } });
+    assert.deepEqual(raw.levels.support, [{ low: 70, high: 70, mid: 70, score: 1, tfs: ['1h'] }]);
+    const wider = mergeSnapshots('BTCUSDT', snaps, ROLES, WEIGHTS, { zones: { fallback_candles: 2 } });
+    assert.equal(wider.raw.levels.support[0].mid, 40);
+    assert.equal(raw.levels.resistance[0].mid, 110);
+});
+
+test('zone width follows ATR up to max_width_percent of the zone price', () => {
+    const indicators = require('../src/services/indicator.service');
+    const candles = [100, 104, 100, 96, 100, 104, 100, 96, 100, 104, 100].map((c, i) => ({ time: i, high: c + 1, low: c - 1, close: c }));
+    const zones = (atr, over = {}) => indicators.calculateSRLevels(candles, 100.5, atr, 100, 100, 50, { ...indicators.ZONE_DEFAULTS, ...over }).support[0];
+    const narrow = zones(1);
+    assert.equal(+(narrow.high - narrow.low).toFixed(6), 1, 'ATR 1 × 0.5 on each side');
+    const capped = zones(40);
+    assert.ok(Math.abs((capped.high - capped.low) / capped.mid * 100 - 2) < 1e-9, 'capped at 2% of its price');
+    const wider = zones(40, { max_width_percent: 10 });
+    assert.ok(Math.abs((wider.high - wider.low) / wider.mid * 100 - 10) < 1e-9, 'the limit is a config value');
+});
+

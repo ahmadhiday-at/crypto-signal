@@ -11,19 +11,20 @@ DATA → MARKET ENGINE → SCORING → FILTER → SIGNAL → LOGGING → DATASET
 - Logging is mandatory before any AI work.
 - Keep signal generation and execution separate.
 
-**Current position:** Level 1 done; Level 2 (Scoring Engine) is the next priority, followed by the Trade Filter (2.5B), Logging + Feature Store (4) and the Backtest Engine (5).
+**Current position:** Levels 1, 2, 2.5A, 2.5B and 3 done (thresholds still to be reviewed with real usage). Level 4 logging is live (v2.7.0) and collecting toward 1,000 labeled trades. Level 5 done (v2.8.0): the 1-year BTCUSDT run has negative expectancy with the live parameters. Level 6 tools ready (v2.9.0 breakdown + sweep, v2.10.0 out-of-sample validation); neither threshold/min RR tuning nor setup changes (v2.11.0: SL, target, side, energy) gave an edge that holds on BTC/SOL/BNB. Level 6.5 A (edge display, v2.12.0) B1 (HTF trend filter, v2.16.0) and B2 (target `rr_zone`, entry distance filter, v2.17.0) done as config options; every calculation value is configurable and sweepable (v2.18.0–v2.19.0). B4 (3 years, BTC/SOL/BNB, fee 0.1%): no variant meets the success criterion; slightly positive before fees on BTC/BNB, negative after. B5 (v2.20.0): new models `trend_pullback` / `breakout`; on 1h entry with a 1w HTF `trend_pullback` (3 ATR stop, 2R) is positive on BTC/BNB over 3 years and near break-even out-of-sample, but SOL keeps it below the criterion. Next: see [Level 6.5](./level-6.5.md) B5 verdict; Level 7 waits for its success criterion.
 
 ## Levels
 
 - [🧱 Level 1 — Market Engine (core) ✅](./level-1.md)
-- [🧱 Level 2 — Scoring Signal Engine 🕒 (next)](./level-2.md)
+- [🧱 Level 2 — Scoring Signal Engine ✅](./level-2.md)
 - [🎨 Level 2.5A — Visual Strategy Layer (dashboard) ✅](./level-2.5a.md)
-- [🧱 Level 2.5B — Trade Filter (capital protection)](./level-2.5b.md)
-- [🧱 Level 3 — Signal Enrichment (actionability)](./level-3.md)
-- [🧱 Level 4 — Signal Logging & Dataset (foundation)](./level-4.md)
-- [🧱 Level 5 — Backtest Engine (quantification)](./level-5.md)
-- [🧱 Level 6 — Performance Analysis (optimization)](./level-6.md)
-- [🧱 Level 7 — AI Signal](./level-7.md)
+- [🧱 Level 2.5B — Trade Filter (capital protection) ✅](./level-2.5b.md)
+- [🧱 Level 3 — Signal Enrichment (actionability) ✅](./level-3.md)
+- [🧱 Level 4 — Signal Logging & Dataset (foundation) — collecting](./level-4.md)
+- [🧱 Level 5 — Backtest Engine (quantification) — done, criterion not met](./level-5.md)
+- [🧱 Level 6 — Performance Analysis (optimization) — tools ready](./level-6.md)
+- [🧱 Level 6.5 — Signal Quality (proven edge) — active](./level-6.5.md)
+- [🧱 Level 7 — AI Signal — after 6.5](./level-7.md)
 
 ## 🔌 Auto Trading Bot (separate execution system)
 Consumes the signal engine's output.

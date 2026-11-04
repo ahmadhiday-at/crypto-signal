@@ -1,15 +1,20 @@
-# 📈 Crypto Signal: Market State Engine
+# 📈 Crypto Signal
 
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/version-4.2.0-blue.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](#)
 
-A real-time analysis system that turns Binance market data into one structured, heuristic **Market State** per symbol. It reduces the 1D, 4H, 1H and 15m timeframes into a single top-down view:
+A real-time signal board that turns Binance market data into **long, short or wait** per market, with a trade plan and the backtest result next to it. Signals are rule-based and heuristic, for research, and are not financial advice.
+
+- **Signals:** `/signals` shows every market with entry, stop, target and R:R, plus open trades and recent results.
+- **Market page:** `/BTCUSDT` shows the signal, its reasons, a position size calculator, key levels, the chart and the track record.
+- **Backtest and Config:** `/backtest/BTCUSDT` shows how the signal did on history; `/config` holds the settings and backtest runs.
+
+Underneath, one **Market State** per symbol reduces the 1W, 1D, 4H and 1H timeframes into a single top-down view:
 
 - **MTF confluence:** support/resistance zones weighted across timeframes.
 - **Compression, energy and pressure:** heuristic reading of squeezes, volume and MACD.
 - **Heuristic scoring:** `breakout_score` and `fake_breakout_risk` are uncalibrated ranking heuristics, not probabilities.
 - **Freshness:** every Market State carries `ok` / `degraded` / `stale`; all analysis uses closed candles only.
-- **Dashboard:** `/BTCUSDT` (Market State, freshness banner, confluence zones); reference chart: `/BTCUSDT/1h`.
 
 Stack: Node.js / Express, Binance REST & WebSocket, `technicalindicators`, local JSON storage, `node:test`.
 
@@ -21,7 +26,7 @@ Requires Node.js 22 or higher (the Docker image uses Node 24).
 git clone <your-repo-url>
 cd crypto-signal
 npm install
-cp .env.example .env    # then adjust MARKET_LIST, TIMEFRAME_LIST, PORT, HOST, ...
+cp .env.example .env    # then set ADMIN_TOKEN; markets and timeframes are on /config
 ```
 
 Every option is described in [.env.example](./.env.example). Default port: `11000`. For local runs set `HOST=127.0.0.1`.

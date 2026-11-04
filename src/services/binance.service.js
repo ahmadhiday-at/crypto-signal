@@ -62,11 +62,16 @@ class BinanceClient {
         return Math.floor(this.now() / 1000);
     }
 
+    // Set at startup from the calculation config `engine.candle_limit` (src/config/calculation.js).
+    setCandleLimit(limit) {
+        this._candleLimit = limit;
+    }
+
     candleLimit() {
-        const limit = parseInt(process.env.CANDLE_LIMIT, 10);
+        const limit = this._candleLimit;
         // Binance caps klines at 1000; at least 201 rows are needed for 200 closed candles.
         if (Number.isFinite(limit) && limit >= 201 && limit <= 1000) return limit;
-        return 500;
+        return 1000;
     }
 
     cooldownState() {
@@ -81,7 +86,17 @@ class BinanceClient {
     }
 
     // Fetches klines and returns parsed candles (closed and forming, sorted, deduplicated by caller).
-    async getKlines(symbol, interval) {
+    getKlines(symbol, interval) {
+        return this._klines({ symbol, interval, limit: this.candleLimit() });
+    }
+
+    // Up to 1000 candles opening at or after `startTimeMs`, for history downloads (backtest).
+    getKlinesFrom(symbol, interval, startTimeMs) {
+        return this._klines({ symbol, interval, startTime: startTimeMs, limit: 1000 });
+    }
+
+    async _klines(params) {
+        const { interval } = params;
         const active = this.cooldownState();
         if (active) {
             throw new BinanceError(active.code, `Binance requests paused until ${new Date(active.until).toISOString()}`);
@@ -91,7 +106,7 @@ class BinanceClient {
         for (;;) {
             try {
                 const response = await this.http.get(`${this.baseUrl}/api/v3/klines`, {
-                    params: { symbol, interval, limit: this.candleLimit() },
+                    params,
                     timeout: REQUEST_TIMEOUT_MS,
                 });
                 const parsed = parseKlines(response.data, interval);

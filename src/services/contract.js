@@ -7,6 +7,7 @@ const ENUMS = {
     tf_context: ['near_support', 'near_resistance', 'mid_range', 'unknown'],
     momentum: ['bullish', 'bearish', 'neutral'],
     regime: ['trending', 'ranging', 'unknown'],
+    trend: ['up', 'down', 'ranging', 'unknown'],
     position: ['closer_to_support', 'closer_to_resistance', 'mid_range'],
     zone_state: ['normal', 'compression'],
     dominant_side: ['support', 'resistance', 'equilibrium'],
@@ -19,6 +20,7 @@ const ENUMS = {
     regime_global: ['trending', 'ranging', 'unknown', 'weak_trend', 'mixed'],
     status: ['ok', 'degraded', 'stale'],
     signal_action: ['BUY', 'SELL', 'WAIT'],
+    divergence: ['bullish', 'bearish', 'none'],
     signal_strength: ['weak', 'medium', 'strong'],
     input_status: ['ok', 'stale', 'missing'],
 };
@@ -93,9 +95,16 @@ function validateMarketState(s) {
     if (!isObj(s.timeframes)) errors.push('timeframes must be an object');
     else for (const [tf, t] of Object.entries(s.timeframes)) {
         if (!isObj(t) || !isNum(t.price) || !isNum(t.timestamp) || !ENUMS.tf_context.includes(t.context)
-            || !ENUMS.momentum.includes(t.momentum) || !ENUMS.regime.includes(t.regime)) {
+            || !ENUMS.momentum.includes(t.momentum) || !ENUMS.regime.includes(t.regime)
+            // `trend` added in 2.16.0; states written before that have none.
+            || (t.trend !== undefined && !ENUMS.trend.includes(t.trend))) {
             errors.push(`timeframes.${tf} is invalid`);
         }
+    }
+
+    // `channel` added in 2.20.0 (null when the entry timeframe has too few candles); older states have none.
+    if (s.channel !== undefined && s.channel !== null && (!isObj(s.channel) || !isNum(s.channel.high) || !isNum(s.channel.low))) {
+        errors.push('channel must be null or {high, low, candles}');
     }
 
     if (!isObj(s.inputs)) errors.push('inputs must be an object');
@@ -124,8 +133,23 @@ function validateMarketState(s) {
         if (typeof sig.filtered !== 'boolean') errors.push('signal.filtered must be a boolean');
         if (!Array.isArray(sig.filters) || !sig.filters.every(f => FILTER_CODES.includes(f))) errors.push('signal.filters must list known filter codes');
         if (sig.filtered !== (Array.isArray(sig.filters) && sig.filters.length > 0)) errors.push('signal.filtered must match signal.filters');
+        const p = sig.plan;
+        if (p !== null) {
+            const numOrNull = (v) => v === null || isNum(v);
+            if (!isObj(p) || !['long', 'short'].includes(p.side)) errors.push('signal.plan must be null or a plan with side long/short');
+            else {
+                if (!Array.isArray(p.entry_zone) || p.entry_zone.length !== 2 || !p.entry_zone.every(isNum) || p.entry_zone[0] > p.entry_zone[1]) {
+                    errors.push('signal.plan.entry_zone must be [low, high]');
+                }
+                if (!isNum(p.stop_loss) || !isNum(p.trailing_stop)) errors.push('signal.plan.stop_loss and trailing_stop must be numbers');
+                if (!numOrNull(p.take_profit_1) || !numOrNull(p.take_profit_2) || !numOrNull(p.risk_reward)) {
+                    errors.push('signal.plan targets and risk_reward must be numbers or null');
+                }
+            }
+        }
     }
     if (s.volatility_ratio !== null && !isNum(s.volatility_ratio)) errors.push('volatility_ratio must be a finite number or null');
+    if (!ENUMS.divergence.includes(s.divergence)) errors.push('divergence has invalid value ' + JSON.stringify(s.divergence));
 
     return errors;
 }

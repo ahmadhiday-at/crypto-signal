@@ -44,6 +44,12 @@ build/
 
 memory
 
+# Signal log (Level 4) and shadow signal log: grow per machine
+data/signals/
+data/signals-shadow/
+# Backtest reports (Level 5); data/history/ is committed
+data/backtest/
+
 
 
 # Proton VPN / WireGuard secrets

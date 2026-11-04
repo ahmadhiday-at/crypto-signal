@@ -1,4 +1,5 @@
 {
+  "schema_version": 2,
   "market": "BTCUSDT",
   "timeframe": "multitimeframe",
   "timeframe_list": [
@@ -7,124 +8,184 @@
     "1h",
     "15m"
   ],
-  "price": 80167.99,
-  "context": "near_support",
+  "price": 77690.41,
+  "context": "mid_range",
   "momentum": "neutral",
   "regime": "ranging",
   "ohlcv": {
-    "time": 1793276100,
-    "open": 80105.72,
-    "high": 80176.01,
-    "low": 80105.72,
-    "close": 80167.99,
-    "volume": 17.9929
+    "time": 1793493900,
+    "open": 77650.81,
+    "high": 77715.5,
+    "low": 77641,
+    "close": 77690.41,
+    "volume": 44.56698
   },
   "indicators": {
-    "ma14": 80185.51285714275,
-    "ma50": 80207.15840000003,
-    "ma200": 80690.76774999993,
-    "rsi": 49.8,
+    "ma14": 77604.4792857141,
+    "ma50": 77593.68460000001,
+    "ma200": 77516.57564999997,
+    "rsi": 58.47,
     "macd": {
-      "MACD": -6.618649892378016,
-      "signal": -18.569223014091758,
-      "histogram": 11.950573121713742
+      "MACD": 7.2955161613062955,
+      "signal": -0.6245726730318935,
+      "histogram": 7.920088834338189
     },
-    "atr": 130.6419752582967,
-    "volume": 17.9929
+    "atr": 70.71101498973879,
+    "volume": 44.56698
   },
   "levels": {
     "support": [
       {
-        "low": 78595.53368953934,
-        "high": 80539.31881046067,
+        "low": 75194.01130841231,
+        "high": 77230.362024921,
+        "mid": 76212.18666666666,
+        "touches": 3,
+        "score": 10,
+        "tfs": [
+          "1d",
+          "4h",
+          "1h",
+          "15m"
+        ],
+        "score_raw": 734.2
+      },
+      {
+        "low": 77384.29510846571,
+        "high": 77630.43822486763,
+        "mid": 77507.36666666667,
+        "touches": 15,
+        "score": 3.99,
+        "tfs": [
+          "1h",
+          "15m"
+        ],
+        "score_raw": 293
+      }
+    ],
+    "resistance": [
+      {
+        "low": 78549.25089174566,
+        "high": 80585.60160825435,
         "mid": 79567.42625,
         "touches": 8,
         "score": 10,
         "tfs": [
           "1d",
-          "4h",
           "1h",
           "15m"
         ],
-        "score_raw": 548.9
+        "score_raw": 498.79999999999995
       },
       {
-        "low": 76654.40243953934,
-        "high": 78598.18756046066,
-        "mid": 77626.295,
-        "touches": 2,
-        "score": 1.27,
-        "tfs": [
-          "1d"
-        ],
-        "score_raw": 69.9
-      }
-    ],
-    "resistance": [
-      {
-        "low": 80274.39493953934,
-        "high": 82218.18006046067,
+        "low": 80228.11214174566,
+        "high": 82264.46285825435,
         "mid": 81246.2875,
         "touches": 4,
-        "score": 10,
+        "score": 8.98,
         "tfs": [
           "1d",
           "4h",
-          "1h",
           "15m"
         ],
-        "score_raw": 1485.0000000000005
+        "score_raw": 448.1
+      },
+      {
+        "low": 77306.39857671167,
+        "high": 78144.05142328834,
+        "mid": 77725.225,
+        "touches": 2,
+        "score": 2.13,
+        "tfs": [
+          "4h"
+        ],
+        "score_raw": 106
       }
     ]
   },
-  "timestamp": 1793276100,
+  "timestamp": 1793493900,
   "timeframes": {
     "1d": {
-      "price": 80176.58,
-      "context": "near_support",
-      "momentum": "neutral",
-      "regime": "ranging",
-      "timestamp": 1793232000
+      "price": 77582.02,
+      "context": "mid_range",
+      "momentum": "bearish",
+      "regime": "trending",
+      "timestamp": 1793404800
     },
     "4h": {
-      "price": 80167.99,
+      "price": 77582.02,
       "context": "mid_range",
-      "momentum": "neutral",
-      "regime": "ranging",
-      "timestamp": 1793275200
+      "momentum": "bearish",
+      "regime": "trending",
+      "timestamp": 1793476800
     },
     "1h": {
-      "price": 80167.99,
+      "price": 77690.41,
       "context": "mid_range",
       "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1793275200
+      "timestamp": 1793491200
     },
     "15m": {
-      "price": 80167.99,
+      "price": 77690.41,
       "context": "mid_range",
       "momentum": "neutral",
       "regime": "ranging",
-      "timestamp": 1793276100
+      "timestamp": 1793493900
     }
   },
+  "volatility_ratio": 0.631,
+  "divergence": "none",
   "position": "closer_to_support",
   "zone_state": "normal",
-  "dominant_side": "resistance",
-  "market_pressure": "bearish_lean",
-  "market_energy": "stable",
-  "breakout_score": 0.13,
+  "dominant_side": "support",
+  "market_pressure": "bullish_lean",
+  "market_energy": "building",
+  "breakout_score": 0,
   "breakout_confirmation": "none",
-  "volume_state": "normal",
+  "volume_state": "increasing",
   "setup_state": "no_trade",
   "fake_breakout_risk": "low",
-  "regime_global": "ranging",
+  "regime_global": "weak_trend",
   "distance": {
-    "to_support": 0.0075,
-    "to_resistance": 0.0135
+    "to_support": 0.019,
+    "to_resistance": 0.0242
   },
   "distance_percent": {
-    "to_support": 0.75,
-    "to_resistance": 1.35
+    "to_support": 1.9,
+    "to_resistance": 2.42
+  },
+  "generated_at": 1793495264,
+  "inputs": {
+    "1d": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "4h": {
+      "candle_close_time": 1793491200,
+      "age_seconds": 4064,
+      "status": "ok"
+    },
+    "1h": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    },
+    "15m": {
+      "candle_close_time": 1793494800,
+      "age_seconds": 464,
+      "status": "ok"
+    }
+  },
+  "status": "ok",
+  "errors": [],
+  "signal": {
+    "action": "WAIT",
+    "score": 0,
+    "strength": "weak",
+    "reasons": [],
+    "filtered": false,
+    "filters": [],
+    "plan": null
   }
 }

@@ -3,827 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market State Engine | Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Market | Crypto Signal</title>
+    <link rel="stylesheet" href="/css/app.css">
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
-    <script src="https://unpkg.com/lucide@0.454.0"></script>
+    <script src="/js/format.js"></script>
     <script src="/js/market-status.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        html, body { height: 100%; }
-        body { font-family: 'Inter', sans-serif; background-color: #131722; color: #d1d4dc; overflow: hidden; }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        .glass { background: rgba(30, 34, 46, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
-        .status-card { transition: all 0.3s ease; }
-        /* Chart panes share the column proportionally; min-height:0 lets flex children shrink. */
-        .pane { position: relative; min-height: 0; }
-        .pane-main { flex: 55 1 0; }
-        .pane-sub { flex: 15 1 0; border-top: 1px solid rgba(255,255,255,0.06); }
-        .pane-chart { position: absolute; inset: 0; }
-        .legend { position: absolute; top: 4px; left: 8px; z-index: 5; pointer-events: none; font-size: 11px; line-height: 16px; white-space: nowrap; }
-        .legend .k { color: #848e9c; margin-right: 3px; }
-        .legend .v { margin-right: 10px; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #374151; border-radius: 10px; }
-        .copy-toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #2962ff; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; z-index: 100; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
-    </style>
-    <div id="toast" class="copy-toast">Copied to clipboard!</div>
+    <script src="/js/signal-view.js"></script>
+    <script src="/js/app-header.js"></script>
+    <script src="/js/pane-chart.js"></script>
 </head>
-<body class="h-screen flex flex-col gap-2 p-3">
-    <!-- Top Navigation / Symbol Header -->
-    <div class="flex flex-wrap justify-between items-center gap-3 shrink-0">
-        <div class="flex items-center gap-3">
-            <div class="relative group">
-                <select id="symbol-selector" class="appearance-none bg-gray-800 text-white text-2xl font-bold mono tracking-tighter px-3 py-0.5 rounded border border-gray-700 cursor-pointer hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all pr-9">
-                    <!-- Options injected by JS -->
-                </select>
-                <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
-                    <i data-lucide="chevron-down" class="w-4 h-4"></i>
-                </div>
-            </div>
-            <div class="flex flex-col leading-tight">
-                <span class="text-[10px] uppercase font-bold text-gray-500">Live price (display only)</span>
-                <div class="flex items-baseline gap-2 mono">
-                    <span id="price-display" class="text-xl font-medium text-gray-300">-</span>
-                    <span id="price-change" class="text-xs"></span>
-                    <span id="price-ref" class="text-[10px] text-gray-500"></span>
-                </div>
-            </div>
-            <button onclick="copyMarketState()" class="flex items-center gap-2 px-3 py-1 rounded-lg glass text-xs font-semibold hover:bg-gray-700 transition-all text-gray-300">
-                <i data-lucide="copy" class="w-3 h-3"></i> Copy State
-            </button>
-            <button onclick="window.location.reload()" class="flex items-center gap-2 px-3 py-1 rounded-lg glass text-xs font-semibold hover:bg-gray-700 transition-all text-gray-300">
-                <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh
-            </button>
-            <button onclick="resetData()" class="flex items-center gap-2 px-3 py-1 rounded-lg glass text-xs font-semibold hover:bg-red-900/50 transition-all text-red-400 border-red-500/30 border">
-                <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
-            </button>
+<body class="fill">
+    <header id="app-header" data-view="market">
+        <div data-header-slot="left" class="row">
+            <span id="price" class="t-headline strong" title="Live price, for display only: signals use closed candles">-</span>
+            <span id="price-change" class="t-meta num"></span>
         </div>
-        <div class="flex items-center gap-2">
-            <div id="connection-status" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold glass text-gray-400">
-                <span class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></span>
-                Connecting...
-            </div>
-            <div id="tf-selector" class="flex gap-1 glass p-1 rounded-lg">
-                <!-- TFs injected by JS -->
-            </div>
+        <div data-header-slot="right" class="row">
+            <span id="conn" class="conn">Connecting</span>
+            <button id="copy-state" type="button" class="btn small" title="Copy the Market State as JSON">Copy state</button>
+            <a id="csv" class="btn small" title="Download the signal log (CSV)">Log CSV</a>
         </div>
+    </header>
+
+    <div class="market-layout">
+        <section class="market-chart" aria-label="Chart">
+            <div id="status" class="banner"><span id="status-title" class="t-label">Loading</span><span id="status-detail" class="muted"></span><span id="status-errors" class="neg"></span></div>
+            <div class="row-between">
+                <div id="tf-selector" class="segment" role="group" aria-label="Timeframe"></div>
+                <span id="chart-status" class="t-meta muted"></span>
+            </div>
+            <div id="chart"></div>
+        </section>
+
+        <aside class="market-side" aria-label="Signal">
+            <section id="signal-card" class="card signal-card first">
+                <div class="row-between">
+                    <span class="t-label">Signal <span id="signal-tf"></span></span>
+                    <span id="signal-strength" class="badge" hidden></span>
+                </div>
+                <div id="signal-word" class="t-display signal-word" style="margin:4px 0">-</div>
+                <div id="signal-why" class="t-data muted"></div>
+                <div style="margin-top:10px">
+                    <div class="row-between t-meta muted"><span>Score</span><span id="score" class="num strong"></span></div>
+                    <div id="gauge" class="gauge" style="margin-top:4px"></div>
+                </div>
+                <div id="edge-line" class="t-meta" style="margin-top:8px"></div>
+            </section>
+
+            <section id="plan-card" class="card first" hidden>
+                <div class="card-head">
+                    <h2 id="plan-title" class="card-title">Trade plan</h2>
+                    <button id="copy-plan" type="button" class="btn small">Copy</button>
+                </div>
+                <div id="plan-rows"></div>
+                <p id="plan-note" class="t-meta muted" style="margin-top:6px"></p>
+            </section>
+
+            <section id="size-card" class="card first" hidden>
+                <div class="card-head"><h2 class="card-title">Position size</h2><span class="card-note">Not advice; excludes costs</span></div>
+                <div class="row-between" style="margin-bottom:8px">
+                    <label class="t-meta muted">Account <input id="account" type="number" min="0" step="any" class="field num-field" inputmode="decimal"></label>
+                    <label class="t-meta muted">Risk % <input id="risk-pct" type="number" min="0" max="100" step="any" class="field num-field" inputmode="decimal" style="width:4.5rem"></label>
+                </div>
+                <div id="size-rows"></div>
+            </section>
+
+            <section id="open-card" class="card first" hidden>
+                <div class="card-head"><h2 class="card-title">Open trades</h2><span class="card-note">From the signal log</span></div>
+                <div id="open-rows" class="stack"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">Why this signal</h2></div>
+                <div id="trend-chips" class="trends" style="flex-wrap:wrap;margin-bottom:8px"></div>
+                <div id="reasons"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">Market context</h2><span class="card-note">Heuristic</span></div>
+                <div id="context" class="metrics"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">Key levels</h2><span class="card-note">Click a price to copy</span></div>
+                <div id="levels"></div>
+            </section>
+
+            <section class="card">
+                <div class="card-head"><h2 class="card-title">Track record</h2><a id="backtest-link" class="t-meta" style="color:var(--accent)">Backtest report</a></div>
+                <div id="edge"></div>
+            </section>
+
+            <section id="recent-card" class="card" hidden>
+                <div class="card-head"><h2 class="card-title">Recent results</h2><span class="card-note">Before costs</span></div>
+                <div id="recent-rows"></div>
+            </section>
+
+            <p class="t-meta faint">Rule-based and heuristic, for research. Not financial advice.</p>
+        </aside>
     </div>
 
-    <!-- Market State freshness (docs/contract/market-state.md §7) -->
-    <div id="state-status" class="glass rounded-lg px-3 py-1 flex flex-wrap items-center gap-3 text-xs mono border-l-4 border-l-gray-500 shrink-0">
-        <span id="state-status-title" class="font-bold text-gray-400">LOADING</span>
-        <span id="state-status-detail" class="text-gray-400">Loading market state...</span>
-        <span id="state-status-close" class="text-gray-500"></span>
-        <span id="state-status-errors" class="text-red-400"></span>
-    </div>
-
-    <!-- State Dashboard -->
-    <div id="state-dashboard" class="grid grid-cols-5 gap-2 shrink-0 transition-opacity">
-        <div class="status-card glass px-3 py-1.5 rounded-lg">
-            <div class="flex items-center gap-1.5 text-gray-500 text-[10px] uppercase font-bold"><i data-lucide="compass" class="w-3 h-3"></i> Global Bias</div>
-            <div id="state-bias" class="text-sm font-semibold mono">-</div>
-        </div>
-        <div class="status-card glass px-3 py-1.5 rounded-lg">
-            <div class="flex items-center gap-1.5 text-gray-500 text-[10px] uppercase font-bold"><i data-lucide="zap" class="w-3 h-3"></i> Market Energy</div>
-            <div id="state-energy" class="text-sm font-semibold mono">-</div>
-        </div>
-        <div class="status-card glass px-3 py-1.5 rounded-lg">
-            <div class="flex items-center gap-1.5 text-gray-500 text-[10px] uppercase font-bold"><i data-lucide="gauge" class="w-3 h-3"></i> Pressure</div>
-            <div id="state-pressure" class="text-sm font-semibold mono">-</div>
-        </div>
-        <div id="setup-card" class="status-card glass px-3 py-1.5 rounded-lg border-l-4 border-l-gray-500">
-            <div class="flex items-center gap-1.5 text-gray-500 text-[10px] uppercase font-bold"><i data-lucide="target" class="w-3 h-3"></i> Setup State</div>
-            <div id="state-setup" class="text-sm font-semibold mono">-</div>
-        </div>
-        <div class="status-card glass px-3 py-1.5 rounded-lg">
-            <div class="flex items-center gap-1.5 text-gray-500 text-[10px] uppercase font-bold"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Fakeout Risk</div>
-            <div id="state-risk" class="text-sm font-semibold mono">-</div>
-        </div>
-    </div>
-
-    <!-- Main View: Chart & Metrics (fills the remaining height) -->
-    <div class="flex-1 min-h-0 grid gap-2" style="grid-template-columns: minmax(0, 1fr) 300px;">
-        <!-- Chart Area -->
-        <div class="flex flex-col gap-1 min-h-0 min-w-0">
-            <div id="chart-status" class="text-[11px] mono text-gray-500 px-1 shrink-0 truncate">-</div>
-            <div id="chart-panel" class="glass rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
-                <div class="pane pane-main">
-                    <div id="main-chart" class="pane-chart"></div>
-                    <div id="legend-main" class="legend mono"></div>
-                </div>
-                <div class="pane pane-sub">
-                    <div id="vol-chart" class="pane-chart"></div>
-                    <div id="legend-vol" class="legend mono"></div>
-                </div>
-                <div class="pane pane-sub">
-                    <div id="macd-chart" class="pane-chart"></div>
-                    <div id="legend-macd" class="legend mono"></div>
-                </div>
-                <div class="pane pane-sub">
-                    <div id="rsi-chart" class="pane-chart"></div>
-                    <div id="legend-rsi" class="legend mono"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Panel: Metrics (scrolls internally) -->
-        <div class="flex flex-col gap-2 min-h-0 overflow-y-auto custom-scrollbar pr-1">
-            <div class="glass p-3 rounded-xl shrink-0">
-                <h3 class="text-[10px] uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">
-                    <i data-lucide="signal" class="w-3 h-3"></i> Signal (heuristic, not advice)
-                </h3>
-                <div class="flex items-baseline justify-between mono">
-                    <span id="signal-action" class="text-lg font-bold">-</span>
-                    <span id="signal-meta" class="text-xs text-gray-400">-</span>
-                </div>
-                <div id="signal-reasons" class="mt-1 space-y-0.5 text-[11px] mono"></div>
-            </div>
-
-            <div class="glass p-3 rounded-xl shrink-0">
-                <h3 class="text-[10px] uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">
-                    <i data-lucide="bar-chart-3" class="w-3 h-3"></i> Scores (heuristic, uncalibrated)
-                </h3>
-                <div class="flex justify-between text-xs mb-1">
-                    <span class="text-gray-400">Breakout Score (0-1, not a probability)</span>
-                    <span id="score-val" class="mono">-</span>
-                </div>
-                <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden mb-2">
-                    <div id="score-bar" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div class="bg-black/30 px-2 py-1 rounded-lg border border-white/5">
-                        <div class="text-[10px] text-gray-500 uppercase">Dist. Support</div>
-                        <div id="dist-support" class="mono text-sm">-</div>
-                    </div>
-                    <div class="bg-black/30 px-2 py-1 rounded-lg border border-white/5">
-                        <div class="text-[10px] text-gray-500 uppercase">Dist. Resist</div>
-                        <div id="dist-resist" class="mono text-sm">-</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="glass p-3 rounded-xl flex flex-col min-h-0">
-                <h3 class="text-[10px] uppercase font-bold text-gray-500 mb-2 flex items-center gap-2">
-                    <i data-lucide="layers" class="w-3 h-3"></i> Confluence Zones
-                </h3>
-                <div id="zones-list" class="space-y-1.5">
-                    <!-- Zones injected here -->
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // Application State
-        const state = {
-            market: '',
-            currentTf: '15m',
-            data: null,
-            charts: {
-                main: null,
-                vol: null,
-                macd: null,
-                rsi: null
-            },
-            series: {
-                candles: null,
-                ma14: null,
-                ma50: null,
-                ma200: null,
-                vol: null,
-                macdLine: null,
-                macdSig: null,
-                macdHist: null,
-                rsi: null
-            },
-            priceLines: [],
-            ws: null,
-            entryTf: '15m',
-            times: [],          // bar times shared by every pane (closed candles + forming candle)
-            lastClosedIdx: -1,  // index of the last closed candle in state.times
-            livePrice: null
-        };
-
-        // One number format for the whole dashboard (browser locale, fixed decimals).
-        const NF = {};
-        const nf = (d) => NF[d] || (NF[d] = new Intl.NumberFormat(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
-        const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
-        const priceDecimals = (v) => { const a = Math.abs(v); return a >= 1 ? 2 : a >= 0.01 ? 4 : 6; };
-        const fmtPrice = (v) => isNum(v) ? nf(priceDecimals(v)).format(v) : '-';
-        const fmtNum = (v, d = 2) => isNum(v) ? nf(d).format(v) : '-';
-        const fmtSigned = (v, d) => isNum(v) ? (v > 0 ? '+' : '') + nf(d ?? priceDecimals(v)).format(v) : '-';
-        const fmtPct = (v) => isNum(v) ? (v > 0 ? '+' : '') + nf(2).format(v) + '%' : '-';
-        const fmtVol = (v) => {
-            if (!isNum(v)) return '-';
-            const a = Math.abs(v);
-            return a >= 1e9 ? nf(2).format(v / 1e9) + 'B' : a >= 1e6 ? nf(2).format(v / 1e6) + 'M' : a >= 1e3 ? nf(2).format(v / 1e3) + 'K' : nf(2).format(v);
-        };
-
-        async function resetData() {
-            if (!confirm('Are you sure you want to reset all market data? This re-fetches every timeframe from Binance and rebuilds the market state. Existing data is kept if a fetch fails.')) {
-                return;
-            }
-            const btn = event.currentTarget;
-            try {
-                btn.innerHTML = '<i data-lucide="loader" class="w-3 h-3 animate-spin"></i> Resetting...';
-                btn.disabled = true;
-
-                const res = await fetch('/api/reset', {
-                    method: 'POST',
-                    headers: { 'X-Requested-With': 'crypto-signal' }
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.status === 409) throw new Error('A reset is already running');
-
-                if (res.ok && data.success) {
-                    alert('Data reset successfully! The page will now reload.');
-                    window.location.reload();
-                } else {
-                    throw new Error(data.error || (data.results ? 'Some timeframes failed to refresh; existing data was kept. See /api/health.' : 'Unknown error occurred'));
-                }
-            } catch (err) {
-                console.error('Reset Error:', err);
-                alert('Failed to reset data: ' + err.message);
-                btn.innerHTML = '<i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset';
-                btn.disabled = false;
-                lucide.createIcons();
-            }
-        }
-
-        // Color Maps
-        const COLORS = {
-            bullish: { text: '#00c087', bg: 'rgba(0, 192, 135, 0.1)', border: '#00c087' },
-            bearish: { text: '#ff3b69', bg: 'rgba(255, 59, 105, 0.1)', border: '#ff3b69' },
-            neutral: { text: '#848e9c', bg: 'rgba(132, 142, 156, 0.1)', border: '#848e9c' },
-            warning: { text: '#f0b90b', bg: 'rgba(240, 185, 11, 0.1)', border: '#f0b90b' },
-            info: { text: '#2962ff', bg: 'rgba(41, 98, 255, 0.1)', border: '#2962ff' }
-        };
-
-        async function init() {
-            const pathParts = window.location.pathname.split('/');
-            state.market = pathParts[pathParts.length - 1];
-            
-            if (!state.market) {
-                document.body.innerHTML = `<div class="flex items-center justify-center h-screen text-2xl font-bold">Market Symbol Missing in URL</div>`;
-                return;
-            }
-
-            lucide.createIcons();
-            if (!/^[A-Z0-9]{5,20}$/.test(state.market)) {
-                renderStatus(MarketStatus.describeMarketState(null, 404, state.entryTf), null);
-                return;
-            }
-            await loadTfSelector();
-            await loadMarketSelector();
-            await setupChart();
-            await refreshMarketState();
-            await loadChartData();
-            setupWebSocket();
-            // Re-read the server's freshness verdict every minute so the banner turns stale even if
-            // no update messages arrive.
-            setInterval(refreshMarketState, 60000);
-        }
-
-        async function loadMarketSelector() {
-            const res = await fetch('/api/config');
-            const config = await res.json();
-            const selector = document.getElementById('symbol-selector');
-            
-            config.markets.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.code;
-                opt.innerText = m.label;
-                opt.selected = (m.code === state.market);
-                selector.appendChild(opt);
-            });
-
-            selector.onchange = (e) => {
-                window.location.pathname = `/${e.target.value}`;
-            };
-        }
-
-        async function loadTfSelector() {
-            const res = await fetch('/api/config');
-            const config = await res.json();
-            if (config.roles && config.roles.entry) state.entryTf = config.roles.entry;
-            const container = document.getElementById('tf-selector');
-            
-            config.timeframes.forEach(tf => {
-                const btn = document.createElement('button');
-                btn.innerText = tf.label;
-                btn.className = `px-3 py-1 rounded-md text-xs font-medium transition-all ${state.currentTf === tf.code ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`;
-                btn.onclick = async () => {
-                    state.currentTf = tf.code;
-                    // Update UI
-                    Array.from(container.children).forEach(b => b.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all text-gray-400 hover:text-white');
-                    btn.className = 'px-3 py-1 rounded-md text-xs font-medium transition-all bg-gray-700 text-white';
-                    subscribe();
-                    await loadChartData();
-                    await refreshMarketState();
-                };
-                container.appendChild(btn);
-            });
-        }
-
-        function renderStatus(desc, data) {
-            const box = document.getElementById('state-status');
-            const colors = { ok: COLORS.bullish, degraded: COLORS.warning, stale: COLORS.bearish, unavailable: COLORS.neutral };
-            const c = colors[desc.level] || COLORS.neutral;
-            box.style.borderLeftColor = c.border;
-            const title = document.getElementById('state-status-title');
-            title.textContent = desc.title;
-            title.style.color = c.text;
-            document.getElementById('state-status-detail').textContent = desc.detail;
-            document.getElementById('state-status-close').textContent = data && typeof data.price === 'number'
-                ? `${state.entryTf} close: ${fmtPrice(data.price)}` : '';
-            document.getElementById('state-status-errors').textContent = desc.errors.length ? `errors: ${desc.errors.join(', ')}` : '';
-            // Anything not fresh is dimmed so it cannot be mistaken for current analysis.
-            document.getElementById('state-dashboard').style.opacity = desc.level === 'ok' ? '1' : '0.45';
-        }
-
-        function clearStateValues() {
-            ['state-bias', 'state-energy', 'state-pressure', 'state-setup', 'state-risk', 'score-val', 'dist-support', 'dist-resist']
-                .forEach(id => { const el = document.getElementById(id); el.textContent = '-'; el.style.color = ''; });
-            document.getElementById('score-bar').style.width = '0%';
-            renderSignal(null);
-            document.getElementById('zones-list').replaceChildren();
-            applyZonesToChart({ support: [], resistance: [] });
-        }
-
-        const label = (v) => String(v).replace(/_/g, ' ').toUpperCase();
-
-        const REASON_LABELS = {
-            near_support: 'Near support', near_resistance: 'Near resistance',
-            bullish_momentum: 'Bullish momentum', bearish_momentum: 'Bearish momentum',
-            strong_htf_support: 'Strong HTF support ≤1%', strong_htf_resistance: 'Strong HTF resistance ≤1%',
-            volume_surge: 'Volume surge', weak_volume: 'Weak volume', data_not_current: 'Data not current → WAIT',
-        };
-        const FILTER_LABELS = {
-            no_mans_land: "No-man's land (>1% from zones)", volatility_extreme: 'Extreme volatility (ATR > 2× avg)',
-            volatility_dead: 'Dead market (ATR < 0.5× avg)', buy_into_resistance: 'Buy into resistance, no breakout',
-            sell_into_support: 'Sell into support, no breakdown',
-        };
-
-        // Server-computed signal (docs/contract/market-state.md); the dashboard only displays it.
-        function renderSignal(sig) {
-            const actionEl = document.getElementById('signal-action');
-            const metaEl = document.getElementById('signal-meta');
-            const list = document.getElementById('signal-reasons');
-            list.replaceChildren();
-            if (!sig) { actionEl.textContent = '-'; actionEl.style.color = ''; metaEl.textContent = '-'; return; }
-            actionEl.textContent = sig.action;
-            actionEl.style.color = sig.action === 'BUY' ? COLORS.bullish.text : sig.action === 'SELL' ? COLORS.bearish.text : COLORS.neutral.text;
-            metaEl.textContent = `${sig.strength} · score ${sig.score > 0 ? '+' : ''}${sig.score} (±5 to act)`;
-            sig.reasons.forEach(r => {
-                const row = document.createElement('div');
-                row.className = 'flex justify-between';
-                const name = document.createElement('span');
-                name.className = 'text-gray-400';
-                name.textContent = REASON_LABELS[r.code] || r.code;
-                const pts = document.createElement('span');
-                pts.textContent = r.points === 0 ? '' : (r.points > 0 ? '+' : '') + r.points;
-                pts.style.color = r.points > 0 ? COLORS.bullish.text : r.points < 0 ? COLORS.bearish.text : '';
-                row.append(name, pts);
-                list.appendChild(row);
-            });
-            if (sig.reasons.length === 0) list.textContent = 'No triggers';
-            (sig.filters || []).forEach(code => {
-                const row = document.createElement('div');
-                row.style.color = COLORS.warning.text;
-                row.textContent = `Filtered: ${FILTER_LABELS[code] || code}`;
-                list.appendChild(row);
-            });
-        }
-
-        async function refreshMarketState() {
-            let res = null;
-            let data = null;
-            try {
-                res = await fetch(`/api/market/${state.market}`);
-                data = await res.json();
-            } catch (err) {
-                console.error('Market State Error:', err);
-            }
-
-            const desc = MarketStatus.describeMarketState(data, res ? res.status : 0, state.entryTf);
-            renderStatus(desc, desc.showValues ? data : null);
-            if (!desc.showValues) {
-                clearStateValues();
-                return;
-            }
-
-            try {
-                // Update Bias
-                const biasEl = document.getElementById('state-bias');
-                biasEl.textContent = label(data.regime_global);
-                biasEl.style.color = data.regime_global.includes('up') || data.regime_global.includes('bull') ? COLORS.bullish.text :
-                                   data.regime_global.includes('down') || data.regime_global.includes('bear') ? COLORS.bearish.text : COLORS.neutral.text;
-
-                // Update Energy
-                const energyEl = document.getElementById('state-energy');
-                energyEl.textContent = label(data.market_energy);
-                energyEl.style.color = data.market_energy === 'explosive' ? COLORS.bullish.text :
-                                     data.market_energy === 'cooling' ? COLORS.bearish.text : COLORS.neutral.text;
-
-                // Update Pressure
-                const pressureEl = document.getElementById('state-pressure');
-                pressureEl.textContent = label(data.market_pressure);
-                pressureEl.style.color = data.market_pressure.includes('bullish') ? COLORS.bullish.text :
-                                       data.market_pressure.includes('bearish') ? COLORS.bearish.text : COLORS.neutral.text;
-
-                // Update Setup (The Big Card)
-                const setupCard = document.getElementById('setup-card');
-                const setupEl = document.getElementById('state-setup');
-                setupEl.textContent = label(data.setup_state);
-                const setupColor = data.setup_state.includes('ready') || data.setup_state.includes('entry') ? COLORS.bullish : COLORS.neutral;
-                setupCard.style.borderLeftColor = setupColor.border;
-                setupEl.style.color = setupColor.text;
-
-                // Update Risk
-                const riskEl = document.getElementById('state-risk');
-                riskEl.textContent = label(data.fake_breakout_risk);
-                riskEl.style.color = data.fake_breakout_risk === 'high' ? COLORS.bearish.text :
-                                   data.fake_breakout_risk === 'medium' ? COLORS.warning.text : COLORS.bullish.text;
-
-                // Server-side score only; the dashboard never recalculates it.
-                document.getElementById('score-val').textContent = data.breakout_score.toFixed(2);
-                document.getElementById('score-bar').style.width = Math.round(data.breakout_score * 100) + '%';
-                document.getElementById('dist-support').textContent = fmtNum(data.distance_percent.to_support) + '%';
-                document.getElementById('dist-resist').textContent = fmtNum(data.distance_percent.to_resistance) + '%';
-
-                renderSignal(data.signal || null);
-                renderZones(data.levels);
-                applyZonesToChart(data.levels);
-            } catch (err) {
-                console.error('Market State Render Error:', err);
-                renderStatus({ level: 'unavailable', title: 'UNAVAILABLE', detail: 'Market state could not be displayed.', errors: [] }, null);
-                clearStateValues();
-            }
-        }
-
-        function renderZones(levels) {
-            const container = document.getElementById('zones-list');
-            container.replaceChildren();
-
-            const allZones = [
-                ...levels.resistance.map(z => ({...z, type: 'RES'})),
-                ...levels.support.map(z => ({...z, type: 'SUP'}))
-            ].sort((a, b) => b.mid - a.mid);
-
-            allZones.forEach(z => {
-                const isRes = z.type === 'RES';
-                const div = document.createElement('div');
-                div.className = `flex justify-between items-center p-2 rounded-lg text-xs mono border-l-2 ${isRes ? 'border-l-red-500 bg-red-500/5' : 'border-l-green-500 bg-green-500/5'}`;
-
-                const left = document.createElement('div');
-                left.className = 'flex flex-col';
-                const name = document.createElement('span');
-                name.className = `font-bold ${isRes ? 'text-red-400' : 'text-green-400'}`;
-                name.textContent = `${z.type} Zone`;
-                const tfs = document.createElement('span');
-                tfs.className = 'text-gray-500 text-[10px]';
-                tfs.textContent = `TFs: ${Array.isArray(z.tfs) ? z.tfs.join(', ') : 'single'}`;
-                left.append(name, tfs);
-
-                const right = document.createElement('div');
-                right.className = 'text-right';
-                const price = document.createElement('div');
-                price.className = 'font-semibold cursor-pointer hover:text-white transition-colors';
-                price.title = 'Copy';
-                price.textContent = fmtPrice(Number(z.mid));
-                price.onclick = () => copyPrice(String(z.mid));
-                const score = document.createElement('div');
-                score.className = 'text-[10px] text-gray-500';
-                score.textContent = `Score: ${fmtNum(z.score)}`;
-                right.append(price, score);
-
-                div.append(left, right);
-                container.appendChild(div);
-            });
-        }
-
-        function copyPrice(val) {
-            navigator.clipboard.writeText(val).then(() => {
-                const toast = document.getElementById('toast');
-                toast.innerText = 'Price Copied!';
-                toast.style.opacity = '1';
-                setTimeout(() => { toast.style.opacity = '0'; }, 2000);
-            });
-        }
-
-        async function copyMarketState() {
-            try {
-                const res = await fetch(`/api/market/${state.market}`);
-                const data = await res.json();
-                await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-                
-                const toast = document.getElementById('toast');
-                toast.innerText = 'Market State Copied!';
-                toast.style.opacity = '1';
-                setTimeout(() => { toast.style.opacity = '0'; }, 2000);
-            } catch (err) {
-                console.error('Copy Error:', err);
-            }
-        }
-
-        // ---- Legends (Binance style): follow the crosshair, default = last closed candle ----
-        const legendItem = (k, v, color) => `<span class="k">${k}</span><span class="v" style="color:${color || '#d1d4dc'}">${v}</span>`;
-        const COLOR_UP = '#00c087', COLOR_DOWN = '#ff3b69';
-
-        // Returns the bar at index i of state.times: closed candle data, or the forming candle.
-        function barAt(i) {
-            const d = state.data;
-            if (!d || i < 0 || i >= state.times.length) return null;
-            if (i <= state.lastClosedIdx) {
-                const ind = d.indicators || {};
-                return { candle: d.candles[i], forming: false, ma14: ind.ma14?.[i], ma50: ind.ma50?.[i], ma200: ind.ma200?.[i],
-                    volume: ind.volume?.[i], macd: ind.macd?.[i], rsi: ind.rsi?.[i] };
-            }
-            const f = d.forming_candle;
-            return f ? { candle: f, forming: true, volume: f.volume } : null;
-        }
-
-        function updateLegends(i) {
-            const bar = barAt(i);
-            const set = (id, html) => { document.getElementById(id).innerHTML = html; };
-            if (!bar) { ['legend-main', 'legend-vol', 'legend-macd', 'legend-rsi'].forEach(id => set(id, '')); return; }
-            const c = bar.candle;
-            const change = c.close - c.open;
-            const dir = change >= 0 ? COLOR_UP : COLOR_DOWN;
-            const date = MarketStatus.formatUtc(c.time).replace(' UTC', '');
-            set('legend-main',
-                `<div>${legendItem(date + (bar.forming ? ' (forming)' : ''), '')}` +
-                legendItem('O', fmtPrice(c.open), dir) + legendItem('H', fmtPrice(c.high), dir) +
-                legendItem('L', fmtPrice(c.low), dir) + legendItem('C', fmtPrice(c.close), dir) +
-                legendItem('Change', `${fmtSigned(change, priceDecimals(c.open))} (${fmtPct(change / c.open * 100)})`, dir) +
-                legendItem('Range', fmtNum((c.high - c.low) / c.low * 100) + '%', dir) + '</div>' +
-                `<div>${legendItem('MA(14)', fmtPrice(bar.ma14), '#4fc3f7')}${legendItem('MA(50)', fmtPrice(bar.ma50), '#ba68c8')}${legendItem('MA(200)', fmtPrice(bar.ma200), '#ffffff')}</div>`);
-            set('legend-vol', legendItem('Vol' + (bar.forming ? ' (forming)' : ''), fmtVol(bar.volume), dir));
-            const m = bar.macd || {};
-            set('legend-macd', legendItem('MACD(12,26,9)', '') + legendItem('MACD', fmtNum(m.MACD), '#2962ff') +
-                legendItem('Signal', fmtNum(m.signal), '#ff9800') + legendItem('Hist', fmtNum(m.histogram), (m.histogram ?? 0) >= 0 ? COLOR_UP : COLOR_DOWN));
-            set('legend-rsi', legendItem('RSI(14)', fmtNum(bar.rsi), '#b072d6'));
-        }
-
-        // Live price change is measured against the close of the last closed candle of the selected timeframe.
-        function renderLivePrice() {
-            const priceEl = document.getElementById('price-display');
-            const changeEl = document.getElementById('price-change');
-            const refEl = document.getElementById('price-ref');
-            const p = state.livePrice;
-            const last = state.data?.candles?.[state.data.candles.length - 1];
-            priceEl.textContent = fmtPrice(p);
-            if (!isNum(p) || !last) { changeEl.textContent = ''; refEl.textContent = ''; return; }
-            const diff = p - last.close;
-            changeEl.textContent = `${fmtSigned(diff, priceDecimals(last.close))} (${fmtPct(diff / last.close * 100)})`;
-            changeEl.style.color = diff >= 0 ? COLOR_UP : COLOR_DOWN;
-            refEl.textContent = `vs ${state.currentTf} close ${fmtPrice(last.close)}`;
-        }
-
-        const PANES = ['main', 'vol', 'macd', 'rsi'];
-
-        // Labels can make one price scale wider than the minimum; give every pane the widest
-        // scale so the plot areas (and therefore the bars) line up vertically.
-        let alignQueued = false;
-        function alignPriceScales() {
-            if (alignQueued) return;
-            alignQueued = true;
-            requestAnimationFrame(() => {
-                alignQueued = false;
-                const widest = Math.max(...PANES.map(n => state.charts[n].priceScale('right').width()));
-                PANES.forEach(n => {
-                    if (state.charts[n].priceScale('right').width() !== widest) {
-                        state.charts[n].priceScale('right').applyOptions({ minimumWidth: widest });
-                    }
-                });
-            });
-        }
-
-        async function setupChart() {
-            const baseOptions = {
-                layout: { background: { color: '#131722' }, textColor: '#d1d4dc', fontSize: 11 },
-                grid: { vertLines: { color: '#1f2433' }, horzLines: { color: '#1f2433' } },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                localization: { priceFormatter: fmtPrice },
-                // Same price-scale width in every pane keeps the time axes aligned.
-                rightPriceScale: { borderVisible: false, minimumWidth: 80 },
-                timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 5, borderVisible: false, visible: false },
-            };
-            const subFormat = { type: 'custom', formatter: (v) => fmtNum(v), minMove: 0.01 };
-
-            try {
-                for (const name of PANES) {
-                    const el = document.getElementById(`${name}-chart`);
-                    const opts = { ...baseOptions, width: el.clientWidth, height: el.clientHeight };
-                    if (name === 'rsi') opts.timeScale = { ...baseOptions.timeScale, visible: true };
-                    if (name !== 'main') opts.localization = { priceFormatter: fmtNum };
-                    state.charts[name] = LightweightCharts.createChart(el, opts);
-                }
-
-                state.series.candles = state.charts.main.addCandlestickSeries({
-                    upColor: COLOR_UP, downColor: COLOR_DOWN, borderVisible: false, wickUpColor: COLOR_UP, wickDownColor: COLOR_DOWN,
-                });
-                state.series.ma14 = state.charts.main.addLineSeries({ color: '#4fc3f7', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
-                state.series.ma50 = state.charts.main.addLineSeries({ color: '#ba68c8', lineWidth: 2, lastValueVisible: false, priceLineVisible: false });
-                state.series.ma200 = state.charts.main.addLineSeries({ color: '#ffffff', lineWidth: 2, lastValueVisible: false, priceLineVisible: false });
-
-                state.series.vol = state.charts.vol.addHistogramSeries({ priceFormat: { type: 'custom', formatter: fmtVol, minMove: 0.01 }, lastValueVisible: false, priceLineVisible: false });
-                state.series.macdHist = state.charts.macd.addHistogramSeries({ priceFormat: subFormat, lastValueVisible: false, priceLineVisible: false });
-                state.series.macdLine = state.charts.macd.addLineSeries({ color: '#2962ff', lineWidth: 2, priceFormat: subFormat, priceLineVisible: false });
-                state.series.macdSig = state.charts.macd.addLineSeries({ color: '#ff9800', lineWidth: 2, priceFormat: subFormat, priceLineVisible: false });
-                state.series.rsi = state.charts.rsi.addLineSeries({ color: '#b072d6', lineWidth: 2, priceFormat: subFormat, priceLineVisible: false });
-                [30, 70].forEach(level => state.series.rsi.createPriceLine({ price: level, color: '#4b5563', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false }));
-
-                // Series used to place the synced crosshair in each pane.
-                const anchor = { main: state.series.candles, vol: state.series.vol, macd: state.series.macdLine, rsi: state.series.rsi };
-
-                // The pane under the mouse drives range and crosshair sync; with no mouse over a
-                // chart, the main pane drives. Other panes never echo back (anti-loop).
-                let activePane = null;
-                const isDriver = (name) => (activePane ? activePane === name : name === 'main');
-
-                // Visible range sync (logical indices match because every pane has the same bars).
-                let syncingRange = false;
-                PANES.forEach(name => {
-                    state.charts[name].timeScale().subscribeVisibleLogicalRangeChange(range => {
-                        if (syncingRange || !range || !isDriver(name)) return;
-                        syncingRange = true;
-                        PANES.forEach(other => { if (other !== name) state.charts[other].timeScale().setVisibleLogicalRange(range); });
-                        syncingRange = false;
-                        alignPriceScales();
-                    });
-                });
-
-                // Crosshair sync.
-                PANES.forEach(name => {
-                    const el = document.getElementById(`${name}-chart`);
-                    el.addEventListener('mouseenter', () => { activePane = name; });
-                    el.addEventListener('mouseleave', () => {
-                        if (activePane === name) activePane = null;
-                        PANES.forEach(other => state.charts[other].clearCrosshairPosition());
-                        updateLegends(state.lastClosedIdx);
-                    });
-                    state.charts[name].subscribeCrosshairMove(param => {
-                        if (activePane !== name) return;
-                        if (!param || param.time === undefined || param.logical === undefined) {
-                            PANES.forEach(other => { if (other !== name) state.charts[other].clearCrosshairPosition(); });
-                            updateLegends(state.lastClosedIdx);
-                            return;
-                        }
-                        const idx = Math.round(param.logical);
-                        PANES.forEach(other => {
-                            if (other === name) return;
-                            const series = anchor[other];
-                            const point = series.dataByIndex(idx);
-                            const value = point && isNum(point.value) ? point.value : point && isNum(point.close) ? point.close : 0;
-                            state.charts[other].setCrosshairPosition(value, param.time, series);
-                        });
-                        updateLegends(idx);
-                    });
-                });
-
-                // Keep each chart sized to its pane.
-                const ro = new ResizeObserver(entries => {
-                    for (const entry of entries) {
-                        const name = entry.target.id.replace('-chart', '');
-                        const { width, height } = entry.contentRect;
-                        if (state.charts[name] && width > 0 && height > 0) state.charts[name].resize(Math.floor(width), Math.floor(height));
-                    }
-                    alignPriceScales();
-                });
-                PANES.forEach(name => ro.observe(document.getElementById(`${name}-chart`)));
-            } catch (err) {
-                console.error('Chart Setup Error:', err);
-            }
-        }
-
-        async function loadChartData() {
-            try {
-                const res = await fetch(`/api/${state.market}/${state.currentTf}`);
-                const data = await res.json();
-                const chartStatus = document.getElementById('chart-status');
-                if (!res.ok || !Array.isArray(data.candles)) {
-                    state.data = null;
-                    chartStatus.textContent = `${state.currentTf}: chart data unavailable (${data.error || 'HTTP ' + res.status})`;
-                    chartStatus.style.color = COLORS.bearish.text;
-                    return;
-                }
-                state.data = data;
-                chartStatus.textContent = `${state.currentTf}: closed candles to ${MarketStatus.formatUtc(data.candle_close_time)} (${MarketStatus.formatAge(data.age_seconds)}) · ${String(data.status).toUpperCase()}` +
-                    (data.forming_candle ? ' · grey candle = forming, not used in calculations' : '');
-                chartStatus.style.color = data.status === 'ok' ? '' : COLORS.bearish.text;
-
-                // Every pane gets exactly the same bar times (closed candles + forming candle);
-                // values that do not exist (indicator warm-up, forming bar) become whitespace.
-                const candles = data.candles;
-                const forming = data.forming_candle;
-                state.times = candles.map(c => c.time).concat(forming ? [forming.time] : []);
-                state.lastClosedIdx = candles.length - 1;
-                const ind = data.indicators || {};
-                const line = (arr) => state.times.map((time, i) => (i < candles.length && isNum(arr?.[i]) ? { time, value: arr[i] } : { time }));
-
-                const bars = candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close }));
-                if (forming) bars.push({ time: forming.time, open: forming.open, high: forming.high, low: forming.low, close: forming.close, color: '#6b7280', wickColor: '#6b7280' });
-                state.series.candles.setData(bars);
-                state.series.ma14.setData(line(ind.ma14));
-                state.series.ma50.setData(line(ind.ma50));
-                state.series.ma200.setData(line(ind.ma200));
-
-                const vols = candles.map((c, i) => (isNum(ind.volume?.[i])
-                    ? { time: c.time, value: ind.volume[i], color: c.close >= c.open ? '#00c08766' : '#ff3b6966' } : { time: c.time }));
-                if (forming) vols.push(isNum(forming.volume) ? { time: forming.time, value: forming.volume, color: '#6b728066' } : { time: forming.time });
-                state.series.vol.setData(vols);
-
-                const macd = ind.macd || [];
-                const macdPart = (key) => state.times.map((time, i) => (i < candles.length && isNum(macd[i]?.[key]) ? { time, value: macd[i][key] } : { time }));
-                state.series.macdLine.setData(macdPart('MACD'));
-                state.series.macdSig.setData(macdPart('signal'));
-                state.series.macdHist.setData(macdPart('histogram').map(p => (isNum(p.value) ? { ...p, color: p.value >= 0 ? '#00c08799' : '#ff3b6999' } : p)));
-                state.series.rsi.setData(line(ind.rsi));
-
-                // Show roughly the latest 100 bars; the range sync applies it to every pane.
-                const total = state.times.length;
-                const range = { from: Math.max(0, total - 100), to: total + 4 };
-                PANES.forEach(n => state.charts[n].timeScale().setVisibleLogicalRange(range));
-
-                updateLegends(state.lastClosedIdx);
-                renderLivePrice();
-                alignPriceScales();
-            } catch (err) {
-                console.error('Chart Data Error:', err);
-            }
-        }
-
-        function applyZonesToChart(levels) {
-            // Clear old lines
-            state.priceLines.forEach(line => state.series.candles.removePriceLine(line));
-            state.priceLines = [];
-
-            const drawLevel = (lvl, color) => {
-                const line = state.series.candles.createPriceLine({
-                    price: lvl.mid,
-                    color: color,
-                    lineWidth: 2,
-                    lineStyle: LightweightCharts.LineStyle.Dashed,
-                    axisLabelVisible: true,
-                    title: `${lvl.score >= 5 ? 'STRONG' : 'MINOR'} ${lvl.tfs ? lvl.tfs.join(' ') : 'S/R'}`,
-                });
-                state.priceLines.push(line);
-            };
-
-            levels.support.forEach(s => drawLevel(s, COLORS.bullish.text));
-            levels.resistance.forEach(r => drawLevel(r, COLORS.bearish.text));
-        }
-
-        function subscribe() {
-            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-                state.ws.send(JSON.stringify({ type: 'subscribe', market: state.market, timeframe: state.currentTf }));
-            }
-        }
-
-        function setConnection(connected) {
-            const el = document.getElementById('connection-status');
-            const dot = document.createElement('span');
-            dot.className = `w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`;
-            el.replaceChildren(dot, document.createTextNode(connected ? ' Connected' : ' Disconnected'));
-            el.classList.toggle('text-green-400', connected);
-            el.classList.toggle('text-red-400', !connected);
-        }
-
-        function setupWebSocket() {
-            state.ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`);
-
-            state.ws.onopen = () => {
-                setConnection(true);
-                subscribe();
-            };
-
-            state.ws.onmessage = (event) => {
-                let data;
-                try {
-                    data = JSON.parse(event.data);
-                } catch (err) {
-                    return;
-                }
-                if (data.type === 'price' && Number.isFinite(data.price)) {
-                    state.livePrice = data.price;
-                    renderLivePrice();
-                } else if (data.type === 'summary_ready') {
-                    refreshMarketState();
-                } else if (data.type === 'update_ready') {
-                    loadChartData();
-                }
-            };
-
-            state.ws.onclose = () => {
-                setConnection(false);
-                setTimeout(setupWebSocket, 5000);
-            };
-        }
-
-        init();
-    </script>
+    <script src="/js/pages/market.js"></script>
 </body>
 </html>

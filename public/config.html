@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Config | Crypto Signal</title>
+    <link rel="stylesheet" href="/css/app.css">
+    <script src="/js/format.js"></script>
+    <script src="/js/signal-view.js"></script>
+    <script src="/js/app-header.js"></script>
+</head>
+<body>
+    <header id="app-header" data-view="config"></header>
+
+    <main class="page">
+        <div class="banner info">
+            <span>Saved to <span id="file" class="mono">config/calculation.json</span> and applied at once, except <strong>Markets</strong>, which needs a restart. Server settings (port, host, admin token, Binance URLs) stay in <span class="mono">.env</span>.</span>
+        </div>
+        <div id="load-error" class="banner neg" hidden></div>
+        <div id="restart-note" class="banner warn" hidden></div>
+
+        <nav id="tabs" class="tabs" role="tablist" aria-label="Config sections"></nav>
+
+        <form id="form" autocomplete="off" hidden></form>
+
+        <section id="runs-card" class="card" hidden>
+            <div class="card-head">
+                <div>
+                    <h2 class="card-title">Recalculate backtest</h2>
+                    <span class="card-note">Uses the saved config; downloads missing history from Binance</span>
+                </div>
+                <button id="run-all" type="button" class="btn primary">Run all markets</button>
+            </div>
+            <div class="table-wrap">
+                <table class="tbl">
+                    <thead><tr>
+                        <th>Market</th><th>Report (UTC)</th><th>Config</th><th class="right">Trades</th><th class="right">R</th><th class="right">OOS R</th><th>Verdict</th><th>Run</th><th></th>
+                    </tr></thead>
+                    <tbody id="runs"></tbody>
+                </table>
+            </div>
+            <div id="run-note" class="t-meta muted" style="margin-top:8px"></div>
+        </section>
+
+        <section id="ops-card" class="stack" style="gap:12px" hidden>
+            <div class="card">
+                <div class="card-head">
+                    <div>
+                        <h2 class="card-title">Market data</h2>
+                        <span class="card-note">Refetch every timeframe from Binance and rebuild the Market State. Existing data is kept if a fetch fails.</span>
+                    </div>
+                    <button id="reset" type="button" class="btn danger">Refetch all data</button>
+                </div>
+                <div id="reset-note" class="t-data muted"></div>
+            </div>
+            <div class="card">
+                <div class="card-head"><h2 class="card-title">Health</h2><span id="health-note" class="card-note"></span></div>
+                <div class="table-wrap"><table class="tbl"><thead id="health-head"></thead><tbody id="health"></tbody></table></div>
+            </div>
+        </section>
+
+        <div id="save-bar" class="save-bar" hidden>
+            <button id="save" type="button" class="btn primary">Save</button>
+            <button id="revert" type="button" class="btn">Discard</button>
+            <button id="defaults" type="button" class="btn" title="Fill the form with the defaults; Save to apply">Fill defaults</button>
+            <span id="save-status" class="t-data"></span>
+        </div>
+    </main>
+
+    <script src="/js/pages/config.js"></script>
+</body>
+</html>

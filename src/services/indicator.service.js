@@ -10,13 +10,30 @@ class CalculationError extends Error {
 
 const lastOf = (arr) => (Array.isArray(arr) && arr.length > 0 ? arr[arr.length - 1] : undefined);
 
+// S/R lookback candles for a timeframe missing from the calculation config's `lookback` group.
+const LOOKBACK_DEFAULT = 200;
+
+// Defaults of the calculation config's `indicators` and `zones` groups (config/calculation.json).
+// The snapshot keeps the field names ma14 / ma50 / ma200 whatever the configured periods are.
+const INDICATOR_DEFAULTS = {
+    ma_fast: 14, ma_mid: 50, ma_slow: 200, rsi_period: 14, macd_fast: 12, macd_slow: 26, macd_signal: 9, atr_period: 14,
+    min_candles: 200, rsi_bullish: 60, rsi_bearish: 40, regime_ma_percent: 1,
+};
+const ZONE_DEFAULTS = {
+    cluster_percent: 0.5, width_atr: 0.5, max_width_percent: 2, touch_points: 2, recency_candles: 50, distance_penalty: 10,
+    ma_bonus: 1, ma_proximity_percent: 1, fallback_candles: 100, lookback_volatility_band: 0.2, lookback_scale: 0.2,
+};
+
 class IndicatorService {
     // `klines` must contain closed candles only, sorted and deduplicated. The forming candle is
     // carried through for chart display only (`meta.forming`) and never enters a calculation.
-    calculateAll(klines, market, timeframe, meta = {}) {
+    // `params` holds the calculation config's `indicators`, `zones` and `lookback` groups (defaults above).
+    calculateAll(klines, market, timeframe, meta = {}, params = {}) {
+        const ind = { ...INDICATOR_DEFAULTS, ...params.indicators };
+        const zoneParams = { ...ZONE_DEFAULTS, ...params.zones };
         try {
-            if (!klines || klines.length < 200) {
-                throw new CalculationError('insufficient_data', 'Insufficient data for indicator calculation (need at least 200 closed candles)');
+            if (!klines || klines.length < ind.min_candles) {
+                throw new CalculationError('insufficient_data', `Insufficient data for indicator calculation (${klines ? klines.length : 0} closed candles, need at least ${ind.min_candles})`);
             }
 
             const closes = klines.map(k => k.close);
@@ -24,21 +41,20 @@ class IndicatorService {
             const lows = klines.map(k => k.low);
             const volumes = klines.map(k => k.volume);
 
-            const ma14 = SMA.calculate({ period: 14, values: closes });
-            const ma50 = SMA.calculate({ period: 50, values: closes });
-            const ma200 = SMA.calculate({ period: 200, values: closes });
-            const rsi = RSI.calculate({ period: 14, values: closes });
+            const ma14 = SMA.calculate({ period: ind.ma_fast, values: closes });
+            const ma50 = SMA.calculate({ period: ind.ma_mid, values: closes });
+            const ma200 = SMA.calculate({ period: ind.ma_slow, values: closes });
+            const rsi = RSI.calculate({ period: ind.rsi_period, values: closes });
             const macdResult = MACD.calculate({
                 values: closes,
-                fastPeriod: 12,
-                slowPeriod: 26,
-                signalPeriod: 9,
+                fastPeriod: ind.macd_fast,
+                slowPeriod: ind.macd_slow,
+                signalPeriod: ind.macd_signal,
             });
-            const atr = ATR.calculate({ high: highs, low: lows, close: closes, period: 14 });
+            const atr = ATR.calculate({ high: highs, low: lows, close: closes, period: ind.atr_period });
 
-            const mappingStr = process.env.MAPPING_CANDLE || "";
-            const mapping = Object.fromEntries(mappingStr.split(',').map(pair => pair.split(':')));
-            const baseCandles = mapping[timeframe] ? parseInt(mapping[timeframe]) : 200;
+            // S/R lookback of this timeframe (config `lookback`).
+            const baseCandles = params.lookback?.[timeframe] ?? LOOKBACK_DEFAULT;
             
             const currentPrice = closes[closes.length - 1];
             const currentAtr = atr[atr.length - 1];
@@ -46,11 +62,13 @@ class IndicatorService {
             const allVolatilities = atr.map((val, idx) => val / closes[idx]);
             const avgVolatility = allVolatilities.reduce((a, b) => a + b, 0) / allVolatilities.length;
 
+            // The S/R lookback widens in volatile markets and narrows in quiet ones.
+            const band = zoneParams.lookback_volatility_band;
             let adjustedCount = baseCandles;
-            if (volatility > avgVolatility * 1.2) {
-                adjustedCount = Math.round(baseCandles * 1.2);
-            } else if (volatility < avgVolatility * 0.8) {
-                adjustedCount = Math.round(baseCandles * 0.8);
+            if (volatility > avgVolatility * (1 + band)) {
+                adjustedCount = Math.round(baseCandles * (1 + zoneParams.lookback_scale));
+            } else if (volatility < avgVolatility * (1 - band)) {
+                adjustedCount = Math.round(baseCandles * (1 - zoneParams.lookback_scale));
             }
 
             const levels = this.calculateSRLevels(
@@ -59,7 +77,8 @@ class IndicatorService {
                 currentAtr, 
                 ma50[ma50.length - 1], 
                 ma200[ma200.length - 1], 
-                adjustedCount
+                adjustedCount,
+                zoneParams
             );
 
             const indicators = {
@@ -86,7 +105,7 @@ class IndicatorService {
                 support: levels.support,
                 resistance: levels.resistance,
                 indicators: indicators
-            });
+            }, ind);
 
             const lastCandle = klines[klines.length - 1];
             return {
@@ -116,7 +135,7 @@ class IndicatorService {
         }
     }
 
-    interpretMarket(data) {
+    interpretMarket(data, ind = INDICATOR_DEFAULTS) {
         const price = data.price;
         const support = data.support?.[0];
         const resistance = data.resistance?.[0];
@@ -140,9 +159,9 @@ class IndicatorService {
         const lastMacd = macdArr.length > 0 ? macdArr[macdArr.length - 1] : {};
         const macdHist = lastMacd?.histogram ?? 0;
 
-        if (rsi > 60 && macdHist > 0) {
+        if (rsi > ind.rsi_bullish && macdHist > 0) {
             momentum = "bullish";
-        } else if (rsi < 40 && macdHist < 0) {
+        } else if (rsi < ind.rsi_bearish && macdHist < 0) {
             momentum = "bearish";
         }
 
@@ -153,7 +172,7 @@ class IndicatorService {
 
         if (ma14 && ma50) {
             const distance = Math.abs(ma14 - ma50) / price;
-            if (distance < 0.01) {
+            if (distance < ind.regime_ma_percent / 100) {
                 regime = "ranging";
             } else {
                 regime = "trending";
@@ -169,11 +188,13 @@ class IndicatorService {
         return Array(diff).fill(null).concat(values);
     }
 
-    calculateSRLevels(klines, price, atr, ma50, ma200, lookbackPeriod) {
+    calculateSRLevels(klines, price, atr, ma50, ma200, lookbackPeriod, zp = ZONE_DEFAULTS) {
         try {
+            // At most 3 levels per side: the Market State contract allows 1–3.
             const MAX_LEVELS = 3;
-            const CLUSTER_TOLERANCE = 0.005;
-            const ATR_MULTIPLIER = 0.5;
+            const CLUSTER_TOLERANCE = zp.cluster_percent / 100;
+            const ATR_MULTIPLIER = zp.width_atr;
+            const maProximity = zp.ma_proximity_percent / 100;
 
             const swings = [];
             const startIdx = Math.max(1, klines.length - lookbackPeriod);
@@ -204,7 +225,8 @@ class IndicatorService {
             }
 
             const zones = clusters.map(c => {
-                const width = (atr || price * 0.002) * ATR_MULTIPLIER;
+                // Half-width from ATR, so a long timeframe's zone stays a price level, not a 10% band.
+                const width = Math.min((atr || price * 0.002) * ATR_MULTIPLIER, c.mid * zp.max_width_percent / 200);
                 return {
                     low: c.mid - width,
                     high: c.mid + width,
@@ -215,19 +237,20 @@ class IndicatorService {
 
             zones.forEach(z => {
                 let score = 0;
-                score += z.touches * 2;
-                let lastTouchIdx = 100;
+                score += z.touches * zp.touch_points;
+                // Candles since the zone was last touched; never touched → no recency bonus.
+                let lastTouchIdx = Infinity;
                 for (let i = klines.length - 1; i >= 0; i--) {
                     if (klines[i].low <= z.high && klines[i].high >= z.low) {
                         lastTouchIdx = klines.length - i;
                         break;
                     }
                 }
-                score += Math.max(0, 50 - lastTouchIdx);
+                score += Math.max(0, zp.recency_candles - lastTouchIdx);
                 const distance = Math.abs(z.mid - price) / price;
-                score -= distance * 10;
-                if (ma50 && Math.abs(z.mid - ma50) / z.mid < 0.01) score += 1;
-                if (ma200 && Math.abs(z.mid - ma200) / z.mid < 0.01) score += 1;
+                score -= distance * zp.distance_penalty;
+                if (ma50 && Math.abs(z.mid - ma50) / z.mid < maProximity) score += zp.ma_bonus;
+                if (ma200 && Math.abs(z.mid - ma200) / z.mid < maProximity) score += zp.ma_bonus;
                 z.score = Math.round(score * 10) / 10;
             });
 
@@ -235,11 +258,11 @@ class IndicatorService {
             let resistance = zones.filter(z => z.mid > price).sort((a, b) => b.score - a.score);
 
             if (support.length === 0) {
-                const fallbackLow = Math.min(...klines.slice(-100).map(k => k.low));
+                const fallbackLow = Math.min(...klines.slice(-zp.fallback_candles).map(k => k.low));
                 support.push({ low: fallbackLow, high: fallbackLow, mid: fallbackLow, score: 1 });
             }
             if (resistance.length === 0) {
-                const fallbackHigh = Math.max(...klines.slice(-100).map(k => k.high));
+                const fallbackHigh = Math.max(...klines.slice(-zp.fallback_candles).map(k => k.high));
                 resistance.push({ low: fallbackHigh, high: fallbackHigh, mid: fallbackHigh, score: 1 });
             }
 
@@ -256,3 +279,5 @@ class IndicatorService {
 
 module.exports = new IndicatorService();
 module.exports.CalculationError = CalculationError;
+module.exports.INDICATOR_DEFAULTS = INDICATOR_DEFAULTS;
+module.exports.ZONE_DEFAULTS = ZONE_DEFAULTS;

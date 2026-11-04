@@ -44,7 +44,16 @@
         return { level: 'unavailable', showValues: false, title: 'UNAVAILABLE', detail: 'Unknown status ' + data.status, errors: errors };
     }
 
-    var api = { describeMarketState: describeMarketState, formatAge: formatAge, formatUtc: formatUtc, SCHEMA_VERSION: SCHEMA_VERSION };
+    // Status for a URL symbol that is not in the server's engine.markets (`markets`: configured codes).
+    function describeUnknownMarket(market, markets) {
+        return {
+            level: 'unavailable', showValues: false, title: 'NOT CONFIGURED',
+            detail: market + ' is not in the market list (engine.markets). Available: ' + (markets.length ? markets.join(', ') : 'none') + '.',
+            errors: [],
+        };
+    }
+
+    var api = { describeMarketState: describeMarketState, describeUnknownMarket: describeUnknownMarket, formatAge: formatAge, formatUtc: formatUtc, SCHEMA_VERSION: SCHEMA_VERSION };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.MarketStatus = api;
 })(typeof window !== 'undefined' ? window : this);

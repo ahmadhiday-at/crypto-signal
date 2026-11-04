@@ -1,0 +1,250 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+const { createSignalLog, isCurrentRecord, configHash, evaluate, candidateDirection, toCsv, EXPIRY_CANDLES } = require('../src/services/signal-log');
+const { createMarketEngine } = require('../src/services/market.service');
+const { createApp } = require('../src/app');
+const { edgeSummary, liveParams } = require('../src/services/edge');
+const { fakeBinance, tempStorage, testConfig, silentLog } = require('./helpers');
+
+const LEN = 900; // 15m
+const T0 = 1_800_000_000 - (1_800_000_000 % LEN);
+
+// Flat candles at 100 starting at T0; `moves` overrides high/low per index.
+function candles(n, moves = {}) {
+    return Array.from({ length: n }, (_, i) => ({
+        time: T0 + i * LEN, close_time: T0 + (i + 1) * LEN,
+        open: 100, high: 100.5, low: 99.5, close: 100, volume: 1,
+        ...(moves[i] || {}),
+    }));
+}
+
+function state({ score = 6, status = 'ok', filters = [], plan = {} } = {}) {
+    return {
+        generated_at: T0 + LEN + 5, status, price: 100, context: 'near_support', momentum: 'bullish',
+        regime: 'ranging', volume_state: 'normal', divergence: 'none', volatility_ratio: 1.1,
+        distance_percent: { to_support: 0.4, to_resistance: 3 }, indicators: { rsi: 41.237, atr: 1 },
+        signal: {
+            action: filters.length ? 'WAIT' : (score >= 5 ? 'BUY' : score <= -5 ? 'SELL' : 'WAIT'),
+            score, strength: 'medium', reasons: [{ code: 'near_support', points: 2 }],
+            filtered: filters.length > 0, filters,
+            plan: { side: 'long', entry_zone: [98, 99], stop_loss: 97, take_profit_1: 104.5, take_profit_2: 110, risk_reward: 1.5, trailing_stop: 98.5, ...plan },
+        },
+    };
+}
+
+const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-log-'));
+const record = (over = {}) => ({ signal: 'BUY', price: 100, sl: 97, tp1: 104.5, risk_reward: 1.5, candle_time: T0, candle_close_time: T0 + LEN, ...over });
+
+test('candidates: |score| >= 5 with ok status, filtered or not', () => {
+    assert.equal(candidateDirection(state({ score: 6 })), 'BUY');
+    assert.equal(candidateDirection(state({ score: -7, filters: ['low_rr'] })), 'SELL');
+    assert.equal(candidateDirection(state({ score: 4 })), null);
+    assert.equal(candidateDirection(state({ score: 6, status: 'degraded' })), null);
+});
+
+test('outcome: TP1 → WIN, SL → LOSS, both in one candle → LOSS, open while untouched', () => {
+    assert.equal(evaluate(record(), candles(5)), null);
+    assert.deepEqual(evaluate(record(), candles(5, { 3: { high: 105 } })), { result: 'WIN', rr: 1.5, closed_at: T0 + 4 * LEN, bars: 3 });
+    assert.deepEqual(evaluate(record(), candles(5, { 2: { low: 96 } })), { result: 'LOSS', rr: -1, closed_at: T0 + 3 * LEN, bars: 2 });
+    assert.equal(evaluate(record(), candles(5, { 1: { low: 96, high: 105 } })).result, 'LOSS');
+    // SELL mirrors: SL above, TP below.
+    const short = record({ signal: 'SELL', sl: 103, tp1: 95.5 });
+    assert.equal(evaluate(short, candles(5, { 2: { low: 95 } })).result, 'WIN');
+    assert.equal(evaluate(short, candles(5, { 2: { high: 103 } })).result, 'LOSS');
+});
+
+test('outcome: EXPIRED after the expiry window, UNKNOWN when the path is gone', () => {
+    const c = candles(EXPIRY_CANDLES + 2, { [EXPIRY_CANDLES]: { close: 101.5 } });
+    assert.deepEqual(evaluate(record(), c), { result: 'EXPIRED', rr: 0.5, closed_at: T0 + (EXPIRY_CANDLES + 1) * LEN, bars: EXPIRY_CANDLES });
+    assert.equal(evaluate(record(), candles(10).slice(3)).result, 'UNKNOWN');
+});
+
+test('log: records a candidate once, closes it later and survives a restart', async () => {
+    const dir = tempDir();
+    const log = createSignalLog({ dir, entryTf: '15m', log: silentLog });
+    await log.load(['BTCUSDT']);
+
+    await log.onSummary('BTCUSDT', state({ filters: ['no_mans_land'] }), candles(1));
+    await log.onSummary('BTCUSDT', state(), candles(2)); // same direction still open: not logged again
+    let rows = await log.records('BTCUSDT');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, `BTCUSDT-${T0}-BUY`);
+    assert.equal(rows[0].filtered, true);
+    assert.deepEqual(rows[0].filters, ['no_mans_land']);
+    assert.equal(rows[0].features.rsi, 41.24);
+    assert.equal(rows[0].result, null);
+
+    // After a restart the open record is still tracked and gets closed.
+    const restarted = createSignalLog({ dir, entryTf: '15m', log: silentLog });
+    await restarted.load(['BTCUSDT']);
+    await restarted.onSummary('BTCUSDT', state({ score: 0 }), candles(4, { 3: { high: 105 } }));
+    rows = await restarted.records('BTCUSDT');
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].result, 'WIN');
+
+    // A truncated line from a crash is skipped.
+    fs.appendFileSync(path.join(dir, 'BTCUSDT.jsonl'), '{"type":"sig');
+    assert.equal((await restarted.records('BTCUSDT')).length, 1);
+});
+
+test('log: no record without a usable plan or with stale data', async () => {
+    const log = createSignalLog({ dir: tempDir(), entryTf: '15m', log: silentLog });
+    await log.load(['BTCUSDT']);
+    await log.onSummary('BTCUSDT', state({ plan: { take_profit_1: null } }), candles(1));
+    await log.onSummary('BTCUSDT', state({ status: 'stale' }), candles(1));
+    assert.deepEqual(await log.records('BTCUSDT'), []);
+});
+
+test('csv flattens features and quotes values', () => {
+    const csv = toCsv([{ id: 'X', signal: 'BUY', filters: ['a', 'b'], result: null, features: { context: 'near_support', reasons: ['r1', 'r2'], score: 6 } }]);
+    const [header, row] = csv.trim().split('\n');
+    const cols = header.split(',');
+    const cells = row.split(',');
+    assert.equal(cells[cols.indexOf('filters')], 'a|b');
+    assert.equal(cells[cols.indexOf('context')], 'near_support');
+    assert.equal(cells[cols.indexOf('reasons')], 'r1|r2');
+    assert.equal(cells[cols.indexOf('result')], '');
+    assert.equal(toCsv([{ id: 'a,"b"', features: {} }]).split('\n')[1].split(',"')[0], '"a');
+});
+
+test('engine passes each published summary and entry candles to the log; log errors do not block', async () => {
+    const MIDNIGHT = Date.UTC(2026, 9, 29) / 1000;
+    const clock = { ms: (MIDNIGHT + 5) * 1000 };
+    const calls = [];
+    const signalLog = {
+        async load(markets) { calls.push(['load', markets]); },
+        async onSummary(market, s, c) { calls.push(['summary', market, s.status, c.length]); throw new Error('disk full'); },
+        async records() { return []; },
+    };
+    const engine = createMarketEngine({
+        storage: tempStorage(), binance: fakeBinance({ now: () => clock.ms }), indicators: require('../src/services/indicator.service'),
+        config: testConfig, signalLog, now: () => clock.ms, log: silentLog,
+    });
+    const results = await engine.initialize();
+    assert.equal(results.BTCUSDT.summary, 'ok', 'publishing succeeds even though logging threw');
+    assert.deepEqual(calls[0], ['load', ['BTCUSDT']]);
+    assert.equal(calls[1][0], 'summary');
+    assert.equal(calls[1][2], 'ok');
+    assert.ok(calls[1][3] >= 200, 'closed entry candles are passed');
+    assert.deepEqual(await engine.signalRecords('BTCUSDT'), { market: 'BTCUSDT', entry_tf: '15m', model: null, stats: { total: 0, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 }, records: [] });
+});
+
+test('GET /api/signals/:market serves JSON and CSV', async (t) => {
+    const dir = tempDir();
+    const log = createSignalLog({ dir, entryTf: '15m', log: silentLog });
+    await log.onSummary('BTCUSDT', state(), candles(1));
+    await log.onSummary('BTCUSDT', state({ score: 0 }), candles(3, { 2: { low: 96 } }));
+    const engine = createMarketEngine({
+        storage: tempStorage(), binance: fakeBinance({ now: () => Date.now() }), indicators: require('../src/services/indicator.service'),
+        config: testConfig, signalLog: log, log: silentLog,
+    });
+    const server = http.createServer(createApp({ engine, config: { ...testConfig, ALLOWED_HOSTS: ['127.0.0.1'] }, log: silentLog }));
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    t.after(() => new Promise(r => server.close(r)));
+    const base = `http://127.0.0.1:${server.address().port}/api/signals`;
+
+    const json = await fetch(`${base}/BTCUSDT`).then(r => r.json());
+    assert.equal(json.stats.total, 1);
+    assert.equal(json.stats.LOSS, 1);
+    assert.equal(json.records[0].rr, -1);
+
+    const csv = await fetch(`${base}/BTCUSDT?format=csv`);
+    assert.match(csv.headers.get('content-type'), /text\/csv/);
+    assert.equal((await csv.text()).trim().split('\n').length, 2);
+
+    assert.equal((await fetch(`${base}/ETHUSDT`)).status, 404);
+});
+
+test('a record from another entry timeframe closes as UNKNOWN instead of being judged on these candles', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-roles-'));
+    const old = { type: 'signal', id: 'BTCUSDT-1000-BUY', market: 'BTCUSDT', timeframe: '15m', candle_time: 1000, candle_close_time: 1900, signal: 'BUY', filtered: false, price: 100, sl: 90, tp1: 101, risk_reward: 0.1 };
+    fs.writeFileSync(path.join(dir, 'BTCUSDT.jsonl'), JSON.stringify(old) + '\n');
+    const log = createSignalLog({ dir, entryTf: '1h', log: silentLog });
+    await log.load(['BTCUSDT']);
+    await log.onSummary('BTCUSDT', { status: 'ok', signal: { score: 0 } }, [{ time: 3600, high: 105, low: 99, close: 104, close_time: 7200 }]);
+    const [r] = await log.records('BTCUSDT');
+    assert.deepEqual([r.result, r.rr, r.closed_at], ['UNKNOWN', null, 7200]);
+});
+
+test('signal stats and Edge cover the current entry timeframe; records keep the whole dataset', async () => {
+    const closed = (timeframe, rr) => ({ id: `${timeframe}-${rr}`, timeframe, filtered: false, result: rr > 0 ? 'WIN' : 'LOSS', rr });
+    const records = [closed('15m', -1), closed('15m', -1), closed('1h', 2)];
+    const engine = createMarketEngine({
+        storage: tempStorage(), binance: fakeBinance({ now: () => Date.now() }), indicators: require('../src/services/indicator.service'),
+        config: { ...testConfig, TF_ROLES: { ...testConfig.TF_ROLES, entry: '1h' } },
+        signalLog: { load: async () => {}, onSummary: async () => {}, records: async () => records }, log: silentLog,
+    });
+    const body = await engine.signalRecords('BTCUSDT');
+    assert.equal(body.entry_tf, '1h');
+    assert.deepEqual([body.stats.total, body.stats.WIN, body.stats.LOSS], [1, 1, 0]);
+    assert.equal(body.records.length, 3);
+    const edge = edgeSummary('BTCUSDT', null, body, liveParams(testConfig, null, 499));
+    assert.equal(edge.live_log.trades, 1);
+});
+
+test('new records carry the model, config hash and version; the config is kept once per hash', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    const config = { model: 'trend_pullback', roles: { entry: '1h' }, signal: { threshold: 5 } };
+    const describe = () => ({ model: config.model, config, app_version: '9.9.9' });
+    const log = createSignalLog({ dir, entryTf: '1h', describe, log: silentLog });
+    await log.load(['BTCUSDT']);
+    const state = (score) => ({
+        status: 'ok', price: 100, generated_at: 1000,
+        signal: { score, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: score > 0 ? 90 : 110, take_profit_1: score > 0 ? 120 : 80, risk_reward: 2, entry_zone: [100, 100] } },
+    });
+    await log.onSummary('BTCUSDT', state(8), [{ time: 3600, high: 101, low: 99, close: 100, close_time: 7200 }]);
+    await log.onSummary('BTCUSDT', state(-8), [{ time: 7200, high: 101, low: 99, close: 100, close_time: 10800 }]);
+    const records = await log.records('BTCUSDT');
+    assert.equal(records.length, 2);
+    const hash = configHash(config);
+    for (const r of records) assert.deepEqual([r.model, r.config_hash, r.app_version], ['trend_pullback', hash, '9.9.9']);
+    assert.match(hash, /^[0-9a-f]{12}$/);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'configs')), [`${hash}.json`]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'configs', `${hash}.json`), 'utf8')), config);
+    const csv = toCsv(records).split('\n');
+    assert.ok(csv[0].endsWith('model,config_hash,app_version'));
+    assert.ok(csv[1].endsWith(`trend_pullback,${hash},9.9.9`));
+});
+
+test('the config hash ignores key order and changes with any value', () => {
+    assert.equal(configHash({ a: 1, b: { c: 2, d: 3 } }), configHash({ b: { d: 3, c: 2 }, a: 1 }));
+    assert.notEqual(configHash({ a: 1 }), configHash({ a: 2 }));
+});
+
+test('a failed config snapshot does not cost the record', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    fs.writeFileSync(path.join(dir, 'configs'), 'a file where the folder should be');
+    const warnings = [];
+    const log = createSignalLog({ dir, entryTf: '1h', describe: () => ({ model: 'breakout', config: { a: 1 }, app_version: '1' }), log: { ...silentLog, warn: (m) => warnings.push(m) } });
+    await log.load(['BTCUSDT']);
+    const state = { status: 'ok', price: 100, generated_at: 1000, signal: { score: 8, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: 90, take_profit_1: 120, risk_reward: 2 } } };
+    await log.onSummary('BTCUSDT', state, [{ time: 3600, high: 101, low: 99, close: 100, close_time: 7200 }]);
+    assert.equal((await log.records('BTCUSDT')).length, 1);
+    assert.equal(warnings.length, 1);
+});
+
+test('stats keep models apart on one timeframe; records without a model still count', () => {
+    assert.equal(isCurrentRecord({ timeframe: '1h', model: 'breakout' }, '1h', 'breakout'), true);
+    assert.equal(isCurrentRecord({ timeframe: '1h', model: 'bounce' }, '1h', 'breakout'), false);
+    assert.equal(isCurrentRecord({ timeframe: '1h' }, '1h', 'breakout'), true, 'older than 3.1.0');
+    assert.equal(isCurrentRecord({ timeframe: '15m', model: 'breakout' }, '1h', 'breakout'), false);
+});
+
+test('another model does not block a new record, and each model keeps its own open record', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crypto-signal-meta-'));
+    const old = { type: 'signal', id: 'BTCUSDT-0-BUY', market: 'BTCUSDT', timeframe: '1h', model: 'bounce', candle_time: 0, candle_close_time: 3600, signal: 'BUY', filtered: false, price: 100, sl: 50, tp1: 200, risk_reward: 2 };
+    fs.writeFileSync(path.join(dir, 'BTCUSDT.jsonl'), JSON.stringify(old) + '\n');
+    const log = createSignalLog({ dir, entryTf: '1h', describe: () => ({ model: 'trend_pullback', config: { a: 1 }, app_version: '1' }), log: silentLog });
+    await log.load(['BTCUSDT']);
+    const state = { status: 'ok', price: 100, generated_at: 1000, signal: { score: 8, strength: 'strong', filtered: false, filters: [], reasons: [], plan: { stop_loss: 90, take_profit_1: 120, risk_reward: 2 } } };
+    const candle = { time: 3600, high: 101, low: 99, close: 100, close_time: 7200 };
+    await log.onSummary('BTCUSDT', state, [candle]);
+    await log.onSummary('BTCUSDT', state, [candle]);
+    const records = await log.records('BTCUSDT');
+    assert.deepEqual(records.map(r => [r.model, r.result]), [['bounce', null], ['trend_pullback', null]]);
+});
+

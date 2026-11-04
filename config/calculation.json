@@ -1,0 +1,69 @@
+{
+  "engine": {
+    "markets": [
+      "BTCUSDT",
+      "BNBUSDT",
+      "XAUTUSDT",
+      "SOLUSDT"
+    ],
+    "timeframes": [
+      "1w",
+      "1d",
+      "4h",
+      "1h",
+      "30m",
+      "15m",
+      "1m"
+    ],
+    "htf": "1w",
+    "structure": "1d",
+    "mid": "4h",
+    "entry": "1h",
+    "candle_limit": 1000
+  },
+  "shadow": {
+    "enabled": "on",
+    "model": "trend_pullback",
+    "htf": "1w",
+    "structure": "1d",
+    "mid": "1d",
+    "entry": "4h",
+    "stop_atr": 3,
+    "target_r": 2
+  },
+  "signal": {
+    "threshold": 5,
+    "min_rr": 1.5,
+    "stop_atr": 0.5,
+    "trailing_atr": 1.5,
+    "htf_proximity_percent": 1,
+    "model": "trend_pullback"
+  },
+  "filters": {
+    "no_mans_land_percent": 1,
+    "volatility_extreme": 2,
+    "volatility_dead": 0.5
+  },
+  "weights": {
+    "1d": 3,
+    "4h": 2,
+    "1h": 1.5,
+    "15m": 1,
+    "1w": 1,
+    "1m": 1
+  },
+  "lookback": {
+    "1w": 200,
+    "1d": 200,
+    "4h": 200,
+    "1h": 200,
+    "30m": 300,
+    "15m": 300,
+    "1m": 500
+  },
+  "backtest": {
+    "days": 1095,
+    "fee_pct": 0.2,
+    "split": 0.7
+  }
+}
