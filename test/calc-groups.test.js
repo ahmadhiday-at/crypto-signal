@@ -168,3 +168,32 @@ test('engine and lookback: seeded from .env, validated, applied at startup', () 
     assert.ok(seen[0] >= 32 && seen[0] <= 48, `lookback 40 → ${seen[0]}`);
     assert.ok(seen[1] >= 160 && seen[1] <= 240, `default 200 → ${seen[1]}`);
 });
+
+test('shadow log: a second model on its own roles, logged apart from the live signal', async () => {
+    const d = defaultsOf({});
+    assert.deepEqual(d.shadow, { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '4h', entry: '1h', stop_atr: 3, target_r: 2 });
+    assert.deepEqual(validate({ shadow: { entry: '1d', mid: '4h' } }, d).problems, ['shadow: htf ≥ structure ≥ mid ≥ entry timeframe is required']);
+
+    const { shadowOptions } = require('../src/config/calculation');
+    const shadowCfg = { ...d, shadow: { ...d.shadow, htf: '1d', structure: '4h', mid: '1h', entry: '1h', model: 'breakout' } };
+    const so = shadowOptions(shadowCfg);
+    assert.deepEqual(so.roles, { htf: '1d', structure: '4h', mid: '1h', entry: '1h' });
+    assert.deepEqual([so.signal.model, so.signal.trend.stop_atr, so.signal.entryTf], ['breakout', 3, '1h']);
+    assert.equal(shadowOptions({ ...d, shadow: { ...d.shadow, enabled: 'off' } }), null);
+
+    const calls = [];
+    const shadowLog = { load: async () => {}, onSummary: async (m, state, candles) => calls.push({ m, state, candles }), records: async () => [] };
+    const calc = {
+        weights: () => ({ ...testConfig.TF_WEIGHTS }), signalOptions: () => ({}), snapshotParams: () => ({}), stateParams: () => ({}),
+        shadowOptions: () => so,
+    };
+    const now = () => (MIDNIGHT + 5) * 1000;
+    const engine = createMarketEngine({ storage: tempStorage(), binance: fakeBinance({ now }), indicators, config: testConfig, calc, shadowLog, now, log: silentLog });
+    await engine.runBoundary(MIDNIGHT);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].state.timeframe_list.sort(), ['1d', '1h', '4h']);
+    assert.equal(calls[0].state.signal.reasons.every(r => r.code !== 'near_support'), true, 'breakout model, not bounce');
+    const body = await engine.signalRecords('BTCUSDT', 'shadow');
+    assert.deepEqual([body.source, body.model, body.latest.roles.entry], ['shadow', 'breakout', '1h']);
+    assert.equal((await engine.getMarketState('BTCUSDT')).body.timeframe_list.includes('15m'), true, 'live state keeps its roles');
+});

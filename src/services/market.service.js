@@ -261,7 +261,7 @@ function composeMarketState(market, snaps, roles, weights, params = {}) {
 
 // `calc` is the calculation config (src/config/calculation.js); without it the engine uses the
 // env weights and the signal defaults.
-function createMarketEngine({ storage, binance, indicators, config, calc = null, signalLog = null, now = () => Date.now(), notify = {}, log = console }) {
+function createMarketEngine({ storage, binance, indicators, config, calc = null, signalLog = null, shadowLog = null, now = () => Date.now(), notify = {}, log = console }) {
     const nowSec = () => Math.floor(now() / 1000);
     const roles = config.TF_ROLES;
     const roleTfs = [...new Set(Object.values(roles))];
@@ -366,6 +366,44 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
             }
             return { updated: false, error: code };
         }
+    }
+
+    // Shadow signal log (calculation config `shadow`): a second model on its own role timeframes,
+    // built from the stored snapshots after each published summary and logged apart. The live signal
+    // is not touched. Its role timeframes must be among the fetched ones (TIMEFRAME_LIST + roles).
+    const shadowLatest = new Map();
+    let shadowWarned = null;
+    async function runShadow(market) {
+        const so = calc ? calc.shadowOptions() : null;
+        if (!so) { shadowLatest.delete(market); return; }
+        const tfs = [...new Set(Object.values(so.roles))];
+        const missing = tfs.filter(tf => !allTfs.includes(tf));
+        if (missing.length) {
+            const key = missing.join(',');
+            if (shadowWarned !== key) log.warn(`[Shadow] role timeframes ${key} are not fetched (add them to TIMEFRAME_LIST); shadow log paused`);
+            shadowWarned = key;
+            return;
+        }
+        const snaps = {};
+        const closeTimes = {};
+        for (const tf of tfs) {
+            const { snap } = await readValidSnapshot(market, tf);
+            if (!snap) return;
+            snaps[tf] = snap;
+            closeTimes[tf] = snap.candle_close_time;
+        }
+        const t = nowSec();
+        const inputs = computeInputs(closeTimes, tfs, t);
+        const state = {
+            ...composeMarketState(market, snaps, so.roles, weightsNow(), stateParams()),
+            generated_at: t, inputs, status: summaryStatus(inputs, tfs, so.roles.entry),
+        };
+        state.signal = computeSignal(state, so.roles.htf, so.signal);
+        shadowLatest.set(market, {
+            model: so.signal.model, roles: so.roles, generated_at: t, status: state.status, price: state.price,
+            signal: { action: state.signal.action, score: state.signal.score, filters: state.signal.filters, plan: state.signal.plan },
+        });
+        await shadowLog.onSummary(market, state, snaps[so.roles.entry].candles);
     }
 
     // At most one update per (market, timeframe); concurrent callers share the running update.
@@ -500,6 +538,13 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
                 log.error(`[SignalLog] ${market}: ${err.message}`);
             }
         }
+        if (shadowLog) {
+            try {
+                await runShadow(market);
+            } catch (err) {
+                log.error(`[Shadow] ${market}: ${err.message}`);
+            }
+        }
         if (notify.summaryUpdated) notify.summaryUpdated(market);
         return { published: true, status: summary.status };
     }
@@ -554,11 +599,12 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
         await storage.ensureDirs();
         await storage.cleanupTempFiles();
         await loadIndex();
-        if (signalLog) {
+        for (const [name, l] of [['SignalLog', signalLog], ['Shadow', shadowLog]]) {
+            if (!l) continue;
             try {
-                await signalLog.load(markets);
+                await l.load(markets);
             } catch (err) {
-                log.error(`[SignalLog] load failed: ${err.message}`);
+                log.error(`[${name}] load failed: ${err.message}`);
             }
         }
         return refreshStale();
@@ -641,15 +687,22 @@ function createMarketEngine({ storage, binance, indicators, config, calc = null,
     }
 
     // Logged signals with outcomes and per-result counts, or null when logging is off.
-    async function signalRecords(market) {
-        if (!signalLog) return null;
-        const records = await signalLog.records(market);
+    // `source` 'shadow' reads the shadow log and adds the shadow model, roles and latest signal.
+    async function signalRecords(market, source = 'live') {
+        const l = source === 'shadow' ? shadowLog : signalLog;
+        if (!l) return null;
+        const records = await l.records(market);
         const stats = { total: records.length, open: 0, WIN: 0, LOSS: 0, EXPIRED: 0, UNKNOWN: 0 };
         for (const r of records) {
             if (r.result === null) stats.open++;
             else stats[r.result] = (stats[r.result] || 0) + 1;
         }
-        return { market, stats, records };
+        if (source !== 'shadow') return { market, stats, records };
+        const so = calc ? calc.shadowOptions() : null;
+        return {
+            market, source, enabled: Boolean(so), model: so?.signal.model ?? null, roles: so?.roles ?? null,
+            latest: shadowLatest.get(market) ?? null, stats, records,
+        };
     }
 
     function healthReport() {

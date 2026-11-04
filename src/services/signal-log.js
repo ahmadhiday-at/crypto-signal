@@ -98,8 +98,10 @@ function recordFrom(market, entryTf, state, last, threshold = THRESHOLD) {
 }
 
 // `threshold` returns the live score threshold (calculation config), read on every summary.
-// `threshold` and `expiry` return the live calculation config values.
+// `threshold` and `expiry` return the live calculation config values; `entryTf` is a timeframe or a
+// function returning it (the shadow log follows its configured entry timeframe).
 function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = () => EXPIRY_CANDLES, log = console }) {
+    const entryOf = typeof entryTf === 'function' ? entryTf : () => entryTf;
     // market -> Map(id -> record) of records without an outcome yet.
     const open = new Map();
     const fileOf = (market) => {
@@ -167,7 +169,7 @@ function createSignalLog({ dir, entryTf, threshold = () => THRESHOLD, expiry = (
             pending.delete(r.id);
         }
 
-        const record = recordFrom(market, entryTf, state, candles[candles.length - 1], threshold());
+        const record = recordFrom(market, entryOf(), state, candles[candles.length - 1], threshold());
         if (!record) return;
         // One open record per direction: a setup that persists over several candles is logged once.
         if ([...pending.values()].some(r => r.signal === record.signal)) return;

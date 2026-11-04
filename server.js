@@ -30,6 +30,11 @@ const engine = createMarketEngine({
         dir: path.join(__dirname, 'data/signals'), entryTf: config.TF_ROLES.entry,
         threshold: () => calc.get().signal.threshold, expiry: () => calc.get().evaluation.expiry_candles,
     }),
+    // Shadow model (config `shadow`), logged apart in data/signals-shadow/.
+    shadowLog: createSignalLog({
+        dir: path.join(__dirname, 'data/signals-shadow'), entryTf: () => calc.get().shadow.entry,
+        threshold: () => calc.get().signal.threshold, expiry: () => calc.get().evaluation.expiry_candles,
+    }),
     notify: {
         timeframeUpdated: (market, timeframe) => wsManager.broadcastUpdate(market, timeframe),
         summaryUpdated: (market) => wsManager.broadcastSummary(market),

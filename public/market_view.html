@@ -447,6 +447,26 @@
                 const text = EDGE_REASONS[code]?.(state.market, edge);
                 if (text) rows.push(edgeLine(text, COLORS.warning.text));
             }
+            // Shadow model (config `shadow`): logged next to the live signal, not shown as the signal.
+            const sh = edge.shadow;
+            if (sh) {
+                const roles = sh.roles ? `${sh.roles.entry}/${sh.roles.mid}/${sh.roles.structure}/${sh.roles.htf}` : '';
+                const head = edgeLine(`Shadow: ${sh.model} ${roles}`, null, 'text-gray-500 t-label mt-1');
+                head.title = 'Second model logged apart (config shadow); it does not change the signal above';
+                rows.push(head);
+                if (sh.latest) {
+                    const c = sh.latest.action === 'BUY' ? COLORS.bullish.text : sh.latest.action === 'SELL' ? COLORS.bearish.text : null;
+                    const now = edgeKv('Now', `${sh.latest.action} · score ${sh.latest.score}${sh.latest.status !== 'ok' ? ` · ${sh.latest.status}` : ''}`);
+                    if (c) now.lastChild.style.color = c;
+                    rows.push(now);
+                }
+                rows.push(edgeKv('Shadow log', sh.trades ? `${r(sh.expectancy_r)} · ${pct(sh.win_rate)} · n ${sh.trades}, ${sh.open} open` : `0 closed, ${sh.open} open`, sh.trades ? sh.expectancy_r : null));
+                const csv = document.createElement('a');
+                csv.href = `/api/signals/${encodeURIComponent(state.market)}?source=shadow&format=csv`;
+                csv.className = 'block text-blue-400 hover:underline';
+                csv.textContent = 'Shadow log CSV';
+                rows.push(csv);
+            }
             const link = document.createElement('a');
             link.href = `/backtest/${encodeURIComponent(state.market)}`;
             link.className = 'text-blue-400 hover:underline';

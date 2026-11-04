@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v2.22.0](docs/changelog/v2.22.0.md) — 2026-11-03 — Shadow signal log: a second model (trend_pullback on 1h/4h/1d/1w) logged live next to the unchanged live signal, shown on the dashboard.
 - [v2.21.0](docs/changelog/v2.21.0.md) — 2026-11-03 — Role timeframes, CANDLE_LIMIT and MAPPING_CANDLE move from .env to config/calculation.json (engine, lookback); .env values become seeds.
 - [v2.20.0](docs/changelog/v2.20.0.md) — 2026-11-02 — New signal models trend_pullback and breakout (signal.model, trend config group); default stays bounce; 3-year validation recorded in the roadmap.
 - [v2.19.0](docs/changelog/v2.19.0.md) — 2026-11-02 — Backtest sweep for every calculation config key (<group>.<key>); first score-point and expiry sweeps found no edge.

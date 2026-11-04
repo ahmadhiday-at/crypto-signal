@@ -71,6 +71,16 @@
                 entry: 'Entry timeframe: signals, plans and the signal log (was TF_ENTRY)',
                 candle_limit: 'Candles fetched per timeframe; snapshots see this − 1 closed candles (was CANDLE_LIMIT)',
             } },
+            shadow: { title: 'Shadow signal log (second model, logged apart; live signal unchanged)', help: {
+                enabled: 'on: log the shadow model to data/signals-shadow/ after each Market State build',
+                model: 'Signal model of the shadow log',
+                htf: 'Shadow HTF timeframe (must be in TIMEFRAME_LIST)',
+                structure: 'Shadow structure timeframe',
+                mid: 'Shadow mid timeframe',
+                entry: 'Shadow entry timeframe: its candles judge the shadow trades',
+                stop_atr: 'Trend models: stop distance, × ATR',
+                target_r: 'Trend models: TP1 at this multiple of the risk',
+            } },
             signal: { title: 'Signal', help: {
                 threshold: 'Minimum |score| for BUY/SELL',
                 min_rr: 'Minimum plan risk/reward (else filter low_rr)',

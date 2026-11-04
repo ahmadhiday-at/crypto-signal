@@ -50,6 +50,22 @@ function rolesMatch(reportRoles, liveRoles) {
     return ['htf', 'structure', 'mid', 'entry'].every(r => reportRoles[r] === liveRoles[r]);
 }
 
+// Taken records of a signal log: open count and the summary of the closed ones (rr before fees).
+function logSummary(records) {
+    const taken = records.filter(r => !r.filtered);
+    const closed = taken.filter(r => CLOSED.includes(r.result)).map(r => ({ ...r, net_r: r.rr }));
+    return { open: taken.filter(r => r.result === null).length, ...pick(metrics(closed).summary) };
+}
+
+// The shadow log (engine.signalRecords(market, 'shadow')) for the Edge response, or null when off.
+function shadowSummary(body) {
+    if (!body || !body.enabled) return null;
+    return {
+        model: body.model, roles: body.roles, latest: body.latest ? { action: body.latest.signal.action, score: body.latest.signal.score, status: body.latest.status } : null,
+        ...logSummary(body.records),
+    };
+}
+
 // `report`: backtest report or null. `log`: engine.signalRecords() result or null.
 // `live`: liveParams() result.
 function edgeSummary(market, report, log, live) {
@@ -67,13 +83,7 @@ function edgeSummary(market, report, log, live) {
         };
     }
 
-    let liveLog = null;
-    if (log) {
-        const taken = log.records.filter(r => !r.filtered);
-        const closed = taken.filter(r => CLOSED.includes(r.result)).map(r => ({ ...r, net_r: r.rr }));
-        const s = metrics(closed).summary;
-        liveLog = { open: taken.filter(r => r.result === null).length, ...pick(s) };
-    }
+    const liveLog = log ? logSummary(log.records) : null;
 
     let verdict;
     const taken = backtest?.taken;
@@ -121,4 +131,4 @@ function liveParams(config, calc = null, window = binance.candleLimit() - 1) {
     };
 }
 
-module.exports = { edgeSummary, liveParams, MIN_TRADES };
+module.exports = { edgeSummary, shadowSummary, liveParams, MIN_TRADES };

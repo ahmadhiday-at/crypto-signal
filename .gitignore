@@ -44,8 +44,9 @@ build/
 
 memory
 
-# Signal log (Level 4): grows per machine
+# Signal log (Level 4) and shadow signal log: grow per machine
 data/signals/
+data/signals-shadow/
 # Backtest history cache and reports (Level 5)
 data/history/
 data/backtest/

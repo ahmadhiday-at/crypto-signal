@@ -29,6 +29,10 @@ Since 2.14.0 the values of the calculation live in `config/calculation.json` (co
 | Group | Key | Default | Range | Meaning |
 | :---- | :-- | :------ | :---- | :------ |
 | `engine` | `htf` / `structure` / `mid` / `entry` | `TF_*` env (`1d` / `4h` / `1h` / `15m`) | supported timeframes, htf ≥ structure ≥ mid ≥ entry | Role timeframes (since 2.21.0). Applied at startup: a change needs a restart; `/config` lists what waits for it |
+| `shadow` | `enabled` | `on` | `off` / `on` | Shadow signal log (since 2.22.0): a second model logged to `data/signals-shadow/` next to the live signal, which it does not change |
+| `shadow` | `model` | `trend_pullback` | `bounce` / `trend_pullback` / `breakout` | Shadow signal model |
+| `shadow` | `htf` / `structure` / `mid` / `entry` | `1w` / `1d` / `4h` / `1h` | fetched timeframes, htf ≥ … ≥ entry | Shadow role timeframes (must be in TIMEFRAME_LIST or the live roles; applied at once) |
+| `shadow` | `stop_atr`, `target_r` | 3, 2 | 0.1–20, 0.5–20 | Shadow trend-model stop (× ATR) and target (× risk); other values come from the live groups |
 | `engine` | `candle_limit` | `CANDLE_LIMIT` env (500) | integer 201–1000 | Candles fetched per timeframe; snapshots see this − 1 closed candles. Restart needed |
 | `lookback` | `<tf>` | `MAPPING_CANDLE` env, else 200 | integer 20–1000 | S/R lookback candles per timeframe (since 2.21.0); unlisted timeframes use 200. Changes recalculate every snapshot |
 | `signal` | `threshold` | 5 | integer 1–15 | Minimum \|score\| for BUY/SELL |

@@ -19,6 +19,10 @@ const WATCH_INTERVAL_MS = 2000;
 const ROLE_KEYS = ['htf', 'structure', 'mid', 'entry'];
 const TF_CHOICES = { values: Object.keys(TF_SECONDS) };
 const ENGINE_DEFAULTS = { htf: '1d', structure: '4h', mid: '1h', entry: '15m', candle_limit: 500 };
+// Shadow signal log (group `shadow`): a second model on its own role timeframes, logged next to the
+// live signal without changing it. Its other values (threshold, filters, points) are the live ones.
+const SHADOW_DEFAULTS = { enabled: 'on', model: 'trend_pullback', htf: '1w', structure: '1d', mid: '4h', entry: '1h', stop_atr: 3, target_r: 2 };
+
 // S/R lookback candles per timeframe (group `lookback`, was MAPPING_CANDLE); unlisted timeframes use 200.
 const LOOKBACK_LIMITS = [20, 1000, true];
 const LOOKBACK_DEFAULT = 200;
@@ -33,6 +37,16 @@ const LIMITS = {
         entry: TF_CHOICES,
         // Binance returns at most 1000 klines; at least 201 rows give 200 closed candles.
         candle_limit: [201, 1000, true],
+    },
+    shadow: {
+        enabled: { values: ['off', 'on'] },
+        model: { values: MODELS },
+        htf: TF_CHOICES,
+        structure: TF_CHOICES,
+        mid: TF_CHOICES,
+        entry: TF_CHOICES,
+        stop_atr: [0.1, 20],
+        target_r: [0.5, 20],
     },
     signal: {
         threshold: [1, 15, true],
@@ -135,7 +149,7 @@ const LIMITS = {
     },
 };
 const WEIGHT_LIMITS = [0.1, 20];
-const GROUPS = ['engine', 'signal', 'filters', 'weights', 'lookback', 'scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
+const GROUPS = ['engine', 'shadow', 'signal', 'filters', 'weights', 'lookback', 'scoring', 'trend', 'indicators', 'zones', 'market', 'divergence', 'evaluation', 'backtest'];
 // Groups that change the per-timeframe snapshots (indicators, zones): a change recalculates them.
 const SNAPSHOT_GROUPS = ['indicators', 'zones', 'lookback'];
 
@@ -153,6 +167,7 @@ function defaultsOf(envWeights = {}, envEngine = {}) {
     for (const [tf, n] of Object.entries(envEngine.lookback || {})) if (TF_SECONDS[tf]) lookback[tf] = n;
     return {
         engine: { ...ENGINE_DEFAULTS, ...(envEngine.roles || {}), candle_limit: envEngine.candle_limit ?? ENGINE_DEFAULTS.candle_limit },
+        shadow: { ...SHADOW_DEFAULTS },
         signal: { ...SIGNAL_DEFAULTS }, filters: { ...FILTER_DEFAULTS }, weights, lookback,
         scoring: { ...SCORING_DEFAULTS }, trend: { ...TREND_DEFAULTS }, indicators: { ...INDICATOR_DEFAULTS }, zones: { ...ZONE_DEFAULTS },
         market: { ...MARKET_DEFAULTS }, divergence: { ...DIVERGENCE_DEFAULTS },
@@ -175,8 +190,10 @@ function hint(limits) {
 // Rules between keys of the merged config (each key is already in range).
 function crossProblems(c) {
     const out = [];
-    const secs = ROLE_KEYS.map(r => TF_SECONDS[c.engine[r]]);
-    if (secs.some((v, i) => i > 0 && v > secs[i - 1])) out.push('engine: htf ≥ structure ≥ mid ≥ entry timeframe is required');
+    for (const group of ['engine', 'shadow']) {
+        const secs = ROLE_KEYS.map(r => TF_SECONDS[c[group][r]]);
+        if (secs.some((v, i) => i > 0 && v > secs[i - 1])) out.push(`${group}: htf ≥ structure ≥ mid ≥ entry timeframe is required`);
+    }
     const candleLimit = c.engine.candle_limit;
     const order = (group, keys) => {
         for (let i = 1; i < keys.length; i++) {
@@ -345,6 +362,19 @@ function createCalcConfig({ file = FILE, envWeights = {}, envEngine = {}, log = 
         snapshotParams: () => copy(snapshotParams(current)),
         stateParams: () => copy(stateParams(current)),
         resultParams: () => copy(resultParams(current)),
+        shadowOptions: () => shadowOptions(copy(current)),
+    };
+}
+
+// The shadow model's roles and computeSignal options: the live options with the shadow's model,
+// stop and target. Null when the shadow log is off.
+function shadowOptions(cfg) {
+    const s = cfg.shadow;
+    if (!s || s.enabled !== 'on') return null;
+    const roles = Object.fromEntries(ROLE_KEYS.map(r => [r, s[r]]));
+    return {
+        roles,
+        signal: { ...signalOptions(cfg), model: s.model, trend: { ...cfg.trend, stop_atr: s.stop_atr, target_r: s.target_r }, structureTf: roles.structure, entryTf: roles.entry },
     };
 }
 
@@ -363,5 +393,5 @@ function applyEngine(config, binance, cfg) {
 
 module.exports = {
     createCalcConfig, validate, defaultsOf, signalOptions, mergeWeights, snapshotParams, stateParams, resultParams, snapshotChanged,
-    engineChanged, applyEngine, LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS, LOOKBACK_DEFAULT, ROLE_KEYS, GROUPS, RESULT_GROUPS, FILE,
+    engineChanged, applyEngine, shadowOptions, SHADOW_DEFAULTS, LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS, LOOKBACK_DEFAULT, ROLE_KEYS, GROUPS, RESULT_GROUPS, FILE,
 };

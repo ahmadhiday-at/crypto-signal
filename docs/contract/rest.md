@@ -8,7 +8,7 @@ HTTP routes served by the app, their status codes, and the 503 body returned whe
 | :------- | :------- | :----- | :---------- |
 | Data | `/api/market/:symbol` | `GET` | Market State ([market-state.md](./market-state.md)) with freshness `status`. HTTP 503 with diagnostics when unavailable (see below). |
 | Data | `/api/:symbol/:tf` | `GET` | Closed-candle snapshot for one timeframe, with `status` and `age_seconds`. 503 `snapshot_unavailable` when no data could be fetched. |
-| Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset. See [Signal log](#signal-log). |
+| Data | `/api/signals/:symbol` | `GET` | Signal log (since 2.7.0): `{market, stats, records}`; `?format=csv` returns the flattened dataset; `?source=shadow` (since 2.22.0) reads the shadow log. See [Signal log](#signal-log). |
 | Data | `/api/backtest/:symbol` | `GET` | Latest backtest report (since 2.8.0), written by `npm run backtest`. 404 `backtest_not_found` until one exists. See [Backtest report](#backtest-report). |
 | Data | `/api/edge/:symbol` | `GET` | How proven the signal is (since 2.12.0): verdict from the latest backtest and the live signal log. See [Edge](#edge). |
 | Data | `/api/calc-config` | `GET` / `PUT` | Calculation config (since 2.14.0). See [Calculation config](#calculation-config). |
@@ -48,6 +48,8 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 ## Signal log
 
 `GET /api/signals/:symbol` (Roadmap Level 4). Source: `data/signals/{MARKET}.jsonl` (gitignored, append-only).
+
+**Shadow log (since 2.22.0):** `?source=shadow` reads `data/signals-shadow/{MARKET}.jsonl` (gitignored), written after each published Market State by the model of the calculation config `shadow` group on its own role timeframes (default `trend_pullback` on 1h / 4h / 1d / 1w, stop 3 ATR, target 2R; other values from the live config). The live signal and log are unchanged. Response `{market, source: "shadow", enabled, model, roles, latest, stats, records}`; `latest` = `{model, roles, generated_at, status, price, signal: {action, score, filters, plan}}` of the last build or `null`. A shadow role timeframe outside the fetched ones (TIMEFRAME_LIST + roles) pauses the shadow log with one warning.
 
 - **When a record is created:** after a published summary with `status: "ok"`, `|signal.score| ≥ 5` and a plan with `stop_loss` and `take_profit_1`. Filtered candidates are logged too (`filtered: true`, `filters`). At most one open record per market and direction.
 - **Record:** `id`, `timestamp` (summary `generated_at`), `market`, `timeframe` (entry), `candle_time`, `candle_close_time`, `signal` (`BUY`/`SELL`, direction before filters), `filtered`, `filters`, `strength`, `price` (entry = closed entry-candle close), `entry_zone`, `sl`, `tp1`, `tp2`, `risk_reward`, `features` (`context`, `momentum`, `regime`, `volume_state`, `breakout_confirmation`, `divergence`, `volatility_ratio`, `distance_to_support`, `distance_to_resistance`, `rsi`, `atr`, `score`, `strength`, `reasons`), then `result`, `rr`, `closed_at`, `bars` (`null` while open).
@@ -89,6 +91,7 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 
 - **`verdict`:** `unproven` when there is no backtest (`no_backtest`), its parameters differ from the live ones (`params_differ`: threshold, min RR, SL buffer, target `tp1`, both sides, no energy skip, role-timeframe weights, window = `CANDLE_LIMIT` − 1, and since 2.18.0 the calculation groups `scoring`, `indicators`, `zones`, `market`, `divergence`, `evaluation` stored in report `params.calc`; older reports count as defaults) or it has fewer than `min_trades` taken trades (`too_few_trades`); `negative` when taken `expectancy_r` ≤ 0 (`negative_expectancy`) or the live-parameter out-of-sample `expectancy_r` ≤ 0 (`negative_out_of_sample`); otherwise `positive`. `no_fees` is added when the backtest used `fee_pct` 0.
 - **`backtest`:** `null` without a report. `taken` = report `taken.summary` subset; `out_of_sample` = the base row of `validation` (`null` without `--split`).
+- **`shadow`** (since 2.22.0): `null` when the shadow log is off; else `{model, roles, latest: {action, score, status} | null, open, trades, win_rate, expectancy_r, profit_factor}` over the shadow log's taken records, like `live_log`.
 - **`live_log`:** `null` when the signal log is disabled. Taken (not filtered) records only; `trades`/`win_rate`/`expectancy_r`/`profit_factor` over WIN/LOSS/EXPIRED in R (`rr`, no fees); `open` = records without an outcome.
 
 ## Calculation config

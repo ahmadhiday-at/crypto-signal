@@ -38,14 +38,14 @@ Roadmap level: goals, milestones and success criteria. Overview: [README.md](./R
   - **15m entry (live layout):** every trend variant is worse than bounce (−0.03 to −0.27 R, 1,100–4,300 trades); too many small trades for the fee.
   - **1h entry, roles 1h / 1h / 4h / 1d:** best around 0 (BTC breakout 3 ATR / 3R +0.006, SOL −0.013, BNB +0.026); out-of-sample negative on all three.
   - **1h entry, roles 1h / 4h / 1d / 1w, `trend_pullback`, `trend.stop_atr` 3, `trend.target_r` 2 (closest to the criterion):** BTC +0.078 R (452 trades), BNB +0.040 (415), SOL −0.123 (323); out-of-sample BTC +0.059 (119), SOL +0.007 (132), BNB −0.005 (117). A refinement sweep (stop 2.5–5 ATR × target 1.5–3R, 12 sets) finds no set positive out-of-sample on all three: BNB stays ≤ −0.005, SOL is negative in-sample for every set.
-  - **Verdict:** a large improvement over bounce (BTC/BNB positive over 3 years, all three near break-even in the last year) but the success criterion is not met. Live defaults unchanged (bounce on the 15m layout: trend models need the 1h/1w roles, an env change). Next candidates: run this layout live in the signal log alongside, test 4h entry, exits with a trailing stop instead of a fixed target.
+  - **Verdict:** a large improvement over bounce (BTC/BNB positive over 3 years, all three near break-even in the last year) but the success criterion is not met. Live defaults unchanged (bounce on the 15m layout: trend models need the 1h/1w roles, an env change). Next candidates: run this layout live in the signal log alongside (done: shadow log, v2.22.0, config `shadow`, shown in the dashboard Edge block), test 4h entry, exits with a trailing stop instead of a fixed target.
 
 **C. Deferred reviews** (decided with the B4 data)
 - [ ] **Level 1:** freshness threshold (2 × timeframe).
 - [ ] **Level 2.5B:** no-man's-land 1%, volatility 2.0 / 0.5, min RR 1.5.
 - [ ] **Level 3:** SL buffer 0.5 × ATR, trailing 1.5 × ATR.
 - [ ] **Level 6:** false-breakout analysis (when `fake_breakout_risk` was wrong; keep, change or drop it).
-- [ ] **Level 4:** Signal Log card on the dashboard; dataset keeps growing toward 1,000 labeled trades.
+- [ ] **Level 4:** Signal Log card on the dashboard; dataset keeps growing toward 1,000 labeled trades. Since v2.22.0 the shadow log collects the `trend_pullback` 1h/1w layout in parallel (`/api/signals/:symbol?source=shadow`).
 
 ## Success criteria
 

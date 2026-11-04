@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { toCsv } = require('../../services/signal-log');
-const { edgeSummary, liveParams } = require('../../services/edge');
+const { edgeSummary, shadowSummary, liveParams } = require('../../services/edge');
 const { LIMITS, WEIGHT_LIMITS, LOOKBACK_LIMITS } = require('../../config/calculation');
 
 // Read on each call so a version bump shows up without restarting the server.
@@ -56,10 +56,12 @@ function createMarketController({ engine, config, reports = null, calc = null, r
         try {
             const { market } = req.params;
             if (!engine.isMarket(market)) return unknown(res);
-            const body = await engine.signalRecords(market);
+            // ?source=shadow reads the shadow log (calculation config `shadow`).
+            const shadow = req.query.source === 'shadow';
+            const body = await engine.signalRecords(market, shadow ? 'shadow' : 'live');
             if (!body) return res.status(404).json({ error: 'signal_log_disabled' });
             if (req.query.format === 'csv') {
-                return res.type('text/csv').set('Content-Disposition', `attachment; filename="${market}_signals.csv"`).send(toCsv(body.records));
+                return res.type('text/csv').set('Content-Disposition', `attachment; filename="${market}_${shadow ? 'shadow_' : ''}signals.csv"`).send(toCsv(body.records));
             }
             res.json(body);
         } catch (err) {
@@ -85,11 +87,12 @@ function createMarketController({ engine, config, reports = null, calc = null, r
         try {
             const { market } = req.params;
             if (!engine.isMarket(market)) return unknown(res);
-            const [report, log] = await Promise.all([
+            const [report, log, shadow] = await Promise.all([
                 reports ? reports.read(market) : null,
                 engine.signalRecords(market),
+                engine.signalRecords(market, 'shadow'),
             ]);
-            res.json(edgeSummary(market, report, log, liveParams(config, calc)));
+            res.json({ ...edgeSummary(market, report, log, liveParams(config, calc)), shadow: shadowSummary(shadow) });
         } catch (err) {
             next(err);
         }
