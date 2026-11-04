@@ -383,3 +383,38 @@ test('CLI options: slippage, entry, folds and offline', () => {
     assert.deepEqual(parseArgs(['--sweep', 'exit=fixed,trailing', '--sweep', 'trail_atr=2,4'], tfs, cfg).variants.length, 4);
 });
 
+
+test('each base trade keeps its Market State in the live format; a sweep does not multiply it', async (t) => {
+    const { validateMarketState } = require('../src/services/contract');
+    const args = { market: 'BTCUSDT', candlesByTf: history(10), roles: testConfig.TF_ROLES, weights: testConfig.TF_WEIGHTS, indicators: bullish, startSec: NOW - 10 * 86400, model: 'bounce' };
+    const report = runBacktest({ ...args, variants: [{ min_rr: 0 }] });
+    assert.ok(report.trades.length > 0);
+    for (const tr of report.trades) {
+        const s = tr.state;
+        assert.equal(s.schema_version, 2);
+        assert.equal(s.market, 'BTCUSDT');
+        assert.equal(s.generated_at, tr.time);
+        assert.equal(s.signal.score, tr.score);
+        assert.deepEqual(s.signal.filters, tr.filters);
+        assert.equal(s.market_energy, tr.features.market_energy);
+        assert.ok(Array.isArray(s.levels.support) && s.levels.support.length > 0);
+        assert.equal(typeof s.indicators.atr, 'number', 'indicators hold the latest values, not candle arrays');
+        assert.equal(s.candles, undefined);
+        assert.deepEqual(validateMarketState(s), [], 'passes the same contract check as the live state');
+        assert.equal(s.inputs[testConfig.TF_ROLES.entry].candle_close_time, tr.time);
+    }
+    assert.ok(JSON.stringify(report).length < report.trades.length * 12000 + 200000, 'no candle history inside');
+
+    const reports = createReports({ dir: tempDir() });
+    await reports.write('BTCUSDT', report);
+    const engine = createMarketEngine({ storage: tempStorage(), binance: fakeBinance({ now: () => Date.now() }), indicators: indicatorService, config: testConfig, log: silentLog });
+    const server = http.createServer(createApp({ engine, config: { ...testConfig, ALLOWED_HOSTS: ['127.0.0.1'] }, reports, log: silentLog }));
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    t.after(() => new Promise(r => server.close(r)));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const full = await fetch(`${base}/api/backtest/BTCUSDT`).then(r => r.json());
+    const light = await fetch(`${base}/api/backtest/BTCUSDT?states=0`).then(r => r.json());
+    assert.ok(full.trades[0].state);
+    assert.equal(light.trades[0].state, undefined);
+    assert.equal(light.trades[0].net_r, full.trades[0].net_r);
+});

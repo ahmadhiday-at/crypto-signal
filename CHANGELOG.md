@@ -2,6 +2,7 @@
 
 Newest first. Details per release in [docs/changelog/](./docs/changelog/).
 
+- [v4.1.0](docs/changelog/v4.1.0.md) — 2026-11-04 — Each backtest trade keeps its full Market State in the live format.
 - [v4.0.1](docs/changelog/v4.0.1.md) — 2026-11-04 — Shadow log moves to trend_pullback with 4h entry; the 4h and random-entry results are recorded.
 - [v4.0.0](docs/changelog/v4.0.0.md) — 2026-11-04 — History is stored per year and kept in git; a daily job at 00:01 UTC fills only what is missing.
 - [v3.3.0](docs/changelog/v3.3.0.md) — 2026-11-04 — Backtest gains slippage, next-open entry, walk-forward, 95% interval, run history, trailing exit option and --offline.

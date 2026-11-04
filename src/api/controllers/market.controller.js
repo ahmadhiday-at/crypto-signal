@@ -76,6 +76,8 @@ function createMarketController({ engine, config, reports = null, calc = null, r
             if (!engine.isMarket(market)) return unknown(res);
             const report = reports ? await reports.read(market) : null;
             if (!report) return res.status(404).json({ error: 'backtest_not_found' });
+            // ?states=0 leaves out the Market State of each trade (the report page has no use for it).
+            if (req.query.states === '0' && Array.isArray(report.trades)) report.trades = report.trades.map(({ state, ...t }) => t);
             res.json(report);
         } catch (err) {
             next(err);

@@ -7,6 +7,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { composeMarketState } = require('./market.service');
+const { SCHEMA_VERSION } = require('./contract');
+const { computeInputs } = require('./freshness');
 const { computeSignal, THRESHOLD, MIN_RISK_REWARD, STOP_ATR_BUFFER, SIGNAL_DEFAULTS, FILTER_DEFAULTS } = require('./signal');
 const { recordFrom, evaluate } = require('./signal-log');
 const { defaultsOf, resultParams, RESULT_GROUPS } = require('../config/calculation');
@@ -340,6 +342,12 @@ function runBacktest({ market, candlesByTf, roles, weights, indicators, startSec
                 filters: record.filters, strength: record.strength, score: state.signal.score,
                 price: trade.price, sl: trade.sl, tp1: trade.tp1, risk_reward: trade.risk_reward,
                 features: featuresOf(state, record, trendTfs),
+                // The base run only: the Market State behind the trade, in the live format. No sweep
+                // variant keeps it, so a sweep does not multiply the memory and the report size.
+                ...(run === runs[0] ? { state: {
+                    schema_version: SCHEMA_VERSION, ...state, errors: [],
+                    inputs: computeInputs(Object.fromEntries(roleTfs.map(tf => [tf, snapshotSets.get(run.snapKey).snaps[tf].candle_close_time])), roleTfs, t),
+                } } : {}),
                 result: outcome ? outcome.result : null,
                 rr: outcome ? outcome.rr : null,
                 net_r: outcome && Number.isFinite(outcome.rr) ? r4(outcome.rr - costR) : null,

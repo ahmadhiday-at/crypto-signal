@@ -362,7 +362,7 @@
         async function load() {
             for (const id of ['breakdown-group', 'trade-filter']) AppHeader.select2(document.getElementById(id), { width: 'style' });
 
-            const res = await fetch(`/api/backtest/${encodeURIComponent(market)}`);
+            const res = await fetch(`/api/backtest/${encodeURIComponent(market)}?states=0`);
             const err = res.ok ? null : await res.json().catch(() => ({}));
             if (err?.error === 'unknown_market_or_timeframe') {
                 const config = (await header) || { markets: [] };

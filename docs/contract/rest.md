@@ -74,6 +74,7 @@ Unknown symbols return HTTP 404 `{ "error": "unknown_market_or_timeframe" }`.
 - **Exit (since 3.3.0, backtest only):** `params.exit` `fixed` (stop and TP1) or `trailing`: no target, the stop follows the best price since entry at `params.trail_atr` × the ATR at the signal, and the stop in force during a candle comes from the candles before it.
 - **`taken.ci95` (since 3.3.0):** 95% interval of the taken expectancy, by resampling the trades with a fixed seed.
 - **`walk_forward` (since 3.3.0):** `null` with `--folds none`. The period is cut into `folds` + 1 equal parts; each later part is judged with the variant that was best on everything before it (`rows[]`: `{from, selected, train_expectancy_r, test}`), plus `test` over all parts, `ci95`, `positive_folds`, `judged_folds`.
+- **`trades[].state` (since 4.1.0):** the full Market State behind a trade of the base run, in the format of `/api/market/:symbol` with its `signal` (it passes the same contract check). No sweep variant keeps one. `?states=0` on this endpoint leaves them out. Older reports have none.
 - **`config_hash` (since 3.3.0):** same hash as the signal log records made with these settings. Results are hypothetical: entry at the signal candle close, no order execution.
 
 ## Edge
